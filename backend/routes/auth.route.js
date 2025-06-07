@@ -1,6 +1,7 @@
 import express from 'express'
 import {
 	getAuthUser,
+	googleAuth,
 	login,
 	logout,
 	signup,
@@ -12,6 +13,8 @@ const router = express.Router()
 // Public routes
 router.post('/signup', signup)
 router.post('/login', login)
+//Google
+router.post('/google', googleAuth)
 
 // Protected routes
 router.post('/logout', logout)

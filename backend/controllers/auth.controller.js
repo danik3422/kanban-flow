@@ -1,44 +1,97 @@
 import bcrypt from 'bcrypt'
+import admin from '../lib/firebaseAdmin.js'
 import { generateToken } from '../lib/utils.js'
 import User from '../models/user.model.js'
+
+export const googleAuth = async (req, res) => {
+	try {
+		const { idToken } = req.body
+
+		if (!idToken) return res.status(400).json({ message: 'Missing ID token' })
+
+		// Verify the token with Firebase
+		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		const { email, name, picture, uid } = decodedToken
+
+		if (!email) return res.status(400).json({ message: 'Invalid token' })
+
+		// Check if user exists
+		let user = await User.findOne({ email })
+
+		if (!user) {
+			// Create user if not found
+			user = new User({
+				email,
+				name,
+				avatar: picture,
+				provider: 'google',
+			})
+			await user.save()
+		}
+
+		// Set cookie and respond
+		generateToken(user._id, res)
+
+		res.status(200).json({
+			_id: user._id,
+			email: user.email,
+			name: user.name,
+			avatar: user.avatar,
+		})
+	} catch (error) {
+		console.error('Google Auth Error:', error)
+		res.status(500).json({ message: 'Google login failed' })
+	}
+}
+
 export const signup = async (req, res) => {
 	try {
-		const { name, email, password } = req.body
+		const { name, email, password, provider = 'local' } = req.body
 
-		if (!name || !email || !password) {
-			return res.status(400).json({ message: 'All fields are required.' })
-		}
-
-		if (password.length < 6) {
+		if (!name || !email || !provider) {
 			return res
 				.status(400)
-				.json({ message: 'Password must be at least 6 characters long.' })
+				.json({ message: 'Name, email, and provider are required.' })
 		}
 
-		const user = await User.findOne({ email })
+		if (provider === 'local') {
+			if (!password) {
+				return res
+					.status(400)
+					.json({ message: 'Password is required for local signup.' })
+			}
+			if (password.length < 6) {
+				return res
+					.status(400)
+					.json({ message: 'Password must be at least 6 characters long.' })
+			}
+		}
 
-		if (user) {
+		const existingUser = await User.findOne({ email })
+		if (existingUser) {
 			return res.status(400).json({ message: 'User already exists.' })
 		}
 
-		const salt = await bcrypt.genSalt(10)
-		const hashedPassword = await bcrypt.hash(password, salt)
+		let hashedPassword = null
+		if (provider === 'local') {
+			const salt = await bcrypt.genSalt(10)
+			hashedPassword = await bcrypt.hash(password, salt)
+		}
 
 		const newUser = new User({
 			name,
 			email,
 			password: hashedPassword,
+			provider,
 		})
 
-		if (newUser) {
-			generateToken(newUser._id, res)
-			await newUser.save()
-			res.status(201).json({ message: 'User created successfully' })
-		} else {
-			res.status(400).json({ message: 'User creation failed.' })
-		}
+		await newUser.save()
+
+		generateToken(newUser._id, res)
+		res.status(201).json({ message: 'User created successfully' })
 	} catch (error) {
-		console.log('Error in signup controller', error.message)
+		console.error('Error in signup controller:', error.message)
+		res.status(500).json({ message: 'Server error during signup' })
 	}
 }
 

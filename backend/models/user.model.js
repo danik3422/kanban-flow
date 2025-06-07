@@ -9,11 +9,19 @@ const userSchema = new mongoose.Schema(
 		},
 		password: {
 			type: String,
-			required: true,
 		},
 		name: {
 			type: String,
 			required: true,
+		},
+		avatar: {
+			type: String,
+			default: '',
+		},
+		provider: {
+			type: String,
+			enum: ['local', 'google', 'microsoft', 'apple'],
+			default: 'local',
 		},
 	},
 	{ timestamps: true }
