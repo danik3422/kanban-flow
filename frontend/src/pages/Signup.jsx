@@ -1,52 +1,67 @@
-import { signInWithPopup } from 'firebase/auth'
 import { Eye, EyeOff, Pencil } from 'lucide-react'
 import { useState } from 'react'
-import { FaApple, FaMicrosoft } from 'react-icons/fa'
-import { FcGoogle } from 'react-icons/fc'
-import { Link } from 'react-router-dom'
-import { axiosInstance } from '../lib/axios'
-import { auth, googleProvider } from '../lib/firebase'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import { useAuthStore } from '../store/useAuthStore'
+import AuthButton from '../ui/AuthButton'
 
 const Signup = () => {
-	const [email, setEmail] = useState('')
-	const [password, setPassword] = useState('')
-	const [confirmPassword, setConfirmPassword] = useState('')
+	const [formData, setFormData] = useState({
+		email: '',
+		password: '',
+		confirmPassword: '',
+	})
+
 	const [emailLocked, setEmailLocked] = useState(false)
 	const [passwordVisible, setPasswordVisible] = useState(false)
 	const [confirmVisible, setConfirmVisible] = useState(false)
 
+	const signup = useAuthStore((state) => state.signup)
+	const handleGoogleSignup = useAuthStore((state) => state.handleGoogleSignup)
+	const isSigningUp = useAuthStore((state) => state.isSigningUp)
+
+	const navigate = useNavigate()
+
+	const handleChange = (e) => {
+		const { name, value } = e.target
+		setFormData((prev) => ({ ...prev, [name]: value }))
+	}
+
 	const handleEmailContinue = () => {
-		if (email.trim()) setEmailLocked(true)
+		if (formData.email.trim()) setEmailLocked(true)
 	}
 
 	const handleEditEmail = () => {
 		setEmailLocked(false)
-		setPassword('')
-		setConfirmPassword('')
+		setFormData((prev) => ({
+			...prev,
+			password: '',
+			confirmPassword: '',
+		}))
 	}
 
-	const handleSubmit = (e) => {
+	const handleSubmit = async (e) => {
 		e.preventDefault()
-	}
 
-	const handleGoogleSignup = async () => {
-		try {
-			const result = await signInWithPopup(auth, googleProvider)
-			const idToken = await result.user.getIdToken()
+		if (formData.password !== formData.confirmPassword) {
+			toast.error('Passwords do not match')
+			return
+		}
 
-			const response = await axiosInstance.post(
-				'/auth/google',
-				{ idToken },
-				{ withCredentials: true }
-			)
+		const success = await signup({
+			email: formData.email,
+			password: formData.password,
+		})
 
-			console.log('User signed in successfully:', response.data)
-			alert('Google Sign-in successful')
-		} catch (error) {
-			console.error('Google Sign-in error:', error)
-			alert('Google Sign-in failed')
+		if (success) {
+			navigate('/enter-name')
 		}
 	}
+
+	const handleMicrosoftSignIn = () =>
+		toast.info('Microsoft sign-in not implemented yet')
+	const handleAppleSignIn = () =>
+		toast.info('Apple sign-in not implemented yet')
 
 	return (
 		<div className='min-h-screen flex items-center justify-center px-4 bg-base-100'>
@@ -65,7 +80,8 @@ const Signup = () => {
 				</h2>
 
 				<form onSubmit={handleSubmit}>
-					<div className='form-control mb-4 relative'>
+					{/* Email Input */}
+					<div className='form-control mb-4'>
 						<label className='label' htmlFor='email'>
 							<span className='label-text font-medium'>
 								Email <span className='text-red-500'>*</span>
@@ -74,9 +90,10 @@ const Signup = () => {
 						<div className='relative'>
 							<input
 								id='email'
+								name='email'
 								type='email'
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
+								value={formData.email}
+								onChange={handleChange}
 								placeholder='Enter your email'
 								required
 								readOnly={emailLocked}
@@ -96,7 +113,8 @@ const Signup = () => {
 						</div>
 					</div>
 
-					{!emailLocked && (
+					{/* Continue Button or Password Fields */}
+					{!emailLocked ? (
 						<button
 							type='button'
 							className='btn btn-primary w-full mb-4'
@@ -104,10 +122,9 @@ const Signup = () => {
 						>
 							Continue
 						</button>
-					)}
-
-					{emailLocked && (
+					) : (
 						<>
+							{/* Password */}
 							<div className='form-control mb-4'>
 								<label className='label' htmlFor='password'>
 									<span className='label-text font-medium'>
@@ -117,9 +134,10 @@ const Signup = () => {
 								<div className='relative'>
 									<input
 										id='password'
+										name='password'
 										type={passwordVisible ? 'text' : 'password'}
-										value={password}
-										onChange={(e) => setPassword(e.target.value)}
+										value={formData.password}
+										onChange={handleChange}
 										placeholder='Enter password'
 										required
 										className='input input-bordered w-full pr-10'
@@ -134,18 +152,20 @@ const Signup = () => {
 								</div>
 							</div>
 
+							{/* Confirm Password */}
 							<div className='form-control mb-6'>
-								<label className='label' htmlFor='confirm'>
+								<label className='label' htmlFor='confirmPassword'>
 									<span className='label-text font-medium'>
 										Confirm Password <span className='text-red-500'>*</span>
 									</span>
 								</label>
 								<div className='relative'>
 									<input
-										id='confirm'
+										id='confirmPassword'
+										name='confirmPassword'
 										type={confirmVisible ? 'text' : 'password'}
-										value={confirmPassword}
-										onChange={(e) => setConfirmPassword(e.target.value)}
+										value={formData.confirmPassword}
+										onChange={handleChange}
 										placeholder='Re-enter password'
 										required
 										className='input input-bordered w-full pr-10'
@@ -160,32 +180,28 @@ const Signup = () => {
 								</div>
 							</div>
 
-							<button type='submit' className='btn btn-primary w-full mb-4'>
-								Sign Up
+							<button
+								type='submit'
+								className='btn btn-primary w-full mb-4'
+								disabled={isSigningUp}
+							>
+								{isSigningUp ? 'Creating account...' : 'Sign Up'}
 							</button>
 						</>
 					)}
 				</form>
 
+				{/* OAuth Buttons */}
 				{!emailLocked && (
 					<>
 						<div className='divider'>Or sign up with</div>
 						<div className='space-y-3'>
-							<button
-								onClick={handleGoogleSignup}
-								className='btn w-full bg-white text-black border border-gray-300 hover:bg-gray-100 justify-center gap-3'
-							>
-								<FcGoogle className='text-xl' />
-								Continue with Google
-							</button>
-							<button className='btn w-full bg-[#2F2F2F] text-white hover:bg-[#1f1f1f] justify-center gap-3'>
-								<FaMicrosoft className='text-xl' />
-								Continue with Microsoft
-							</button>
-							<button className='btn w-full bg-black text-white hover:bg-gray-900 justify-center gap-3'>
-								<FaApple className='text-xl' />
-								Continue with Apple
-							</button>
+							<AuthButton provider='google' onClick={handleGoogleSignup} />
+							<AuthButton
+								provider='microsoft'
+								onClick={handleMicrosoftSignIn}
+							/>
+							<AuthButton provider='apple' onClick={handleAppleSignIn} />
 						</div>
 					</>
 				)}

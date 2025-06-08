@@ -9,7 +9,6 @@ export const googleAuth = async (req, res) => {
 
 		if (!idToken) return res.status(400).json({ message: 'Missing ID token' })
 
-		// Verify the token with Firebase
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
 		const { email, name, picture, uid } = decodedToken
 
@@ -46,12 +45,13 @@ export const googleAuth = async (req, res) => {
 
 export const signup = async (req, res) => {
 	try {
-		const { name, email, password, provider = 'local' } = req.body
+		const { email, password, provider = 'local' } = req.body
 
-		if (!name || !email || !provider) {
+		// Validate required fields
+		if (!email || !provider) {
 			return res
 				.status(400)
-				.json({ message: 'Name, email, and provider are required.' })
+				.json({ message: 'Email and provider are required.' })
 		}
 
 		if (provider === 'local') {
@@ -61,34 +61,47 @@ export const signup = async (req, res) => {
 					.json({ message: 'Password is required for local signup.' })
 			}
 			if (password.length < 6) {
-				return res
-					.status(400)
-					.json({ message: 'Password must be at least 6 characters long.' })
+				return res.status(400).json({
+					message: 'Password must be at least 6 characters long.',
+				})
 			}
 		}
 
+		// Check if user already exists
 		const existingUser = await User.findOne({ email })
 		if (existingUser) {
 			return res.status(400).json({ message: 'User already exists.' })
 		}
 
+		// Hash password if using local sign up
 		let hashedPassword = null
 		if (provider === 'local') {
 			const salt = await bcrypt.genSalt(10)
 			hashedPassword = await bcrypt.hash(password, salt)
 		}
 
+		// Create user with an unset name and default profileSetup=false
 		const newUser = new User({
-			name,
 			email,
 			password: hashedPassword,
 			provider,
+			name: '', // no name yet
+			profileSetup: false, // setup flag false
 		})
 
 		await newUser.save()
 
+		// Create JWT in cookie
 		generateToken(newUser._id, res)
-		res.status(201).json({ message: 'User created successfully' })
+
+		// Respond with user data including profileSetup status
+		res.status(201).json({
+			_id: newUser._id,
+			email: newUser.email,
+			name: newUser.name,
+			provider: newUser.provider,
+			profileSetup: newUser.profileSetup,
+		})
 	} catch (error) {
 		console.error('Error in signup controller:', error.message)
 		res.status(500).json({ message: 'Server error during signup' })
@@ -120,6 +133,7 @@ export const login = async (req, res) => {
 			_id: user._id,
 			email: user.email,
 			name: user.name,
+			profileSetup: user.profileSetup,
 		})
 	} catch (error) {
 		console.log('Error in login controller', error.message)
