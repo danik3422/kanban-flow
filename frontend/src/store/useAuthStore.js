@@ -70,7 +70,28 @@ export const useAuthStore = create((set) => ({
 			const idToken = await result.user.getIdToken()
 
 			const response = await axiosInstance.post(
-				'/auth/google',
+				'/auth/google/signup',
+				{ idToken },
+				{ withCredentials: true }
+			)
+
+			set({ authUser: response.data })
+			toast.success('Google account created successfully')
+			return { success: true, user: response.data }
+		} catch (error) {
+			console.error('Google Signup Error:', error)
+			toast.error(error.response?.data?.message || 'Google signup failed')
+			return { success: false, error }
+		}
+	},
+
+	handleGoogleSignin: async () => {
+		try {
+			const result = await signInWithPopup(auth, googleProvider)
+			const idToken = await result.user.getIdToken()
+
+			const response = await axiosInstance.post(
+				'/auth/google/login',
 				{ idToken },
 				{ withCredentials: true }
 			)
@@ -79,8 +100,8 @@ export const useAuthStore = create((set) => ({
 			toast.success('Google Sign-in successful')
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error('Google Sign-in error:', error)
-			toast.error('Google Sign-in failed')
+			console.error('Google Sign-in Error:', error)
+			toast.error(error.response?.data?.message || 'Google sign-in failed')
 			return { success: false, error }
 		}
 	},

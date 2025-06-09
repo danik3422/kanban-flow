@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import AuthButton from '../ui/AuthButton'
 
 const Login = () => {
-	const { login, handleGoogleSignup } = useAuthStore()
+	const { login, handleGoogleSignin } = useAuthStore()
 
 	const [formData, setFormData] = useState({ email: '', password: '' })
 	const [passwordVisible, setPasswordVisible] = useState(false)
@@ -35,7 +35,7 @@ const Login = () => {
 	}
 
 	const handleGoogleSignIn = async () => {
-		await handleGoogleSignup()
+		await handleGoogleSignin()
 	}
 
 	const handleMicrosoftSignIn = () =>

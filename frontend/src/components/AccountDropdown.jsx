@@ -7,11 +7,14 @@ import {
 	Settings,
 	User,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useAuthStore } from '../store/useAuthStore'
+import ThemeSelector from './ThemeSelector'
 
 const AccountDropdown = () => {
 	const { authUser, logout } = useAuthStore()
 	const needsSetup = authUser?.profileSetup === false
+	const [showThemeSelector, setShowThemeSelector] = useState(false)
 
 	return (
 		<div className='dropdown dropdown-end'>
@@ -45,7 +48,6 @@ const AccountDropdown = () => {
 				</div>
 
 				{needsSetup ? (
-					// Only Logout button if profile not set up
 					<ul className='menu menu-sm bg-base-200 rounded-box'>
 						<li>
 							<button
@@ -58,9 +60,7 @@ const AccountDropdown = () => {
 						</li>
 					</ul>
 				) : (
-					// Full menu once profileSetup is true
 					<>
-						{/* Account Section */}
 						<p className='text-xs font-semibold text-gray-500 mb-1'>ACCOUNT</p>
 						<ul className='menu menu-sm bg-base-200 rounded-box mb-2'>
 							<li>
@@ -77,7 +77,6 @@ const AccountDropdown = () => {
 							</li>
 						</ul>
 
-						{/* Trello Section */}
 						<p className='text-xs font-semibold text-gray-500 mb-1'>TRELLO</p>
 						<ul className='menu menu-sm bg-base-200 rounded-box mb-2'>
 							<li>
@@ -86,15 +85,24 @@ const AccountDropdown = () => {
 									Boards
 								</a>
 							</li>
-							<li>
-								<a className='flex items-center gap-2'>
+							<li className='relative'>
+								<button
+									onClick={() => setShowThemeSelector(!showThemeSelector)}
+									className='flex items-center gap-2 w-full text-left'
+								>
 									<Palette className='w-4 h-4' />
 									Theme
-								</a>
+								</button>
+								{showThemeSelector && (
+									<div className='absolute left-0 mt-2 z-50'>
+										<ThemeSelector
+											onClose={() => setShowThemeSelector(false)}
+										/>
+									</div>
+								)}
 							</li>
 						</ul>
 
-						{/* More Section */}
 						<p className='text-xs font-semibold text-gray-500 mb-1'>MORE</p>
 						<ul className='menu menu-sm bg-base-200 rounded-box mb-2'>
 							<li>
@@ -111,7 +119,6 @@ const AccountDropdown = () => {
 							</li>
 						</ul>
 
-						{/* Logout Button */}
 						<div className='divider my-2' />
 						<ul className='menu menu-sm bg-base-200 rounded-box'>
 							<li>
