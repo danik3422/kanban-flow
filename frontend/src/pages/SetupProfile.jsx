@@ -17,7 +17,7 @@ const SetupProfile = () => {
 	useEffect(() => {
 		if (authUser) {
 			setName(authUser.name || '')
-			setAvatarPreview(authUser.avatar || null)
+			setAvatarPreview(authUser.avatar || '/avatar.png')
 		}
 	}, [authUser])
 

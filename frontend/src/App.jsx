@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 
 import Navbar from './components/Navbar'
@@ -8,9 +8,12 @@ import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
 import SetupProfile from './pages/SetupProfile'
 import Signup from './pages/Signup'
+import Workspace from './pages/Workspace'
 import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
+	const location = useLocation()
+	const isWorkspace = location.pathname.startsWith('/workspaces')
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 
 	useEffect(() => {
@@ -30,7 +33,7 @@ export const App = () => {
 	return (
 		<>
 			<Toaster position='bottom-right' richColors />
-			<Navbar />
+			{!isWorkspace && <Navbar />}
 
 			<Routes>
 				{needsSetup ? (
@@ -58,7 +61,11 @@ export const App = () => {
 								!authUser ? <ResetPassword /> : <Navigate to='/' replace />
 							}
 						/>
-						<Route path='*' element={<Navigate to='/' replace />} />
+
+						<Route
+							path='/workspaces'
+							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
+						/>
 					</>
 				)}
 			</Routes>

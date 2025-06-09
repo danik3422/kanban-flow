@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import { useAuthStore } from '../store/useAuthStore'
 
 const HeroSection = () => {
+	const { authUser } = useAuthStore()
 	return (
 		<section className='flex flex-col items-center justify-center text-center py-40 px-6 bg-base-200'>
 			<img
@@ -14,12 +16,22 @@ const HeroSection = () => {
 				team, and boost productivity.
 			</p>
 			<div className='flex gap-4 flex-wrap justify-center'>
-				<Link to='/signup' className='btn btn-primary btn-lg'>
-					Get Started
-				</Link>
-				<Link to='/login' className='btn btn-outline btn-lg'>
-					Log In
-				</Link>
+				{authUser ? (
+					<>
+						<Link to='/workspaces' className='btn btn-primary btn-lg'>
+							Workspace
+						</Link>
+					</>
+				) : (
+					<>
+						<Link to='/signup' className='btn btn-primary btn-lg'>
+							Get Started
+						</Link>
+						<Link to='/login' className='btn btn-outline btn-lg'>
+							Log In
+						</Link>
+					</>
+				)}
 			</div>
 		</section>
 	)
