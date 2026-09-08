@@ -1,11 +1,21 @@
 import bcrypt from 'bcrypt'
+import crypto from 'node:crypto'
 import cloudinary from '../lib/cloudinary.js'
+import { env } from '../config/env.js'
 import admin from '../lib/firebaseAdmin.js'
+import { sendPasswordResetEmail } from '../lib/mailer.js'
 import { generateToken } from '../lib/utils.js'
+import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
 
 export const googleSignup = async (req, res) => {
 	try {
+		if (!admin.apps.length) {
+			return res.status(500).json({
+				message: 'Google auth is not configured on the server.',
+			})
+		}
+
 		const { idToken } = req.body
 
 		if (!idToken) {
@@ -53,6 +63,12 @@ export const googleSignup = async (req, res) => {
 
 export const googleSignin = async (req, res) => {
 	try {
+		if (!admin.apps.length) {
+			return res.status(500).json({
+				message: 'Google auth is not configured on the server.',
+			})
+		}
+
 		const { idToken } = req.body
 
 		if (!idToken) {
@@ -201,6 +217,80 @@ export const login = async (req, res) => {
 	} catch (error) {
 		console.error('Error in login controller:', error)
 		res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const requestPasswordReset = async (req, res) => {
+	try {
+		const email = req.body.email?.trim().toLowerCase()
+		const genericResponse = {
+			message: 'If an account exists for this email, a reset link has been sent.',
+		}
+
+		if (!email) return res.status(400).json({ message: 'Email is required' })
+
+		const user = await User.findOne({ email })
+		if (!user) return res.status(200).json(genericResponse)
+
+		await PasswordResetToken.deleteMany({ user: user._id })
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		const expiresAt = new Date(
+			Date.now() + env.passwordResetMinutes * 60 * 1000
+		)
+
+		await PasswordResetToken.create({ user: user._id, tokenHash, expiresAt })
+		const resetUrl = `${env.frontendUrl}/login/resetpassword?token=${rawToken}`
+
+		try {
+			await sendPasswordResetEmail({ email: user.email, resetUrl })
+		} catch (mailError) {
+			await PasswordResetToken.deleteOne({ tokenHash })
+			console.error('Password reset email failed:', mailError.message)
+			return res.status(503).json({
+				message: 'Password reset email service is not configured.',
+			})
+		}
+
+		return res.status(200).json(genericResponse)
+	} catch (error) {
+		console.error('Password reset request failed:', error)
+		return res.status(500).json({ message: 'Could not request password reset' })
+	}
+}
+
+export const resetPassword = async (req, res) => {
+	try {
+		const { token, password } = req.body
+		if (!token || !password) {
+			return res.status(400).json({ message: 'Token and password are required' })
+		}
+		if (password.length < 8) {
+			return res.status(400).json({ message: 'Password must be at least 8 characters long' })
+		}
+
+		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+		const resetToken = await PasswordResetToken.findOne({
+			tokenHash,
+			expiresAt: { $gt: new Date() },
+		})
+		if (!resetToken) {
+			return res.status(400).json({ message: 'Reset link is invalid or expired' })
+		}
+
+		const user = await User.findById(resetToken.user)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+
+		const salt = await bcrypt.genSalt(10)
+		user.password = await bcrypt.hash(password, salt)
+		user.provider = 'local'
+		await user.save()
+		await PasswordResetToken.deleteMany({ user: user._id })
+
+		return res.status(200).json({ message: 'Password updated successfully' })
+	} catch (error) {
+		console.error('Password reset failed:', error)
+		return res.status(500).json({ message: 'Could not reset password' })
 	}
 }
 

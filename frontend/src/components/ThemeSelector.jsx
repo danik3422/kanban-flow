@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { themes } from '../data/themes'
 import { applyTheme } from '../utils/theme'
 
 const ThemeSelector = () => {
-	const [selected, setSelected] = useState('system')
-
-	useEffect(() => {
-		const saved = localStorage.getItem('theme') || 'system'
-		setSelected(saved)
-	}, [])
+	const [selected, setSelected] = useState(
+		() => localStorage.getItem('theme') || 'system'
+	)
 
 	const handleChange = (theme) => {
 		setSelected(theme)

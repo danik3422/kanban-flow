@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react'
+import { CheckSquare, Menu } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -15,15 +15,16 @@ const Navbar = () => {
 	}
 
 	return (
-		<header className='navbar bg-base-100 shadow-md fixed top-0 left-0 right-0 z-40'>
+		<header className='navbar bg-base-100 fixed top-0 left-0 right-0 z-40 border-b border-base-300'>
 			<div className='container mx-auto px-4 w-full flex justify-between items-center h-16'>
 				{/* Logo */}
-				<Link to='/' className='text-xl font-bold text-primary'>
-					Trello
+				<Link to='/' className='flex items-center gap-2 text-xl font-bold text-base-content'>
+					<span className='brand-mark'><CheckSquare size={15} /></span>
+					Kanban
 				</Link>
 
 				{/* Right Side */}
-				<div className='flex items-center gap-4'>
+				<div className='header-actions'>
 					{authUser ? (
 						<AccountDropdown />
 					) : (
@@ -31,28 +32,28 @@ const Navbar = () => {
 							{/* Desktop Auth Buttons */}
 							<Link
 								to='/login'
-								className='btn btn-ghost btn-sm hidden sm:inline-flex'
+								className='header-link hidden sm:inline-flex'
 							>
 								Login
 							</Link>
 							<Link
 								to='/signup'
-								className='btn btn-primary btn-sm hidden sm:inline-flex'
+								className='header-cta hidden sm:inline-flex'
 							>
-								Get Trello for free
+									Start organizing
 							</Link>
 
 							{/* Mobile Burger Menu */}
 							<div className='relative sm:hidden'>
 								<button
 									onClick={() => setIsMenuOpen((prev) => !prev)}
-									className='btn btn-circle btn-ghost'
+									className='header-menu-button'
 								>
 									<Menu className='w-5 h-5' />
 								</button>
 
 								{isMenuOpen && (
-									<ul className='menu absolute right-0 mt-2 z-50 p-2 shadow bg-base-100 rounded-box w-48'>
+										<ul className='header-menu'>
 										<li>
 											<button onClick={() => handleNavigate('/login')}>
 												Login
@@ -60,7 +61,7 @@ const Navbar = () => {
 										</li>
 										<li>
 											<button onClick={() => handleNavigate('/signup')}>
-												Get Trello for free
+												Start organizing
 											</button>
 										</li>
 									</ul>

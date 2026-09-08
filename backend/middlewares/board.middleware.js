@@ -1,4 +1,5 @@
 import Board from '../models/board.model.js'
+import Column from '../models/column.model.js'
 
 export const boardMiddleware = async (req, res, next) => {
 	try {
@@ -12,6 +13,23 @@ export const boardMiddleware = async (req, res, next) => {
 		next()
 	} catch (error) {
 		console.error('Board middleware error:', error)
+		res.status(500).json({ message: 'Internal Server Error' })
+	}
+}
+
+export const columnMiddleware = async (req, res, next) => {
+	try {
+		const columnId = req.params.id
+		const column = await Column.findById(columnId)
+
+		if (!column) {
+			return res.status(404).json({ message: 'Column not found.' })
+		}
+
+		req.column = column
+		next()
+	} catch (error) {
+		console.error('Column middleware error:', error)
 		res.status(500).json({ message: 'Internal Server Error' })
 	}
 }

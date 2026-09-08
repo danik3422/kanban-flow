@@ -2,6 +2,7 @@ import { signInWithPopup } from 'firebase/auth'
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance } from '../lib/axios'
+import { devUser, isDevAuthBypass } from '../lib/devMode'
 import { auth, googleProvider } from '../lib/firebase'
 
 export const useAuthStore = create((set) => ({
@@ -14,6 +15,10 @@ export const useAuthStore = create((set) => ({
 
 	checkAuth: async () => {
 		set({ isCheckingAuth: true })
+		if (isDevAuthBypass) {
+			set({ authUser: devUser, isCheckingAuth: false })
+			return
+		}
 		try {
 			const res = await axiosInstance.get('/auth/get-user')
 			set({ authUser: res.data })
@@ -55,6 +60,11 @@ export const useAuthStore = create((set) => ({
 	},
 
 	logout: async () => {
+		if (isDevAuthBypass) {
+			set({ authUser: devUser })
+			toast.info('Dev auth bypass is enabled')
+			return
+		}
 		try {
 			await axiosInstance.post('/auth/logout')
 			set({ authUser: null })

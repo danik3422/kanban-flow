@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
@@ -8,18 +8,13 @@ const SetupProfile = () => {
 	const navigate = useNavigate()
 	const { authUser, checkAuth } = useAuthStore()
 
-	const [name, setName] = useState('')
+	const [name, setName] = useState(() => authUser?.name || '')
 	const [password, setPassword] = useState('')
 	const [avatarFile, setAvatarFile] = useState(null)
-	const [avatarPreview, setAvatarPreview] = useState(null)
+	const [avatarPreview, setAvatarPreview] = useState(
+		() => authUser?.avatar || '/avatar.png'
+	)
 	const [isSubmitting, setIsSubmitting] = useState(false)
-
-	useEffect(() => {
-		if (authUser) {
-			setName(authUser.name || '')
-			setAvatarPreview(authUser.avatar || '/avatar.png')
-		}
-	}, [authUser])
 
 	const handleFileChange = (e) => {
 		const file = e.target.files[0]

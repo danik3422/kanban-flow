@@ -1,33 +1,35 @@
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import express from 'express'
+import helmet from 'helmet'
 
+import { env } from './config/env.js'
 import { connectDB } from './lib/db.js'
+import { apiLimiter } from './middlewares/security.middleware.js'
 import authRoutes from './routes/auth.route.js'
 import boardRoutes from './routes/board.route.js'
 
-dotenv.config()
-
-const PORT = process.env.PORT || 5001
 const app = express()
 
 // Middleware
-app.use(express.json())
+app.disable('x-powered-by')
+app.use(helmet())
+app.use(express.json({ limit: '100kb' }))
 app.use(cookieParser())
 app.use(
 	cors({
-		origin: 'http://localhost:5173',
+		origin: env.corsOrigin,
 		credentials: true,
 	})
 )
+app.use('/api', apiLimiter)
 
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/board', boardRoutes)
 
 // Start server and connect DB
-app.listen(PORT, () => {
-	console.log(`Server is running on port ${PORT}`)
+app.listen(env.port, () => {
+	console.log(`Server is running on port ${env.port}`)
 	connectDB()
 })

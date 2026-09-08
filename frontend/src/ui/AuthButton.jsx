@@ -25,7 +25,7 @@ const AuthButton = ({ provider, onClick }) => {
 	return (
 		<button
 			onClick={onClick}
-			className={`btn w-full justify-center gap-3 ${styles[provider]}`}
+			className={`auth-provider-button ${styles[provider]}`}
 		>
 			{icons[provider]}
 			{labels[provider]}

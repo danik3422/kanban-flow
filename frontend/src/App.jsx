@@ -5,7 +5,10 @@ import { Toaster } from 'sonner'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import NotFound from './pages/NotFound'
+import Profile from './pages/Profile'
 import ResetPassword from './pages/ResetPassword'
+import Settings from './pages/Settings'
 import SetupProfile from './pages/SetupProfile'
 import Signup from './pages/Signup'
 import Workspace from './pages/Workspace'
@@ -66,6 +69,19 @@ export const App = () => {
 							path='/workspaces'
 							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
 						/>
+						<Route
+							path='/setup-profile'
+							element={authUser ? <SetupProfile /> : <Navigate to='/login' replace />}
+						/>
+						<Route
+							path='/profile'
+							element={authUser ? <Profile /> : <Navigate to='/login' replace />}
+						/>
+						<Route
+							path='/settings'
+							element={authUser ? <Settings /> : <Navigate to='/login' replace />}
+						/>
+						<Route path='*' element={<NotFound />} />
 					</>
 				)}
 			</Routes>

@@ -1,4 +1,4 @@
-import { Home, List, LogOut, Settings, Users, X } from 'lucide-react'
+import { ClipboardList, Home, LogOut, Settings, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -34,10 +34,10 @@ const WorkspaceSidebar = ({ isOpen, onClose }) => {
 	}, [])
 
 	const navItems = [
-		{ icon: <Home size={20} />, label: 'Home' },
-		{ icon: <List size={20} />, label: 'Tasks' },
-		{ icon: <Users size={20} />, label: 'Users', count: 2 },
-		{ icon: <Settings size={20} />, label: 'Settings' },
+		{ icon: <Home size={18} />, label: 'Overview', active: true },
+		{ icon: <ClipboardList size={18} />, label: 'My tasks', count: 0 },
+		{ icon: <Users size={18} />, label: 'Team' },
+		{ icon: <Settings size={18} />, label: 'Settings' },
 	]
 
 	return (
@@ -53,7 +53,7 @@ const WorkspaceSidebar = ({ isOpen, onClose }) => {
 			<aside
 				ref={sidebarRef}
 				style={{ width }}
-				className={`bg-base-100 border-r border-base-300 flex flex-col justify-between shadow-sm
+				className={`workspace-sidebar bg-base-100 border-r border-base-300 flex flex-col justify-between shadow-sm
 					fixed md:static h-full z-40 transition-transform duration-300
 					${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
 			>
@@ -64,7 +64,8 @@ const WorkspaceSidebar = ({ isOpen, onClose }) => {
 							to='/workspaces'
 							className='text-2xl font-extrabold text-primary hover:opacity-80 transition-opacity'
 						>
-							Trello
+							<span className='brand-mark'>K</span>
+							<span>Kanban</span>
 						</Link>
 						{/* Mobile close */}
 						<button onClick={onClose} className='md:hidden text-base-content'>
@@ -77,7 +78,7 @@ const WorkspaceSidebar = ({ isOpen, onClose }) => {
 						{navItems.map((item, i) => (
 							<div
 								key={i}
-								className='flex justify-between items-center px-4 py-3 border-b border-base-300 hover:bg-base-200/60 transition-colors duration-200 rounded-md'
+								className={`workspace-nav-item flex justify-between items-center px-4 py-3 border-b border-base-300 hover:bg-base-200/60 transition-colors duration-200 rounded-md ${item.active ? 'active' : ''}`}
 							>
 								<div className='flex items-center gap-2 text-sm text-base-content'>
 									{item.icon}

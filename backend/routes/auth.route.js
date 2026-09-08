@@ -5,19 +5,32 @@ import {
 	googleSignup,
 	login,
 	logout,
+	requestPasswordReset,
+	resetPassword,
 	setupProfile,
 	signup,
 } from '../controllers/auth.controller.js'
 import { authMiddleware } from '../middlewares/auth.middleware.js'
+import { authLimiter, passwordResetLimiter } from '../middlewares/security.middleware.js'
+import { validateBody } from '../middlewares/validation.middleware.js'
+import {
+	googleAuthSchema,
+	loginSchema,
+	passwordResetConfirmSchema,
+	passwordResetRequestSchema,
+	signupSchema,
+} from '../lib/validation.js'
 
 const router = express.Router()
 
 // Public routes
-router.post('/signup', signup)
-router.post('/login', login)
+router.post('/signup', authLimiter, validateBody(signupSchema), signup)
+router.post('/login', authLimiter, validateBody(loginSchema), login)
+router.post('/password-reset/request', passwordResetLimiter, validateBody(passwordResetRequestSchema), requestPasswordReset)
+router.post('/password-reset/confirm', passwordResetLimiter, validateBody(passwordResetConfirmSchema), resetPassword)
 //Google
-router.post('/google/signup', googleSignup)
-router.post('/google/login', googleSignin)
+router.post('/google/signup', authLimiter, validateBody(googleAuthSchema), googleSignup)
+router.post('/google/login', authLimiter, validateBody(googleAuthSchema), googleSignin)
 
 // Protected routes
 router.post('/logout', logout)

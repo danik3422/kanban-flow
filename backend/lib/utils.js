@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken'
+
+import { env } from '../config/env.js'
+
 export const generateToken = (userId, res) => {
-	const token = jwt.sign({ userId }, process.env.JWT_SECRET, {
+	const token = jwt.sign({ userId }, env.jwtSecret, {
 		expiresIn: '7d',
 	})
 
@@ -8,7 +11,7 @@ export const generateToken = (userId, res) => {
 		httpOnly: true,
 		maxAge: 7 * 24 * 60 * 60 * 1000,
 		sameSite: 'strict',
-		secure: process.env.NODE_ENV !== 'development',
+		secure: env.isProduction,
 	})
 
 	return token

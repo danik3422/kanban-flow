@@ -1,4 +1,14 @@
-import { Eye, EyeOff, Pencil } from 'lucide-react'
+import {
+	ArrowRight,
+	Check,
+	CheckCircle2,
+	Circle,
+	Eye,
+	EyeOff,
+	LockKeyhole,
+	Pencil,
+	ShieldCheck,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -21,6 +31,16 @@ const Signup = () => {
 	const isSigningUp = useAuthStore((state) => state.isSigningUp)
 
 	const navigate = useNavigate()
+	const passwordChecks = {
+		length: formData.password.length >= 8,
+		uppercase: /[A-Z]/.test(formData.password),
+		number: /\d/.test(formData.password),
+		special: /[^A-Za-z0-9]/.test(formData.password),
+	}
+	const passwordScore = Object.values(passwordChecks).filter(Boolean).length
+	const passwordStrength = passwordScore <= 1 ? 'weak' : passwordScore <= 3 ? 'medium' : 'strong'
+	const passwordsMatch = formData.confirmPassword.length > 0 && formData.password === formData.confirmPassword
+	const passwordMismatch = formData.confirmPassword.length > 0 && !passwordsMatch
 
 	const handleChange = (e) => {
 		const { name, value } = e.target
@@ -54,7 +74,7 @@ const Signup = () => {
 		})
 
 		if (success) {
-			navigate('/enter-name')
+			navigate('/setup-profile')
 		}
 	}
 
@@ -64,154 +84,23 @@ const Signup = () => {
 		toast.info('Apple sign-in not implemented yet')
 
 	return (
-		<div className='min-h-screen flex items-center justify-center px-4 bg-base-100'>
-			<div className='w-full max-w-sm card bg-base-200 shadow-xl p-8'>
-				<div className='flex justify-center mb-6'>
-					<img
-						src='https://cdn.worldvectorlogo.com/logos/trello.svg'
-						alt='Trello'
-						className='h-10'
-						onError={(e) => (e.target.style.display = 'none')}
-					/>
-				</div>
+		<div className='auth-page'>
+			<div className='auth-layout'>
+				<section className='auth-intro'>
+					<div className='auth-intro-copy'><p className='eyebrow'>Start organizing</p><h1>Give your best work a clear place to grow.</h1><p>Set up a calm, shared space for ideas, priorities, and the work that matters next.</p></div>
+					<div className='auth-preview'><div className='auth-preview-top'><span>Your first board</span><ShieldCheck size={16} /></div><div className='auth-progress'><span /><span /><span /><span /></div><strong>Build your working rhythm.</strong><p>Start with a board, then make it yours.</p><div className='auth-check-list'><span><Check size={13} /> Add your first project</span><span><Check size={13} /> Invite your team when ready</span></div></div>
+					<div className='auth-trust'><LockKeyhole size={15} /> Simple setup. Private by default.</div>
+				</section>
 
-				<h2 className='text-center text-xl font-bold text-base-content mb-6'>
-					Create your account
-				</h2>
-
-				<form onSubmit={handleSubmit}>
-					{/* Email Input */}
-					<div className='form-control mb-4'>
-						<label className='label' htmlFor='email'>
-							<span className='label-text font-medium'>
-								Email <span className='text-red-500'>*</span>
-							</span>
-						</label>
-						<div className='relative'>
-							<input
-								id='email'
-								name='email'
-								type='email'
-								value={formData.email}
-								onChange={handleChange}
-								placeholder='Enter your email'
-								required
-								readOnly={emailLocked}
-								className={`input input-bordered w-full pr-10 ${
-									emailLocked ? 'opacity-80 cursor-default' : ''
-								}`}
-							/>
-							{emailLocked && (
-								<button
-									type='button'
-									onClick={handleEditEmail}
-									className='absolute right-2 top-1/2 -translate-y-1/2 text-base-content opacity-70 hover:opacity-100'
-								>
-									<Pencil size={18} />
-								</button>
-							)}
-						</div>
-					</div>
-
-					{/* Continue Button or Password Fields */}
-					{!emailLocked ? (
-						<button
-							type='button'
-							className='btn btn-primary w-full mb-4'
-							onClick={handleEmailContinue}
-						>
-							Continue
-						</button>
-					) : (
-						<>
-							{/* Password */}
-							<div className='form-control mb-4'>
-								<label className='label' htmlFor='password'>
-									<span className='label-text font-medium'>
-										Password <span className='text-red-500'>*</span>
-									</span>
-								</label>
-								<div className='relative'>
-									<input
-										id='password'
-										name='password'
-										type={passwordVisible ? 'text' : 'password'}
-										value={formData.password}
-										onChange={handleChange}
-										placeholder='Enter password'
-										required
-										className='input input-bordered w-full pr-10'
-									/>
-									<button
-										type='button'
-										className='absolute right-2 top-1/2 -translate-y-1/2'
-										onClick={() => setPasswordVisible((v) => !v)}
-									>
-										{passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-									</button>
-								</div>
-							</div>
-
-							{/* Confirm Password */}
-							<div className='form-control mb-6'>
-								<label className='label' htmlFor='confirmPassword'>
-									<span className='label-text font-medium'>
-										Confirm Password <span className='text-red-500'>*</span>
-									</span>
-								</label>
-								<div className='relative'>
-									<input
-										id='confirmPassword'
-										name='confirmPassword'
-										type={confirmVisible ? 'text' : 'password'}
-										value={formData.confirmPassword}
-										onChange={handleChange}
-										placeholder='Re-enter password'
-										required
-										className='input input-bordered w-full pr-10'
-									/>
-									<button
-										type='button'
-										className='absolute right-2 top-1/2 -translate-y-1/2'
-										onClick={() => setConfirmVisible((v) => !v)}
-									>
-										{confirmVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-									</button>
-								</div>
-							</div>
-
-							<button
-								type='submit'
-								className='btn btn-primary w-full mb-4'
-								disabled={isSigningUp}
-							>
-								{isSigningUp ? 'Creating account...' : 'Sign Up'}
-							</button>
-						</>
-					)}
-				</form>
-
-				{/* OAuth Buttons */}
-				{!emailLocked && (
-					<>
-						<div className='divider'>Or sign up with</div>
-						<div className='space-y-3'>
-							<AuthButton provider='google' onClick={handleGoogleSignup} />
-							<AuthButton
-								provider='microsoft'
-								onClick={handleMicrosoftSignIn}
-							/>
-							<AuthButton provider='apple' onClick={handleAppleSignIn} />
-						</div>
-					</>
-				)}
-
-				<p className='text-center text-sm text-base-content mt-6'>
-					Already have an account?{' '}
-					<Link to='/login' className='link link-primary'>
-						Log in
-					</Link>
-				</p>
+				<section className='auth-form-panel'>
+					<div className='auth-form-heading'><p className='eyebrow'>Create account</p><h2>Start with the basics.</h2><p>Use your email to create a workspace you can grow into.</p></div>
+					<form className='auth-form' onSubmit={handleSubmit}>
+						<div className='auth-field'><label htmlFor='email'>Email address</label><div className='auth-input-wrap'><input id='email' name='email' type='email' value={formData.email} onChange={handleChange} placeholder='you@example.com' required readOnly={emailLocked} />{emailLocked && <button type='button' onClick={handleEditEmail} className='auth-input-action' aria-label='Edit email' title='Edit email'><Pencil size={16} /></button>}</div></div>
+						{!emailLocked ? <button type='button' className='auth-submit' onClick={handleEmailContinue}>Continue <ArrowRight size={16} /></button> : <><div className='auth-field'><label htmlFor='password'>Password</label><div className='auth-input-wrap'><input id='password' name='password' type={passwordVisible ? 'text' : 'password'} value={formData.password} onChange={handleChange} placeholder='Create a password' required /><button type='button' onClick={() => setPasswordVisible((value) => !value)} className='auth-input-action' aria-label={passwordVisible ? 'Hide password' : 'Show password'} title={passwordVisible ? 'Hide password' : 'Show password'}>{passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>{formData.password && <div className={`password-strength ${passwordStrength}`}><div className='password-strength-heading'><span>Password strength</span><strong>{passwordStrength}</strong></div><div className='password-strength-bars'><span className={passwordScore >= 1 ? 'filled' : ''} /><span className={passwordScore >= 2 ? 'filled' : ''} /><span className={passwordScore >= 3 ? 'filled' : ''} /><span className={passwordScore >= 4 ? 'filled' : ''} /></div><div className='password-requirements'><span className={passwordChecks.length ? 'met' : ''}>{passwordChecks.length ? <CheckCircle2 size={13} /> : <Circle size={13} />} 8+ characters</span><span className={passwordChecks.uppercase ? 'met' : ''}>{passwordChecks.uppercase ? <CheckCircle2 size={13} /> : <Circle size={13} />} Uppercase letter</span><span className={passwordChecks.number ? 'met' : ''}>{passwordChecks.number ? <CheckCircle2 size={13} /> : <Circle size={13} />} Number</span><span className={passwordChecks.special ? 'met' : ''}>{passwordChecks.special ? <CheckCircle2 size={13} /> : <Circle size={13} />} Special character</span></div></div>}</div><div className='auth-field'><label htmlFor='confirmPassword'>Confirm password</label><div className='auth-input-wrap'><input id='confirmPassword' name='confirmPassword' type={confirmVisible ? 'text' : 'password'} value={formData.confirmPassword} onChange={handleChange} placeholder='Repeat your password' required className={passwordMismatch ? 'password-input-mismatch' : passwordsMatch ? 'password-input-match' : ''} /><button type='button' onClick={() => setConfirmVisible((value) => !value)} className='auth-input-action' aria-label={confirmVisible ? 'Hide password' : 'Show password'} title={confirmVisible ? 'Hide password' : 'Show password'}>{confirmVisible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>{passwordMismatch && <p className='password-match-message mismatch'>Passwords do not match</p>}{passwordsMatch && <p className='password-match-message match'>Passwords match</p>}</div><button type='submit' className='auth-submit' disabled={isSigningUp || passwordMismatch}>{isSigningUp ? 'Creating account...' : <>Create account <ArrowRight size={16} /></>}</button></>}
+					</form>
+					{!emailLocked && <><div className='auth-divider'><span>or sign up with</span></div><div className='auth-providers'><AuthButton provider='google' onClick={handleGoogleSignup} /><AuthButton provider='microsoft' onClick={handleMicrosoftSignIn} /><AuthButton provider='apple' onClick={handleAppleSignIn} /></div></>}
+					<p className='auth-footer-copy'>Already have an account? <Link to='/login'>Log in <ArrowRight size={14} /></Link></p>
+				</section>
 			</div>
 		</div>
 	)

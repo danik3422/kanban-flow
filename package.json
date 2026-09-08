@@ -1,9 +1,15 @@
 {
-  "name": "ai",
+  "name": "kanban-flow",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
   },
   "keywords": [],
   "author": "Danylo Syloats <mr.siloacd@gmail.com>",

@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/user.model.js'
+import { env } from '../config/env.js'
+
 export const authMiddleware = async (req, res, next) => {
 	try {
 		const token = req.cookies.jwt
@@ -10,7 +12,7 @@ export const authMiddleware = async (req, res, next) => {
 				.json({ message: 'Unauthorized - No token provided' })
 		}
 
-		const decoded = jwt.verify(token, process.env.JWT_SECRET)
+		const decoded = jwt.verify(token, env.jwtSecret)
 
 		if (!decoded) {
 			return res.status(401).json({ message: 'Unauthorized - Invalid token' })
