@@ -7,6 +7,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import Profile from './pages/Profile'
+import EditProfile from './pages/EditProfile'
 import ResetPassword from './pages/ResetPassword'
 import Settings from './pages/Settings'
 import SetupProfile from './pages/SetupProfile'
@@ -70,12 +71,16 @@ export const App = () => {
 							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
 						/>
 						<Route
-							path='/setup-profile'
-							element={authUser ? <SetupProfile /> : <Navigate to='/login' replace />}
+							path='/workspaces/:boardId'
+							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
 						/>
 						<Route
 							path='/profile'
 							element={authUser ? <Profile /> : <Navigate to='/login' replace />}
+						/>
+						<Route
+							path='/profile/edit'
+							element={authUser ? <EditProfile /> : <Navigate to='/login' replace />}
 						/>
 						<Route
 							path='/settings'

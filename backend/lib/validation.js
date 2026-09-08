@@ -24,3 +24,10 @@ export const passwordResetConfirmSchema = z.object({
 	token: z.string().length(64),
 	password,
 })
+
+export const settingsSchema = z.object({
+	emailNotifications: z.boolean(),
+	taskNotifications: z.boolean(),
+	weeklyDigest: z.boolean(),
+	language: z.enum(['en', 'uk']),
+})

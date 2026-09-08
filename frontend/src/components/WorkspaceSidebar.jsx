@@ -1,140 +1,70 @@
-import { ClipboardList, Home, LogOut, Settings, Users, X } from 'lucide-react'
+import { ChevronDown, ClipboardList, Home, Layers3, Plus, Search, Settings, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuthStore } from '../store/useAuthStore'
 
-const MIN_WIDTH = 200
-const MAX_WIDTH = 400
+const MIN_WIDTH = 220
+const MAX_WIDTH = 390
 
-const WorkspaceSidebar = ({ isOpen, onClose }) => {
-	const { authUser, logout } = useAuthStore()
-	const [width, setWidth] = useState(280)
+const RoomGroup = ({ title, items, isOpen, onToggle, search, selectedBoardId, onBoardSelect }) => {
+	const filteredItems = items.filter((board) => board.name.toLowerCase().includes(search.toLowerCase()))
+
+	return (
+		<div className='workspace-room-group'>
+			<button className='workspace-room-group-heading' onClick={onToggle}><span>{title}</span><span className='workspace-room-group-meta'><b>{items.length}</b><ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} /></span></button>
+			{isOpen && <div className='workspace-room-list'>{filteredItems.map((board) => <button key={board._id} onClick={() => onBoardSelect(board)} className={`workspace-room ${selectedBoardId === board._id ? 'active' : ''}`} title={board.name}><span className='workspace-room-icon'><Layers3 size={15} /></span><span className='workspace-room-name'>{board.name}</span><span className='workspace-room-dot' /></button>)}{!filteredItems.length && <div className='workspace-rooms-empty'>{search ? 'No rooms match your search.' : 'No rooms here yet.'}</div>}</div>}
+		</div>
+	)
+}
+
+const WorkspaceSidebar = ({ isOpen, onClose, boards = [], selectedBoardId, onBoardSelect, onCreateBoard, isCollapsed = false }) => {
+	const [width, setWidth] = useState(286)
+	const [roomSearch, setRoomSearch] = useState('')
+	const [isOwnedOpen, setIsOwnedOpen] = useState(true)
+	const [isSharedOpen, setIsSharedOpen] = useState(true)
 	const isDragging = useRef(false)
 	const sidebarRef = useRef(null)
 
 	useEffect(() => {
-		const handleMouseMove = (e) => {
+		const handleMouseMove = (event) => {
 			if (!isDragging.current) return
-			const newWidth = Math.min(Math.max(e.clientX, MIN_WIDTH), MAX_WIDTH)
-			setWidth(newWidth)
+			setWidth(Math.min(Math.max(event.clientX, MIN_WIDTH), MAX_WIDTH))
 		}
-
 		const handleMouseUp = () => {
 			isDragging.current = false
 			document.body.style.cursor = ''
 		}
-
 		document.addEventListener('mousemove', handleMouseMove)
 		document.addEventListener('mouseup', handleMouseUp)
-
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove)
 			document.removeEventListener('mouseup', handleMouseUp)
 		}
 	}, [])
 
+	const ownedBoards = boards.filter((board) => board.access === 'owned' || !board.access)
+	const sharedBoards = boards.filter((board) => board.access === 'invited')
 	const navItems = [
-		{ icon: <Home size={18} />, label: 'Overview', active: true },
-		{ icon: <ClipboardList size={18} />, label: 'My tasks', count: 0 },
-		{ icon: <Users size={18} />, label: 'Team' },
-		{ icon: <Settings size={18} />, label: 'Settings' },
+		{ icon: <Home size={17} />, label: 'Workspace home', to: '/workspaces' },
+		{ icon: <ClipboardList size={17} />, label: 'My tasks', disabled: true },
+		{ icon: <Users size={17} />, label: 'Team', disabled: true },
 	]
 
 	return (
 		<>
-			{/* Overlay for mobile */}
-			<div
-				className={`fixed inset-0 bg-black bg-opacity-30 z-30 md:hidden transition-opacity duration-300 ${
-					isOpen ? 'block' : 'hidden'
-				}`}
-				onClick={onClose}
-			/>
-
-			<aside
-				ref={sidebarRef}
-				style={{ width }}
-				className={`workspace-sidebar bg-base-100 border-r border-base-300 flex flex-col justify-between shadow-sm
-					fixed md:static h-full z-40 transition-transform duration-300
-					${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
-			>
-				{/* Header */}
-				<div className='border-b border-base-300'>
-					<div className='px-5 py-4 flex items-center justify-between md:block'>
-						<Link
-							to='/workspaces'
-							className='text-2xl font-extrabold text-primary hover:opacity-80 transition-opacity'
-						>
-							<span className='brand-mark'>K</span>
-							<span>Kanban</span>
-						</Link>
-						{/* Mobile close */}
-						<button onClick={onClose} className='md:hidden text-base-content'>
-							<X size={22} />
-						</button>
-					</div>
-
-					{/* Navigation */}
-					<nav className='flex flex-col'>
-						{navItems.map((item, i) => (
-							<div
-								key={i}
-								className={`workspace-nav-item flex justify-between items-center px-4 py-3 border-b border-base-300 hover:bg-base-200/60 transition-colors duration-200 rounded-md ${item.active ? 'active' : ''}`}
-							>
-								<div className='flex items-center gap-2 text-sm text-base-content'>
-									{item.icon}
-									<span>{item.label}</span>
-								</div>
-								{item.count !== undefined && (
-									<div className='badge badge-sm badge-primary'>
-										{item.count}
-									</div>
-								)}
-							</div>
-						))}
-					</nav>
-				</div>
-
-				{/* Footer */}
-				{/* Footer */}
-				<div className='border-t border-base-300 px-4 py-4'>
-					<div className='flex items-center justify-between gap-2'>
-						<div className='flex items-center gap-3 min-w-0'>
-							<div className='avatar'>
-								<div className='w-11 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2'>
-									<img src={authUser.avatar || '/avatar.png'} alt='avatar' />
-								</div>
-							</div>
-							<div className='leading-tight hidden sm:block min-w-0'>
-								<p className='font-semibold text-sm truncate'>
-									{authUser.name || authUser.email}
-								</p>
-								<p className='text-xs text-base-content/60 truncate'>
-									{authUser.email}
-								</p>
-							</div>
-						</div>
-
-						<button
-							onClick={logout}
-							className='text-error hover:text-error-focus transition-colors shrink-0'
-							title='Log out'
-						>
-							<LogOut size={20} />
-						</button>
-					</div>
+			<div className={`workspace-overlay md:hidden ${isOpen ? 'is-open' : ''}`} onClick={onClose} />
+			<aside ref={sidebarRef} style={{ width: isCollapsed ? 76 : width }} className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} fixed md:static h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+				<div className='workspace-sidebar-main'>
+					<div className='workspace-brand-row'><Link to='/workspaces' className='workspace-brand'><span className='brand-mark'>K</span><span>Kanban</span></Link></div>
+					<div className='workspace-space-label'><span>My workspace</span><span className='workspace-private'>Private</span></div>
+					<nav className='workspace-primary-nav'>{navItems.map((item) => item.disabled ? <button key={item.label} className='workspace-nav-item workspace-nav-disabled' disabled title={item.label}>{item.icon}<span>{item.label}</span><small>Soon</small></button> : <Link key={item.label} to={item.to} onClick={onClose} className={`workspace-nav-item ${!selectedBoardId ? 'active' : ''}`} title={item.label}>{item.icon}<span>{item.label}</span></Link>)}</nav>
+					<div className='workspace-rooms-heading'><span>Rooms</span><button onClick={onCreateBoard} aria-label='Create a room' title='Create a room'><Plus size={16} /></button></div>
+					<label className='workspace-room-search'><Search size={15} /><input value={roomSearch} onChange={(event) => setRoomSearch(event.target.value)} placeholder='Find a room' aria-label='Find a room' /></label>
+					<RoomGroup title='My boards' items={ownedBoards} isOpen={isOwnedOpen} onToggle={() => setIsOwnedOpen((value) => !value)} search={roomSearch} selectedBoardId={selectedBoardId} onBoardSelect={onBoardSelect} />
+					<RoomGroup title='Shared with me' items={sharedBoards} isOpen={isSharedOpen} onToggle={() => setIsSharedOpen((value) => !value)} search={roomSearch} selectedBoardId={selectedBoardId} onBoardSelect={onBoardSelect} />
+					<button className='workspace-create-room' onClick={onCreateBoard}><Plus size={16} /> New room</button>
 				</div>
 			</aside>
-
-			{/* Resize handle (desktop only) */}
-			<div
-				onMouseDown={() => {
-					if (window.innerWidth >= 768) {
-						isDragging.current = true
-						document.body.style.cursor = 'col-resize'
-					}
-				}}
-				className='hidden md:block w-1 cursor-col-resize bg-base-200 hover:bg-base-300 transition-colors'
-			/>
+			<div onMouseDown={() => { if (!isCollapsed && window.innerWidth >= 768) { isDragging.current = true; document.body.style.cursor = 'col-resize' } }} className={`workspace-resize-handle hidden md:block ${isCollapsed ? 'is-disabled' : ''}`} />
 		</>
 	)
 }

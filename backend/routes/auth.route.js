@@ -9,6 +9,7 @@ import {
 	resetPassword,
 	setupProfile,
 	signup,
+	updateSettings,
 } from '../controllers/auth.controller.js'
 import { authMiddleware } from '../middlewares/auth.middleware.js'
 import { authLimiter, passwordResetLimiter } from '../middlewares/security.middleware.js'
@@ -18,6 +19,7 @@ import {
 	loginSchema,
 	passwordResetConfirmSchema,
 	passwordResetRequestSchema,
+	settingsSchema,
 	signupSchema,
 } from '../lib/validation.js'
 
@@ -36,5 +38,6 @@ router.post('/google/login', authLimiter, validateBody(googleAuthSchema), google
 router.post('/logout', logout)
 router.get('/get-user', authMiddleware, getAuthUser)
 router.patch('/setup-profile', authMiddleware, setupProfile)
+router.patch('/settings', authMiddleware, validateBody(settingsSchema), updateSettings)
 
 export default router

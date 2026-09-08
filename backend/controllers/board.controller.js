@@ -5,6 +5,7 @@ import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
 import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
+import { emitBoardEvent } from '../lib/realtime.js'
 
 const ensureBoardAccess = async (userId, boardId) => {
 	const board = await Board.findById(boardId)
@@ -149,6 +150,7 @@ export const getColumnTasks = async (req, res) => {
 		}
 
 		const tasks = await Task.find({ column: columnId })
+			.populate('assignees', 'name email avatar')
 			.sort({ position: 1, createdAt: 1 })
 			.lean()
 
@@ -207,17 +209,30 @@ export const getUserBoards = async (req, res) => {
 			return res.status(400).json({ message: 'User ID is required' })
 		}
 
-		const membership = await BoardMember.find({ user: userId }).select('board')
+		const membership = await BoardMember.find({ user: userId }).select('board role').lean()
 
 		const boardIds = membership.map((member) => member.board)
 
-		const boards = await Board.find({ _id: { $in: boardIds } })
+		const boards = await Board.find({ _id: { $in: boardIds } }).lean()
 
 		if (!boards || boards.length === 0) {
 			return res.status(404).json({ message: 'No boards found for this user.' })
 		}
 
-		res.status(200).json(boards)
+		const membershipByBoard = new Map(
+			membership.map((member) => [member.board.toString(), member])
+		)
+		const boardsWithAccess = boards.map((board) => {
+			const member = membershipByBoard.get(board._id.toString())
+			const isOwner = board.createdBy.toString() === userId.toString()
+			return {
+				...board,
+				access: isOwner ? 'owned' : 'invited',
+				role: isOwner ? 'owner' : member?.role || 'member',
+			}
+		})
+
+		res.status(200).json(boardsWithAccess)
 	} catch (error) {
 		console.error('Error fetching user boards:', error)
 		res.status(500).json({ message: 'Internal server error' })
@@ -344,10 +359,43 @@ export const createTask = async (req, res) => {
 			assignees,
 		})
 
-		const savedTask = await newTask.save()
+		await newTask.save()
+		const savedTask = await Task.findById(newTask._id).populate('assignees', 'name email avatar').lean()
+		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
 		return res.status(201).json(savedTask)
 	} catch (error) {
 		console.error('Error creating task:', error)
 		res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const updateTask = async (req, res) => {
+	try {
+		const task = await Task.findById(req.params.id).populate('column', 'board')
+		if (!task) return res.status(404).json({ message: 'Task not found' })
+		const boardId = task.column.board.toString()
+		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
+		if (!board || !allowed) return res.status(403).json({ message: 'Access denied' })
+
+		const { title, description, assignees, position, column: targetColumnId } = req.body
+		let targetColumn = task.column
+		if (targetColumnId && targetColumnId.toString() !== task.column._id.toString()) {
+			targetColumn = await Column.findById(targetColumnId)
+			if (!targetColumn || targetColumn.board.toString() !== task.column.board.toString()) {
+				return res.status(400).json({ message: 'Invalid target column' })
+			}
+			task.column = targetColumn._id
+		}
+		if (title !== undefined) task.title = title.trim()
+		if (description !== undefined) task.description = description
+		if (assignees !== undefined) task.assignees = assignees
+		if (position !== undefined) task.position = position
+		await task.save()
+		const updatedTask = await Task.findById(task._id).populate('assignees', 'name email avatar').lean()
+		emitBoardEvent(boardId, 'task:updated', updatedTask)
+		return res.status(200).json(updatedTask)
+	} catch (error) {
+		console.error('Error updating task:', error)
+		return res.status(500).json({ message: 'Internal server error' })
 	}
 }

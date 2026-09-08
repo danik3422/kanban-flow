@@ -319,15 +319,33 @@ export const getAuthUser = async (req, res) => {
 	}
 }
 
+export const updateSettings = async (req, res) => {
+	try {
+		const user = await User.findByIdAndUpdate(
+			req.user._id,
+			{ $set: req.body },
+			{ new: true, runValidators: true }
+		).select('-password')
+
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		return res.status(200).json(user)
+	} catch (error) {
+		console.error('Settings update failed:', error)
+		return res.status(500).json({ message: 'Could not update settings' })
+	}
+}
+
 export const setupProfile = async (req, res) => {
 	try {
-		const { name, password, avatar } = req.body
+		const { name, jobTitle, timezone, password, avatar } = req.body
 		const userId = req.user._id
 
 		const user = await User.findById(userId)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
-		if (name) user.name = name
+		if (name) user.name = name.trim()
+		if (jobTitle !== undefined) user.jobTitle = jobTitle.trim()
+		if (timezone) user.timezone = timezone
 
 		if (password && password.length >= 6) {
 			const salt = await bcrypt.genSalt(10)
@@ -352,6 +370,8 @@ export const setupProfile = async (req, res) => {
 			user: {
 				_id: user._id,
 				name: user.name,
+				jobTitle: user.jobTitle,
+				timezone: user.timezone,
 				email: user.email,
 				avatar: user.avatar,
 			},

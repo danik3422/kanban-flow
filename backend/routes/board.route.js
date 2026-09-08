@@ -10,6 +10,7 @@ import {
 	getColumnTasks,
 	getUserBoards,
 	removeBoard,
+	updateTask,
 } from '../controllers/board.controller.js'
 import { authMiddleware } from '../middlewares/auth.middleware.js'
 import {
@@ -41,5 +42,6 @@ router.post(
 // Tasks
 router.get('/columns/:id/tasks', authMiddleware, columnMiddleware, getColumnTasks)
 router.post('/columns/:id/task', authMiddleware, columnMiddleware, createTask)
+router.patch('/tasks/:id', authMiddleware, updateTask)
 
 export default router
