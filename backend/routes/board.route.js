@@ -1,12 +1,16 @@
 import express from 'express'
 import {
 	addMemberToBoard,
+	acceptBoardInvite,
+	createBoardInvite,
 	createBoard,
 	createColumn,
 	createTask,
 	getBoardById,
 	getBoardColumns,
 	getBoardMembers,
+	getBoardInvites,
+	revokeBoardInvite,
 	getColumnTasks,
 	getUserBoards,
 	removeBoard,
@@ -28,7 +32,11 @@ router.delete('/boards/:id', authMiddleware, boardMiddleware, removeBoard)
 
 // Members
 router.get('/boards/:id/members', authMiddleware, boardMiddleware, getBoardMembers)
+router.get('/boards/:id/invites', authMiddleware, boardMiddleware, getBoardInvites)
+router.delete('/boards/:id/invites/:inviteId', authMiddleware, boardMiddleware, revokeBoardInvite)
 router.post('/boards/:id/members', authMiddleware, boardMiddleware, addMemberToBoard)
+router.post('/boards/:id/invites', authMiddleware, boardMiddleware, createBoardInvite)
+router.post('/invites/:token/accept', authMiddleware, acceptBoardInvite)
 
 // Columns
 router.get('/boards/:id/columns', authMiddleware, boardMiddleware, getBoardColumns)

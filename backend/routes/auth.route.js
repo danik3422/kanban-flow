@@ -1,6 +1,7 @@
 import express from 'express'
 import {
 	getAuthUser,
+	changePassword,
 	googleSignin,
 	googleSignup,
 	login,
@@ -39,5 +40,6 @@ router.post('/logout', logout)
 router.get('/get-user', authMiddleware, getAuthUser)
 router.patch('/setup-profile', authMiddleware, setupProfile)
 router.patch('/settings', authMiddleware, validateBody(settingsSchema), updateSettings)
+router.patch('/change-password', authMiddleware, changePassword)
 
 export default router

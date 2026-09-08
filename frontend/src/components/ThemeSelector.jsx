@@ -31,7 +31,7 @@ const ThemeSelector = () => {
 									? 'bg-gray-200'
 									: theme.id === 'dark'
 									? 'bg-gray-800'
-									: 'bg-gradient-to-br from-white to-black'
+									: 'bg-linear-to-br from-white to-black'
 							}`}
 						/>
 						{selected === theme.id && (

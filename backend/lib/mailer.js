@@ -39,3 +39,18 @@ export const sendPasswordResetEmail = async ({ email, resetUrl }) => {
 		`,
 	})
 }
+
+export const sendBoardInviteEmail = async ({ email, boardName, boardUrl }) => {
+	const transporter = getTransporter()
+	if (!transporter) {
+		throw new Error('SMTP is not configured')
+	}
+
+	await transporter.sendMail({
+		from: env.mailFrom || env.smtp.user,
+		to: email,
+		subject: `You were invited to ${boardName}`,
+		text: `You were invited to collaborate on ${boardName}. Open the board here: ${boardUrl}`,
+		html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #202c35"><h2>You were invited to collaborate</h2><p>You have access to <strong>${boardName}</strong>.</p><p><a href="${boardUrl}">Open the workspace</a></p></div>`,
+	})
+}

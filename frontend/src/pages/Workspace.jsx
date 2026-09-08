@@ -1,6 +1,7 @@
 import {
 	Archive,
 	ArrowUpRight,
+	CalendarDays,
 	CheckCircle2,
 	ChevronDown,
 	CirclePlus,
@@ -8,6 +9,7 @@ import {
 	LayoutDashboard,
 	ChevronRight,
 	Menu,
+	Mail,
 	MoreHorizontal,
 	PanelLeftClose,
 	PanelLeftOpen,
@@ -15,6 +17,7 @@ import {
 	Search,
 	Sparkles,
 	UsersRound,
+	UserRound,
 	X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -26,6 +29,7 @@ import WorkspaceOverview from '../components/WorkspaceOverview'
 import { axiosInstance } from '../lib/axios'
 import { devBoard, devColumns, isDevAuthBypass } from '../lib/devMode'
 import AccountDropdown from '../components/AccountDropdown'
+import InviteMemberModal from '../components/InviteMemberModal'
 import { useAuthStore } from '../store/useAuthStore'
 
 const fetchColumns = async (boardId) => {
@@ -61,10 +65,16 @@ const Workspace = () => {
 	const [newTaskTitle, setNewTaskTitle] = useState('')
 	const [search, setSearch] = useState('')
 	const [boardMembers, setBoardMembers] = useState([])
+	const [boardInvites, setBoardInvites] = useState([])
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
 	const [draggedTask, setDraggedTask] = useState(null)
+	const [dropIndicator, setDropIndicator] = useState(null)
+	const [taskDetails, setTaskDetails] = useState(null)
+	const [taskDetailsForm, setTaskDetailsForm] = useState({ title: '', description: '', dueDate: '', assignees: [], labels: [], checklist: [] })
+	const [isInviteOpen, setIsInviteOpen] = useState(false)
+	const [inviteEmail, setInviteEmail] = useState('')
 
 	const refreshBoard = async (board) => {
 		if (!board) return
@@ -140,6 +150,29 @@ const Workspace = () => {
 	}, [selectedBoard])
 
 	useEffect(() => {
+		if (!draggedTask) return undefined
+		const handleDragOver = (event) => {
+			const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
+			const card = targetElement?.closest('.task-card')
+			const taskList = card?.closest('.task-list')
+			if (!card || !taskList) return
+			document.querySelectorAll('.task-card.drop-before, .task-card.drop-after').forEach((item) => item.classList.remove('drop-before', 'drop-after'))
+			const column = card.closest('.kanban-column')
+			const columnIndex = Array.from(document.querySelectorAll('.kanban-column')).indexOf(column)
+			const targetColumn = columns[columnIndex]
+			const taskIndex = Array.from(taskList.children).indexOf(card)
+			const isBefore = event.clientY < card.getBoundingClientRect().top + card.offsetHeight / 2
+			card.classList.add(isBefore ? 'drop-before' : 'drop-after')
+			setDropIndicator({ columnId: targetColumn?._id, index: taskIndex + (isBefore ? 0 : 1) })
+		}
+		document.addEventListener('dragover', handleDragOver)
+		return () => {
+			document.removeEventListener('dragover', handleDragOver)
+			document.querySelectorAll('.task-card.drop-before, .task-card.drop-after').forEach((item) => item.classList.remove('drop-before', 'drop-after'))
+		}
+	}, [columns, draggedTask])
+
+	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return
 		const socket = io('http://localhost:5001', { withCredentials: true })
 		socket.on('connect', () => socket.emit('join-board', selectedBoard._id))
@@ -147,14 +180,23 @@ const Workspace = () => {
 			setColumns((current) => current.map((column) => column._id === task.column ? { ...column, tasks: column.tasks.some((item) => item._id === task._id) ? column.tasks : [...column.tasks, task] } : column))
 		})
 		socket.on('task:updated', (task) => {
-			setColumns((current) => current.map((column) => ({ ...column, tasks: column.tasks.map((item) => item._id === task._id ? task : item) })))
+			setColumns((current) => current.map((column) => {
+				const withoutTask = column.tasks.filter((item) => item._id !== task._id)
+				return column._id === task.column ? { ...column, tasks: [...withoutTask, task].sort((left, right) => left.position - right.position) } : { ...column, tasks: withoutTask }
+			}))
 		})
 		return () => socket.disconnect()
 	}, [selectedBoard])
 
 	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return
-		axiosInstance.get(`/board/boards/${selectedBoard._id}/members`).then(({ data }) => setBoardMembers(data.map((member) => member.user))).catch(() => {})
+		Promise.all([
+			axiosInstance.get(`/board/boards/${selectedBoard._id}/members`),
+			axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`),
+		]).then(([membersResponse, invitesResponse]) => {
+			setBoardMembers(membersResponse.data.map((member) => member.user))
+			setBoardInvites(invitesResponse.data)
+		}).catch(() => {})
 	}, [selectedBoard])
 
 	const createBoard = async (event) => {
@@ -194,6 +236,47 @@ const Workspace = () => {
 		setSelectedBoard(board)
 		setIsSidebarOpen(false)
 		navigate(`/workspaces/${board._id}`)
+	}
+
+	const copyInviteUrl = async (url) => {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(url)
+			return
+		}
+		const textArea = document.createElement('textarea')
+		textArea.value = url
+		textArea.style.position = 'fixed'
+		textArea.style.opacity = '0'
+		document.body.appendChild(textArea)
+		textArea.select()
+		document.execCommand('copy')
+		textArea.remove()
+	}
+
+	const inviteMember = async (event, mode = 'email') => {
+		event.preventDefault()
+		if (!selectedBoard || isDevAuthBypass) return
+		try {
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email: mode === 'email' ? inviteEmail.trim() : '' })
+			setInviteEmail('')
+			setIsInviteOpen(false)
+			await copyInviteUrl(data.inviteUrl)
+			const { data: invites } = await axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`)
+			setBoardInvites(invites)
+			toast.success(mode === 'email' && data.emailSent ? 'Invite email sent and link copied' : 'Invite link created and copied')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not invite member')
+		}
+	}
+
+	const revokeInvite = async (inviteId) => {
+		try {
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/invites/${inviteId}`)
+			setBoardInvites((current) => current.filter((invite) => invite._id !== inviteId))
+			toast.success('Invite revoked')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not revoke invite')
+		}
 	}
 
 	const openOverviewBoard = (board) => selectBoard(board)
@@ -266,20 +349,86 @@ const Workspace = () => {
 		}
 	}
 
-	const moveTask = async (task, targetColumn) => {
-		if (!task || task.column === targetColumn._id || isDevAuthBypass) {
+	const openTaskDetails = (task) => {
+		setTaskDetails(task)
+		setTaskDetailsForm({
+			title: task.title || '',
+			description: task.description || '',
+			dueDate: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : '',
+			assignees: (task.assignees || []).map((assignee) => assignee._id || assignee),
+			labels: task.labels || [],
+			checklist: task.checklist || [],
+		})
+	}
+
+	const saveTaskDetails = async (event) => {
+		event.preventDefault()
+		if (!taskDetails || !taskDetailsForm.title.trim()) return
+
+		const changes = {
+			title: taskDetailsForm.title.trim(),
+			description: taskDetailsForm.description,
+			dueDate: taskDetailsForm.dueDate || null,
+			assignees: taskDetailsForm.assignees,
+			labels: taskDetailsForm.labels,
+			checklist: taskDetailsForm.checklist,
+		}
+
+		if (isDevAuthBypass) {
+			setColumns((current) => current.map((column) => ({
+				...column,
+				tasks: column.tasks.map((task) => task._id === taskDetails._id ? { ...task, ...changes } : task),
+			})))
+			setTaskDetails(null)
+			return
+		}
+
+		try {
+			const { data } = await axiosInstance.patch(`/board/tasks/${taskDetails._id}`, changes)
+			setColumns((current) => current.map((column) => ({
+				...column,
+				tasks: column.tasks.map((task) => task._id === data._id ? data : task),
+			})))
+			setTaskDetails(null)
+			toast.success('Task updated')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not update task')
+		}
+	}
+
+	const moveTask = async (task, targetColumn, targetIndex = targetColumn.tasks.length) => {
+		if (!task) {
+			setDraggedTask(null)
+			return
+		}
+		const sourceColumn = columns.find((column) => column.tasks.some((item) => item._id === task._id))
+		if (!sourceColumn) {
 			setDraggedTask(null)
 			return
 		}
 		const previousColumns = columns
+		const requestedIndex = dropIndicator?.columnId === targetColumn._id ? dropIndicator.index : targetIndex
+		const sourceIndex = sourceColumn.tasks.findIndex((item) => item._id === task._id)
+		const insertionIndex = sourceColumn._id === targetColumn._id && requestedIndex > sourceIndex ? requestedIndex - 1 : requestedIndex
+		if (sourceColumn._id === targetColumn._id && insertionIndex === sourceIndex) {
+			setDraggedTask(null)
+			setDropIndicator(null)
+			return
+		}
+		const nextPosition = Math.max(0, Math.min(insertionIndex, targetColumn.tasks.length - (sourceColumn._id === targetColumn._id ? 1 : 0)))
 		setColumns((current) => current.map((column) => {
-			if (column._id === task.column) return { ...column, tasks: column.tasks.filter((item) => item._id !== task._id) }
-			if (column._id === targetColumn._id) return { ...column, tasks: [...column.tasks, { ...task, column: targetColumn._id }] }
-			return column
+			if (column._id !== sourceColumn._id && column._id !== targetColumn._id) return column
+			const nextTasks = column.tasks.filter((item) => item._id !== task._id)
+			if (column._id === targetColumn._id) {
+				nextTasks.splice(nextPosition, 0, { ...task, column: targetColumn._id, position: nextPosition })
+			}
+			return { ...column, tasks: nextTasks.map((item, index) => ({ ...item, position: index })) }
 		}))
 		setDraggedTask(null)
+		setDropIndicator(null)
+		if (isDevAuthBypass) return
 		try {
-			await axiosInstance.patch(`/board/tasks/${task._id}`, { column: targetColumn._id, position: targetColumn.tasks.length })
+			await axiosInstance.patch(`/board/tasks/${task._id}`, { column: targetColumn._id, position: nextPosition })
 		} catch (error) {
 			setColumns(previousColumns)
 			toast.error(error.response?.data?.message || 'Could not move task')
@@ -323,15 +472,18 @@ const Workspace = () => {
 							<div className='board-picker'><div className='board-mark'><LayoutDashboard size={20} /></div><div><p className='eyebrow'>Current room</p><select value={selectedBoard._id} onChange={(event) => selectBoard(boards.find((board) => board._id === event.target.value))}>{boards.map((board) => <option key={board._id} value={board._id}>{board.name}</option>)}</select></div><ChevronDown size={17} className='select-chevron' /></div>
 							<div className='board-stats'><span><strong>{columns.length}</strong> columns</span><span><strong>{totalTasks}</strong> tasks</span><span><UsersRound size={16} /> Private board</span></div>
 						</section>
-						<div className='board-toolbar'><div className='toolbar-note'><CheckCircle2 size={17} /> Small steps add up.</div><button className='quiet-button' onClick={() => refreshBoard(selectedBoard)} disabled={isRefreshing}><Archive size={16} /> {isRefreshing ? 'Refreshing...' : 'Refresh'}</button></div>
+											{boardInvites.length > 0 && <section className='board-invites'><div className='board-invites-heading'><div><p className='eyebrow'>Invitations</p><h2>People invited to this room</h2></div><span>{boardInvites.length}</span></div><div className='board-invite-list'>{boardInvites.map((invite) => <div className='board-invite-row' key={invite._id}><div className='board-invite-person'><span className='board-invite-icon'><Mail size={15} /></span><div><strong>{invite.email || 'Link invitation'}</strong><small>Sent {new Date(invite.createdAt).toLocaleDateString()}</small></div></div><div className='board-invite-actions'><span className={`board-invite-status ${invite.status}`}>{invite.status === 'accepted' ? 'Accepted' : invite.status === 'expired' ? 'Expired' : 'Pending'}</span>{invite.status === 'pending' && <button type='button' className='board-invite-revoke' onClick={() => revokeInvite(invite._id)}>Cancel</button>}</div></div>)}</div></section>}
+						<div className='board-toolbar'><div className='toolbar-note'><CheckCircle2 size={17} /> Small steps add up.</div><div className='board-toolbar-actions'><button className='quiet-button' onClick={() => setIsInviteOpen(true)}><Mail size={16} /> Invite</button><button className='quiet-button' onClick={() => refreshBoard(selectedBoard)} disabled={isRefreshing}><Archive size={16} /> {isRefreshing ? 'Refreshing...' : 'Refresh'}</button></div></div>
 						<div className='board-scroll'><div className='kanban-grid'>
-							{visibleColumns.map((column) => <section className={`kanban-column ${draggedTask ? 'drop-target-ready' : ''}`} key={column._id} onDragOver={(event) => event.preventDefault()} onDrop={() => moveTask(draggedTask, column)}><div className='column-header'><div><h2>{column.title}</h2><span>{column.tasks.length}</span></div><button className='icon-button subtle' aria-label={`More options for ${column.title}`} title='More options'><MoreHorizontal size={18} /></button></div><div className='task-list'>{column.tasks.length === 0 ? <div className='column-empty'>Drop a task here.</div> : column.tasks.map((task) => <article className='task-card' draggable={editingTask?._id !== task._id} onDragStart={() => setDraggedTask(task)} onDragEnd={() => setDraggedTask(null)} key={task._id} onDoubleClick={() => { setEditingTask(task); setEditingTitle(task.title) }}><div className='task-label'>Task · drag to move</div>{editingTask?._id === task._id ? <form className='inline-form' onSubmit={(event) => { event.preventDefault(); updateTask(task) }}><input autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} /><button type='submit' className='mini-primary'>Save</button></form> : <><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className='task-footer'><span><ClipboardList size={14} /> Work item</span><ArrowUpRight size={15} /></div></>}</article>)}</div>{activeTaskColumn === column._id ? <form className='inline-form' onSubmit={(event) => createTask(event, column)}><input autoFocus value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder='What needs doing?' />{boardMembers.length > 0 && <select multiple value={selectedAssignees} onChange={(event) => setSelectedAssignees(Array.from(event.target.selectedOptions, (option) => option.value))} aria-label='Assign people'><option value='' disabled>Assign people</option>{boardMembers.map((member) => <option key={member._id} value={member._id}>{member.name || member.email}</option>)}</select>}<div><button type='submit' className='mini-primary'>Add task</button><button type='button' className='icon-button subtle' onClick={() => setActiveTaskColumn(null)} aria-label='Cancel' title='Cancel'><X size={16} /></button></div></form> : <button className='add-task-button' onClick={() => setActiveTaskColumn(column._id)}><Plus size={16} /> Add task</button>}</section>)}
+											{visibleColumns.map((column) => <section className={`kanban-column ${draggedTask ? 'drop-target-ready' : ''}`} key={column._id} onDragOver={(event) => event.preventDefault()} onDrop={() => moveTask(draggedTask, column)}><div className='column-header'><div><h2>{column.title}</h2><span>{column.tasks.length}</span></div><button className='icon-button subtle' aria-label={`More options for ${column.title}`} title='More options'><MoreHorizontal size={18} /></button></div><div className='task-list'>{column.tasks.length === 0 ? <div className='column-empty'>Drop a task here.</div> : column.tasks.map((task) => <article className='task-card' draggable={editingTask?._id !== task._id} onDragStart={() => setDraggedTask(task)} onDragEnd={() => setDraggedTask(null)} key={task._id} onClick={() => openTaskDetails(task)} onDoubleClick={() => { setEditingTask(task); setEditingTitle(task.title) }}><div className='task-label'>Task · drag to move</div>{editingTask?._id === task._id ? <form className='inline-form' onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); updateTask(task) }}><input autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} /><button type='submit' className='mini-primary'>Save</button></form> : <><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<div className='task-footer'><span>{task.dueDate ? <><CalendarDays size={14} /> {new Date(task.dueDate).toLocaleDateString()}</> : <><ClipboardList size={14} /> Work item</>}{task.assignees?.length > 0 && <><UserRound size={14} /> {task.assignees.length}</>}</span><ArrowUpRight size={15} /></div></>}</article>)}</div>{activeTaskColumn === column._id ? <form className='inline-form' onSubmit={(event) => createTask(event, column)}><input autoFocus value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder='What needs doing?' />{boardMembers.length > 0 && <select multiple value={selectedAssignees} onChange={(event) => setSelectedAssignees(Array.from(event.target.selectedOptions, (option) => option.value))} aria-label='Assign people'><option value='' disabled>Assign people</option>{boardMembers.map((member) => <option key={member._id} value={member._id}>{member.name || member.email}</option>)}</select>}<div><button type='submit' className='mini-primary'>Add task</button><button type='button' className='icon-button subtle' onClick={() => setActiveTaskColumn(null)} aria-label='Cancel' title='Cancel'><X size={16} /></button></div></form> : <button className='add-task-button' onClick={() => setActiveTaskColumn(column._id)}><Plus size={16} /> Add task</button>}</section>)}
 							{isCreatingColumn ? <form className='kanban-column add-column-form' onSubmit={createColumn}><input autoFocus value={newColumnTitle} onChange={(event) => setNewColumnTitle(event.target.value)} placeholder='Column name' /><div><button type='submit' className='mini-primary'>Add column</button><button type='button' className='icon-button subtle' onClick={() => setIsCreatingColumn(false)} aria-label='Cancel' title='Cancel'><X size={16} /></button></div></form> : <button className='new-column-button' onClick={() => setIsCreatingColumn(true)}><CirclePlus size={18} /> Add column</button>}
 						</div></div>
 					</>}
 				</div>}
 			</main>
 
+			<InviteMemberModal isOpen={isInviteOpen} email={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} onClose={() => setIsInviteOpen(false)} onSubmit={inviteMember} />
+			{taskDetails && <div className='modal-backdrop' onMouseDown={() => setTaskDetails(null)}><form className='modal-panel task-details-panel' onSubmit={saveTaskDetails} onMouseDown={(event) => event.stopPropagation()}><div className='modal-title'><div><p className='eyebrow'>Task details</p><h2>Edit task</h2></div><button type='button' className='icon-button' onClick={() => setTaskDetails(null)} aria-label='Close' title='Close'><X size={18} /></button></div><label className='field-label' htmlFor='task-title'>Title</label><input id='task-title' autoFocus value={taskDetailsForm.title} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, title: event.target.value }))} /><label className='field-label' htmlFor='task-description'>Description</label><textarea id='task-description' value={taskDetailsForm.description} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, description: event.target.value }))} placeholder='Add a description' /><label className='field-label' htmlFor='task-due-date'>Deadline</label><input id='task-due-date' type='date' value={taskDetailsForm.dueDate} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, dueDate: event.target.value }))} /><label className='field-label' htmlFor='task-labels'>Labels</label><input id='task-labels' value={taskDetailsForm.labels.join(', ')} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, labels: event.target.value.split(',').map((label) => label.trim()).filter(Boolean) }))} placeholder='design, urgent, research' />{boardMembers.length > 0 && <><label className='field-label' htmlFor='task-assignees'>Assignees</label><select id='task-assignees' multiple value={taskDetailsForm.assignees} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, assignees: Array.from(event.target.selectedOptions, (option) => option.value) }))}>{boardMembers.map((member) => <option key={member._id} value={member._id}>{member.name || member.email}</option>)}</select></>}<label className='field-label' htmlFor='task-checklist'>Checklist</label><textarea id='task-checklist' value={taskDetailsForm.checklist.map((item) => `${item.completed ? '[x] ' : ''}${item.text}`).join('\n')} onChange={(event) => setTaskDetailsForm((current) => ({ ...current, checklist: event.target.value.split('\n').map((text) => text.replace(/^\[x\] /, '').trim()).filter(Boolean).map((text, index) => ({ text, completed: current.checklist[index]?.completed || false })) }))} placeholder='One checklist item per line' /><button className='primary-button full-button' type='submit'>Save changes</button></form></div>}
 			{isCreatingBoard && <div className='modal-backdrop' onMouseDown={() => setIsCreatingBoard(false)}><form className='modal-panel' onSubmit={createBoard} onMouseDown={(event) => event.stopPropagation()}><div className='modal-title'><div><p className='eyebrow'>New workspace</p><h2>Create a board</h2></div><button type='button' className='icon-button' onClick={() => setIsCreatingBoard(false)} aria-label='Close' title='Close'><X size={18} /></button></div><p>Give this project a clear home. You can add columns and tasks right away.</p><label className='field-label' htmlFor='board-name'>Board name</label><input id='board-name' autoFocus value={newBoardName} onChange={(event) => setNewBoardName(event.target.value)} placeholder='e.g. Product launch' /><button className='primary-button full-button' type='submit'><Plus size={18} /> Create board</button></form></div>}
 		</div>
 	)

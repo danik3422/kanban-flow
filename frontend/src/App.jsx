@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 
 import Navbar from './components/Navbar'
@@ -13,16 +13,28 @@ import Settings from './pages/Settings'
 import SetupProfile from './pages/SetupProfile'
 import Signup from './pages/Signup'
 import Workspace from './pages/Workspace'
+import BoardInvite from './pages/BoardInvite'
+import { axiosInstance } from './lib/axios'
 import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
 	const location = useLocation()
+	const navigate = useNavigate()
 	const isWorkspace = location.pathname.startsWith('/workspaces')
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 
 	useEffect(() => {
 		checkAuth()
 	}, [checkAuth])
+
+	useEffect(() => {
+		const pendingInvite = localStorage.getItem('kanban-pending-invite')
+		if (!authUser || !pendingInvite) return
+		axiosInstance.post(`/board/invites/${pendingInvite}/accept`).then(({ data }) => {
+			localStorage.removeItem('kanban-pending-invite')
+			navigate(`/workspaces/${data.boardId}`, { replace: true })
+		}).catch(() => {})
+	}, [authUser, navigate])
 
 	const needsSetup = authUser && authUser.profileSetup === false
 
@@ -55,6 +67,7 @@ export const App = () => {
 							path='/login'
 							element={!authUser ? <Login /> : <Navigate to='/' replace />}
 						/>
+						<Route path='/invite/:token' element={<BoardInvite />} />
 						<Route
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}

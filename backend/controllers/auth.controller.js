@@ -335,6 +335,28 @@ export const updateSettings = async (req, res) => {
 	}
 }
 
+export const changePassword = async (req, res) => {
+	try {
+		const { currentPassword, newPassword } = req.body
+		if (!currentPassword || !newPassword || newPassword.length < 8) {
+			return res.status(400).json({ message: 'Current password and a new password of at least 8 characters are required' })
+		}
+
+		const user = await User.findById(req.user._id)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		if (!user.password) return res.status(400).json({ message: 'Set a local password from profile before changing it' })
+		if (!(await bcrypt.compare(currentPassword, user.password))) return res.status(400).json({ message: 'Current password is incorrect' })
+
+		const salt = await bcrypt.genSalt(10)
+		user.password = await bcrypt.hash(newPassword, salt)
+		await user.save()
+		return res.status(200).json({ message: 'Password changed successfully' })
+	} catch (error) {
+		console.error('Password change failed:', error)
+		return res.status(500).json({ message: 'Could not change password' })
+	}
+}
+
 export const setupProfile = async (req, res) => {
 	try {
 		const { name, jobTitle, timezone, password, avatar } = req.body

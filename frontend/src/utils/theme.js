@@ -1,13 +1,6 @@
-const systemTheme = () =>
-	window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-
-export const applyTheme = (theme) => {
-	theme === 'system'
-		? (localStorage.removeItem('theme'),
-		  document.documentElement.setAttribute('data-theme', systemTheme()))
-		: (localStorage.setItem('theme', theme),
-		  document.documentElement.setAttribute('data-theme', theme))
+export const applyTheme = () => {
+	localStorage.setItem('theme', 'light')
+	document.documentElement.setAttribute('data-theme', 'light')
 }
 
-export const applyThemeFromStorage = () =>
-	applyTheme(localStorage.getItem('theme') || 'system')
+export const applyThemeFromStorage = () => applyTheme('light')

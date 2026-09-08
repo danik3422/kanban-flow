@@ -9,14 +9,25 @@ const AccountDropdown = () => {
 	const navigate = useNavigate()
 	const needsSetup = authUser?.profileSetup === false
 	const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+	const [isClosing, setIsClosing] = useState(false)
+	const [isSheetExpanded, setIsSheetExpanded] = useState(false)
+	const [sheetOffset, setSheetOffset] = useState(0)
 	const dropdownRef = useRef(null)
+	const triggerRef = useRef(null)
+	const sheetDragStart = useRef(null)
 
 	useEffect(() => {
 		const handleClickOutside = (event) => {
-			const insideDropdown = dropdownRef.current?.contains(event.target)
+			const insideDropdown = dropdownRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)
 
             if (!insideDropdown) {
-				setIsDropdownOpen(false)
+				setIsClosing(true)
+				window.setTimeout(() => {
+					setIsDropdownOpen(false)
+					setIsClosing(false)
+					setIsSheetExpanded(false)
+					setSheetOffset(0)
+				}, 220)
 			}
 		}
 
@@ -24,8 +35,46 @@ const AccountDropdown = () => {
 		return () => document.removeEventListener('mousedown', handleClickOutside)
 	}, [])
 
+	useEffect(() => {
+		document.body.classList.toggle('account-sheet-open', isDropdownOpen)
+		return () => document.body.classList.remove('account-sheet-open')
+	}, [isDropdownOpen])
+
 	const closeMenu = () => {
-		setIsDropdownOpen(false)
+		if (!isDropdownOpen || isClosing) return
+		setIsClosing(true)
+		window.setTimeout(() => {
+			setIsDropdownOpen(false)
+			setIsClosing(false)
+			setIsSheetExpanded(false)
+			setSheetOffset(0)
+		}, 220)
+	}
+
+	const toggleMenu = () => {
+		if (isDropdownOpen) closeMenu()
+		else setIsDropdownOpen(true)
+	}
+
+	const handleSheetPointerDown = (event) => {
+		if (window.innerWidth > 720) return
+		sheetDragStart.current = event.clientY
+		event.currentTarget.setPointerCapture(event.pointerId)
+	}
+
+	const handleSheetPointerMove = (event) => {
+		if (sheetDragStart.current === null) return
+		setSheetOffset(Math.max(-80, event.clientY - sheetDragStart.current))
+	}
+
+	const handleSheetPointerUp = (event) => {
+		if (sheetDragStart.current === null) return
+		const delta = event.clientY - sheetDragStart.current
+		sheetDragStart.current = null
+		setSheetOffset(0)
+		if (delta > 110) closeMenu()
+		else if (delta < -45) setIsSheetExpanded(true)
+		else if (delta > 25) setIsSheetExpanded(false)
 	}
 
 	const goTo = (path) => {
@@ -36,8 +85,9 @@ const AccountDropdown = () => {
 	return (
 		<div className='account-menu-wrap'>
 			<button
-				onClick={() => setIsDropdownOpen((value) => !value)}
+				onClick={toggleMenu}
 				className='account-trigger'
+				ref={triggerRef}
 				aria-expanded={isDropdownOpen}
 				aria-label='Open account menu'
 			>
@@ -51,8 +101,9 @@ const AccountDropdown = () => {
 
 			{isDropdownOpen && (
 				<>
-					<div className='account-backdrop' onClick={closeMenu} />
-					<div ref={dropdownRef} className='account-popover'>
+					<div className={`account-backdrop ${isClosing ? 'is-closing' : ''}`} onClick={closeMenu} />
+					<div ref={dropdownRef} className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''}`} style={{ '--sheet-drag-offset': `${sheetOffset}px` }}>
+						<button type='button' className='account-sheet-handle' onPointerDown={handleSheetPointerDown} onPointerMove={handleSheetPointerMove} onPointerUp={handleSheetPointerUp} onPointerCancel={handleSheetPointerUp} aria-label='Drag account menu'><span /></button>
 						<div className='account-popover-head'>
 							<div className='account-profile'>
 								<img src={authUser.avatar || '/avatar.png'} alt='' />

@@ -10,6 +10,10 @@ const taskSchema = new mongoose.Schema(
 			type: String,
 			default: '',
 		},
+		dueDate: {
+			type: Date,
+			default: null,
+		},
 		column: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Column',
@@ -23,6 +27,16 @@ const taskSchema = new mongoose.Schema(
 			{
 				type: mongoose.Schema.Types.ObjectId,
 				ref: 'User',
+			},
+		],
+		labels: {
+			type: [String],
+			default: [],
+		},
+		checklist: [
+			{
+				text: { type: String, required: true },
+				completed: { type: Boolean, default: false },
 			},
 		],
 	},
