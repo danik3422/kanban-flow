@@ -1390,7 +1390,7 @@ const Workspace = () => {
 										className='quiet-button'
 										onClick={() => setIsDeleteBoardArmed(false)}
 									>
-										Назад
+										Back
 									</button>
 									<button
 										type='submit'
