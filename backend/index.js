@@ -61,8 +61,16 @@ app.use('/api', apiLimiter)
 app.use('/api/auth', authRoutes)
 app.use('/api/board', boardRoutes)
 
-// Start server and connect DB
-httpServer.listen(env.port, () => {
-	console.log(`Server is running on port ${env.port}`)
-	connectDB()
+// Connect the database before accepting requests so auth never runs against an
+// unready MongoDB connection.
+const startServer = async () => {
+	await connectDB()
+	httpServer.listen(env.port, () => {
+		console.log(`Server is running on port ${env.port}`)
+	})
+}
+
+startServer().catch((error) => {
+	console.error('Server startup failed:', error)
+	process.exitCode = 1
 })

@@ -10,21 +10,27 @@ export const connectDB = async () => {
 		if (!env.mongoUri) {
 			memoryServer = await MongoMemoryServer.create()
 			const mongoUri = memoryServer.getUri()
-			const connect = await mongoose.connect(mongoUri)
+			const connect = await mongoose.connect(mongoUri, {
+				serverSelectionTimeoutMS: 5000,
+			})
 			console.log(
 				`MongoMemoryServer connected ${connect.connection.host}`
 			)
 			return
 		}
 
-		const connect = await mongoose.connect(env.mongoUri)
+		const connect = await mongoose.connect(env.mongoUri, {
+			serverSelectionTimeoutMS: 5000,
+		})
 		console.log(`MongoDB connected ${connect.connection.host}`)
 	} catch (error) {
 		console.log('MongoDB connection failed, falling back to in-memory database...')
 		try {
 			memoryServer = await MongoMemoryServer.create()
 			const mongoUri = memoryServer.getUri()
-			const connect = await mongoose.connect(mongoUri)
+			const connect = await mongoose.connect(mongoUri, {
+				serverSelectionTimeoutMS: 5000,
+			})
 			console.log(
 				`MongoMemoryServer connected ${connect.connection.host}`
 			)
