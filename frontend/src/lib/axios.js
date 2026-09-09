@@ -6,4 +6,5 @@ export const axiosInstance = axios.create({
 			? 'http://localhost:5001/api'
 			: '/api',
 	withCredentials: true,
+	timeout: 8000,
 })
