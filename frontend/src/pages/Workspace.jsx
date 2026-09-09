@@ -992,9 +992,13 @@ const Workspace = () => {
 						</div>
 
 						{isLoading ? (
-							<div className='empty-state'>
-								<div className='loading-spinner' />
-								<p>Setting up your workspace...</p>
+							<div className='empty-state workspace-loading-state' role='status'>
+								<div className='loading-orbit' aria-hidden='true'>
+									<span />
+									<span />
+									<span />
+								</div>
+								<p className='loading-label'>Setting up your workspace<span className='loading-dots'>...</span></p>
 							</div>
 						) : !selectedBoard ? (
 							<div className='empty-state empty-state-accent'>

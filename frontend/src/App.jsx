@@ -57,8 +57,13 @@ export const App = () => {
 
 	if (isCheckingAuth) {
 		return (
-			<div className='min-h-screen flex items-center justify-center text-lg font-semibold'>
-				Loading...
+			<div className='loading-screen' role='status' aria-live='polite'>
+				<div className='loading-orbit' aria-hidden='true'>
+					<span />
+					<span />
+					<span />
+				</div>
+				<p className='loading-label'>Loading<span className='loading-dots'>...</span></p>
 			</div>
 		)
 	}
