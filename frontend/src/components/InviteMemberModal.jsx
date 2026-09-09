@@ -1,4 +1,12 @@
-import { CheckCircle2, Clock3, Link2, Mail, UserRound, X } from 'lucide-react'
+import {
+	CheckCircle2,
+	Clock3,
+	Link2,
+	Mail,
+	UserRound,
+	UsersRound,
+	X,
+} from 'lucide-react'
 import { useState } from 'react'
 
 const InviteMemberModal = ({
@@ -26,10 +34,13 @@ const InviteMemberModal = ({
 				onMouseDown={(event) => event.stopPropagation()}
 			>
 				<div className='modal-title share-header'>
+					<span className='share-header-icon'>
+						<UsersRound size={20} />
+					</span>
 					<div className='share-header-copy'>
 						<span className='share-kicker'>Collaborate</span>
 						<h2>Invite people</h2>
-						<p>Bring teammates into the board with email or a share link.</p>
+						<p>Bring the right people into this board.</p>
 					</div>
 					<button
 						type='button'
@@ -40,6 +51,12 @@ const InviteMemberModal = ({
 					>
 						<X size={18} />
 					</button>
+				</div>
+				<div className='share-section-heading'>
+					<div>
+						<strong>Invite someone</strong>
+						<span>Send a direct invitation by email.</span>
+					</div>
 				</div>
 				<div className='share-invite-row'>
 					<div className='share-email-wrap'>
@@ -75,7 +92,7 @@ const InviteMemberModal = ({
 					</span>
 					<div>
 						<strong>Anyone with this link can join the board</strong>
-						<small>Link expires in 7 days</small>
+						<small>Share it anywhere · expires in 7 days</small>
 					</div>
 					<button
 						type='button'

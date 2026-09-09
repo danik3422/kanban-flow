@@ -2062,8 +2062,22 @@ button {
 	box-shadow: 0 2px 8px rgba(32, 67, 54, 0.08);
 }
 .share-board-modal {
-	width: min(100%, 620px);
-	padding: 14px;
+	width: min(100%, 660px);
+	padding: 16px;
+	border-color: #dce9df;
+	box-shadow: 0 28px 80px rgba(24, 61, 45, 0.2);
+}
+.share-header-icon {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	flex: 0 0 40px;
+	margin: 1px 2px 0 0;
+	border-radius: 12px;
+	color: #fff;
+	background: var(--teal);
+	box-shadow: 0 8px 16px rgba(20, 125, 120, 0.2);
 }
 .share-invite-row {
 	display: grid;
@@ -2074,6 +2088,22 @@ button {
 	border: 1px solid #e8efe9;
 	border-radius: 12px;
 	background: #f7faf8;
+}
+.share-section-heading {
+	display: flex;
+	align-items: center;
+	margin: 18px 2px 8px;
+}
+.share-section-heading > div {
+	display: grid;
+	gap: 2px;
+}
+.share-section-heading strong {
+	font-size: 0.82rem;
+}
+.share-section-heading span {
+	color: var(--muted);
+	font-size: 0.7rem;
 }
 .share-email-wrap {
 	display: flex;
@@ -2139,7 +2169,7 @@ button {
 	padding: 11px 12px;
 	border: 1px solid #e0ebdf;
 	border-radius: 11px;
-	background: linear-gradient(180deg, rgba(240, 248, 243, 0.95), rgba(255, 255, 255, 1));
+	background: linear-gradient(110deg, #edf8f0, #fbfdfb 72%);
 }
 .share-link-icon {
 	display: grid;
@@ -2171,8 +2201,8 @@ button {
 .share-tabs {
 	display: flex;
 	gap: 8px;
-	margin-bottom: 6px;
-	padding: 4px;
+	margin: 18px 0 6px;
+	padding: 3px;
 	border: 1px solid #e7efe9;
 	border-radius: 10px;
 	background: #f5f9f6;
@@ -2181,7 +2211,7 @@ button {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	min-height: 34px;
+	min-height: 36px;
 	padding: 0 10px;
 	border: 0;
 	border-radius: 7px;
