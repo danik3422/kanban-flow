@@ -15,6 +15,7 @@ const InviteMemberModal = ({
 	invites = [],
 	currentUserId,
 	boardOwnerId,
+	onlineUserIds = [],
 	canManageMembers = false,
 	isOpen,
 	onChange,
@@ -48,6 +49,9 @@ const InviteMemberModal = ({
 								: 'See who is working in this room.'}
 						</p>
 					</div>
+					<span className='share-online-count'>
+						<span className='share-online-dot' /> {onlineUserIds.length} online
+					</span>
 					<button
 						type='button'
 						className='icon-button'
@@ -138,14 +142,16 @@ const InviteMemberModal = ({
 									{(() => {
 										const memberUserId = member.user?._id || member._id
 										const isOwner = String(memberUserId) === String(boardOwnerId)
+										const isOnline = onlineUserIds.includes(String(memberUserId))
 										const canTransferOwnership =
 											canManageMembers &&
 											String(currentUserId) === String(boardOwnerId)
 
 										return (
 											<>
-									<span className='share-member-avatar'>
+									<span className={`share-member-avatar ${isOnline ? 'is-online' : ''}`}>
 										<UserRound size={18} />
+										<span className='share-member-presence' aria-label={isOnline ? 'Online' : 'Offline'} />
 									</span>
 									<div>
 										<strong>

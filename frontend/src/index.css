@@ -2149,6 +2149,34 @@ button {
 	font-size: 0.72rem;
 	line-height: 1.45;
 }
+.share-online-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: 0 0 auto;
+	margin-top: 4px;
+	padding: 5px 8px;
+	border-radius: 999px;
+	color: var(--teal-dark);
+	background: #e3f2e8;
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+.share-online-dot,
+.share-member-presence {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border: 2px solid #fff;
+	border-radius: 50%;
+	background: #a6b5ad;
+}
+.share-online-dot {
+	width: 6px;
+	height: 6px;
+	border: 0;
+	background: #27a66f;
+}
 .invite-mode-switch {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -2362,6 +2390,7 @@ button {
 	padding: 5px 2px;
 }
 .share-member-avatar {
+	position: relative;
 	display: grid;
 	place-items: center;
 	width: 36px;
@@ -2370,6 +2399,18 @@ button {
 	border-radius: 50%;
 	color: var(--teal);
 	background: #dceee4;
+}
+.share-member-avatar.is-online {
+	color: var(--teal-dark);
+	background: #d7f0df;
+}
+.share-member-presence {
+	position: absolute;
+	right: -1px;
+	bottom: -1px;
+}
+.share-member-avatar.is-online .share-member-presence {
+	background: #27a66f;
 }
 .share-member-row > div {
 	display: grid;

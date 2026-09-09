@@ -78,6 +78,7 @@ const Workspace = () => {
 	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
+	const [onlineUserIds, setOnlineUserIds] = useState([])
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
@@ -233,6 +234,7 @@ const Workspace = () => {
 		if (!selectedBoard || isDevAuthBypass) return
 		const socket = io('http://localhost:5001', { withCredentials: true })
 		socket.on('connect', () => socket.emit('join-board', selectedBoard._id))
+		socket.on('board:presence', (userIds) => setOnlineUserIds(userIds))
 		socket.on('task:created', (task) => {
 			setColumns((current) =>
 				current.map((column) =>
@@ -264,7 +266,10 @@ const Workspace = () => {
 				}),
 			)
 		})
-		return () => socket.disconnect()
+		return () => {
+			setOnlineUserIds([])
+			socket.disconnect()
+		}
 	}, [selectedBoard])
 
 	useEffect(() => {
@@ -1430,6 +1435,7 @@ const Workspace = () => {
 				invites={boardInvites}
 				currentUserId={authUser?._id}
 				boardOwnerId={selectedBoard?.createdBy}
+				onlineUserIds={onlineUserIds}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}

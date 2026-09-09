@@ -21,6 +21,7 @@ const httpServer = http.createServer(app)
 const io = new Server(httpServer, {
 	cors: { origin: env.corsOrigin, credentials: true },
 })
+const boardPresence = new Map()
 setRealtimeServer(io)
 
 io.use(async (socket, next) => {
@@ -38,9 +39,47 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
 	socket.on('join-board', async (boardId) => {
+		if (socket.boardId === boardId) return
+		if (socket.boardId) {
+			const previousUsers = boardPresence.get(socket.boardId)
+			if (previousUsers) {
+				const count = previousUsers.get(socket.userId) || 0
+				if (count <= 1) previousUsers.delete(socket.userId)
+				else previousUsers.set(socket.userId, count - 1)
+				io.to(`board:${socket.boardId}`).emit(
+					'board:presence',
+					Array.from(previousUsers.keys()),
+				)
+			}
+			socket.leave(`board:${socket.boardId}`)
+			socket.boardId = null
+		}
 		const board = await Board.findById(boardId).select('createdBy')
 		const membership = await BoardMember.findOne({ board: boardId, user: socket.userId })
-		if (board && (board.createdBy.toString() === socket.userId || membership)) socket.join(`board:${boardId}`)
+		if (board && (board.createdBy.toString() === socket.userId || membership)) {
+			socket.join(`board:${boardId}`)
+			socket.boardId = boardId
+			const users = boardPresence.get(boardId) || new Map()
+			users.set(socket.userId, (users.get(socket.userId) || 0) + 1)
+			boardPresence.set(boardId, users)
+			io.to(`board:${boardId}`).emit(
+				'board:presence',
+				Array.from(users.keys()),
+			)
+		}
+	})
+	socket.on('disconnect', () => {
+		if (!socket.boardId) return
+		const users = boardPresence.get(socket.boardId)
+		if (!users) return
+		const count = users.get(socket.userId) || 0
+		if (count <= 1) users.delete(socket.userId)
+		else users.set(socket.userId, count - 1)
+		io.to(`board:${socket.boardId}`).emit(
+			'board:presence',
+			Array.from(users.keys()),
+		)
+		if (users.size === 0) boardPresence.delete(socket.boardId)
 	})
 })
 
