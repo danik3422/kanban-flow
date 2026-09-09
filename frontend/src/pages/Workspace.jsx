@@ -633,7 +633,12 @@ const Workspace = () => {
 			setColumns((current) =>
 				current.map((item) =>
 					item._id === column._id
-						? { ...item, tasks: [...item.tasks, data] }
+						? {
+								...item,
+								tasks: item.tasks.some((task) => task._id === data._id)
+									? item.tasks
+									: [...item.tasks, data],
+							}
 						: item,
 				),
 			)
