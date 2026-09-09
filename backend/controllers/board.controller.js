@@ -109,10 +109,18 @@ export const getBoardMembers = async (req, res) => {
 export const updateBoardMemberRole = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString())
+		const isOwner = board.createdBy.toString() === req.user._id.toString()
+		const requesterMembership = !isOwner
+			? await BoardMember.findOne({
+					board: board._id,
+					user: req.user._id,
+					role: 'admin',
+				})
+			: null
+		if (!isOwner && !requesterMembership)
 			return res
 				.status(403)
-				.json({ message: 'Only the board owner can edit member roles' })
+				.json({ message: 'Only the board owner or an admin can edit member roles' })
 		const role = req.body.role
 		if (!['admin', 'member'].includes(role))
 			return res.status(400).json({ message: 'Invalid member role' })

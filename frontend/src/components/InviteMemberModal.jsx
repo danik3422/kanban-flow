@@ -14,6 +14,7 @@ const InviteMemberModal = ({
 	members = [],
 	invites = [],
 	currentUserId,
+	canManageMembers = false,
 	isOpen,
 	onChange,
 	onClose,
@@ -140,6 +141,7 @@ const InviteMemberModal = ({
 										aria-label={`Role for ${member.user?.name || member.name || member.email}`}
 										value={member.role || 'member'}
 										disabled={
+											!canManageMembers ||
 											member.user?._id === currentUserId ||
 											member._id === currentUserId
 										}

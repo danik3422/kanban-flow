@@ -267,16 +267,19 @@ const Workspace = () => {
 
 	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return
-		Promise.all([
+		Promise.allSettled([
 			axiosInstance.get(`/board/boards/${selectedBoard._id}/members`),
 			axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`),
 		])
-			.then(([membersResponse, invitesResponse]) => {
-				setBoardMembers(membersResponse.data.map((member) => member.user))
-				setBoardMemberRecords(membersResponse.data)
-				setBoardInvites(invitesResponse.data)
+			.then(([membersResult, invitesResult]) => {
+				if (membersResult.status === 'fulfilled') {
+					setBoardMembers(membersResult.value.data.map((member) => member.user))
+					setBoardMemberRecords(membersResult.value.data)
+				}
+				if (invitesResult.status === 'fulfilled') {
+					setBoardInvites(invitesResult.value.data)
+				}
 			})
-			.catch(() => {})
 	}, [selectedBoard])
 
 	const renameBoard = async () => {
@@ -1365,6 +1368,9 @@ const Workspace = () => {
 				members={boardMemberRecords}
 				invites={boardInvites}
 				currentUserId={authUser?._id}
+				canManageMembers={
+					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
+				}
 				onChange={(event) => setInviteEmail(event.target.value)}
 				onClose={() => setIsInviteOpen(false)}
 				onSubmit={inviteMember}
