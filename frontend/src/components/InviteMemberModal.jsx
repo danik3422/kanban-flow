@@ -167,27 +167,33 @@ const InviteMemberModal = ({
 										<span className='share-member-status-dot' />
 										{status[0].toUpperCase() + status.slice(1)}
 									</span>
-									<select
-										className='share-member-role-select'
-										aria-label={`Role for ${member.user?.name || member.name || member.email}`}
+									<div className='share-member-role-control'>
+										<span>
+											{isOwner ? 'Owner' : (member.role || 'member').replace(/^./, (letter) => letter.toUpperCase())}
+										</span>
+										<select
+											className='share-member-role-select'
+											aria-label={`Role for ${member.user?.name || member.name || member.email}`}
 											value={isOwner ? 'owner' : member.role || 'member'}
-										disabled={
-											!canManageMembers ||
+											disabled={
+												!canManageMembers ||
 												isOwner ||
 												member.user?._id === currentUserId ||
 												member._id === currentUserId
-										}
-										onChange={(event) =>
-											onRoleChange(member._id, event.target.value)
-										}
-									>
-										<option value='member'>Member</option>
-										<option value='admin'>Admin</option>
+											}
+											onChange={(event) =>
+												onRoleChange(member._id, event.target.value)
+											}
+										>
+											<option value='member'>Member</option>
+											<option value='admin'>Admin</option>
 											{isOwner && <option value='owner'>Owner</option>}
 											{canTransferOwnership && !isOwner && (
 												<option value='owner'>Owner</option>
 											)}
-									</select>
+										</select>
+										<span className='share-member-role-chevron'>⌄</span>
+									</div>
 											</>
 									)
 								})()}
