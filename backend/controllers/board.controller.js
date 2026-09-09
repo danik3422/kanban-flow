@@ -31,6 +31,17 @@ const ensureBoardAccess = async (userId, boardId) => {
 	}
 }
 
+const canManageBoard = async (board, userId) => {
+	if (board.createdBy.toString() === userId.toString()) return true
+	return Boolean(
+		await BoardMember.exists({
+			board: board._id,
+			user: userId,
+			role: 'admin',
+		}),
+	)
+}
+
 export const createBoard = async (req, res) => {
 	try {
 		const { name } = req.body
@@ -146,10 +157,10 @@ export const updateBoardMemberRole = async (req, res) => {
 export const getBoardInvites = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString())
+		if (!(await canManageBoard(board, req.user._id)))
 			return res
 				.status(403)
-				.json({ message: 'Only the board owner can view invites' })
+				.json({ message: 'Only the board owner or an admin can view invites' })
 		const invites = await BoardInvite.find({ board: board._id })
 			.sort({ createdAt: -1 })
 			.select('email expiresAt usedAt createdAt')
@@ -175,10 +186,10 @@ export const getBoardInvites = async (req, res) => {
 export const revokeBoardInvite = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString())
+		if (!(await canManageBoard(board, req.user._id)))
 			return res
 				.status(403)
-				.json({ message: 'Only the board owner can revoke invites' })
+				.json({ message: 'Only the board owner or an admin can revoke invites' })
 		const invite = await BoardInvite.findOne({
 			_id: req.params.inviteId,
 			board: board._id,
@@ -197,10 +208,10 @@ export const revokeBoardInvite = async (req, res) => {
 export const copyBoardInviteLink = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString())
+		if (!(await canManageBoard(board, req.user._id)))
 			return res
 				.status(403)
-				.json({ message: 'Only the board owner can copy invites' })
+				.json({ message: 'Only the board owner or an admin can copy invites' })
 
 		const invite = await BoardInvite.findOne({
 			_id: req.params.inviteId,
@@ -447,9 +458,9 @@ export const addMemberToBoard = async (req, res) => {
 			return res.status(404).json({ message: 'Board not found.' })
 		}
 
-		if (board.createdBy.toString() !== requesterId.toString()) {
+		if (!(await canManageBoard(board, requesterId))) {
 			return res.status(403).json({
-				message: 'Access denied: Only the board creator can add members.',
+				message: 'Access denied: Only the board owner or an admin can add members.',
 			})
 		}
 
@@ -514,10 +525,10 @@ export const addMemberToBoard = async (req, res) => {
 export const createBoardInvite = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString())
+		if (!(await canManageBoard(board, req.user._id)))
 			return res
 				.status(403)
-				.json({ message: 'Only the board owner can create invites' })
+				.json({ message: 'Only the board owner or an admin can create invites' })
 		const email = (req.body.email || '').trim().toLowerCase()
 		if (email && email === req.user.email.toLowerCase())
 			return res.status(400).json({ message: 'You cannot invite yourself' })

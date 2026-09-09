@@ -40,8 +40,12 @@ const InviteMemberModal = ({
 					</span>
 					<div className='share-header-copy'>
 						<span className='share-kicker'>Collaborate</span>
-						<h2>Invite people</h2>
-						<p>Bring the right people into this board.</p>
+						<h2>{canManageMembers ? 'Invite people' : 'People in this room'}</h2>
+						<p>
+							{canManageMembers
+								? 'Bring the right people into this board.'
+								: 'See who is working in this room.'}
+						</p>
 					</div>
 					<button
 						type='button'
@@ -53,73 +57,79 @@ const InviteMemberModal = ({
 						<X size={18} />
 					</button>
 				</div>
-				<div className='share-section-heading'>
-					<div>
-						<strong>Invite someone</strong>
-						<span>Send a direct invitation by email.</span>
+				{canManageMembers && (
+					<>
+						<div className='share-section-heading'>
+							<div>
+								<strong>Invite someone</strong>
+								<span>Send a direct invitation by email.</span>
+							</div>
+						</div>
+						<div className='share-invite-row'>
+							<div className='share-email-wrap'>
+								<Mail size={17} />
+								<input
+									id='invite-email'
+									type='email'
+									autoFocus={mode === 'email'}
+									value={email}
+									onChange={onChange}
+									placeholder='Email address or name'
+								/>
+							</div>
+							<select
+								className='share-role'
+								aria-label='Member role'
+								defaultValue='member'
+							>
+								<option value='member'>Member</option>
+								<option value='admin'>Admin</option>
+							</select>
+							<button
+								className='primary-button share-submit'
+								type='submit'
+								onClick={() => setMode('email')}
+							>
+								<Mail size={16} /> Share
+							</button>
+						</div>
+						<div className='share-link-box'>
+							<span className='share-link-icon'>
+								<Link2 size={18} />
+							</span>
+							<div>
+								<strong>Anyone with this link can join the board</strong>
+								<small>Share it anywhere · expires in 7 days</small>
+							</div>
+							<button
+								type='button'
+								className='quiet-button'
+								onClick={() => onSubmit({ preventDefault: () => {} }, 'link')}
+							>
+								<Link2 size={14} /> Copy
+							</button>
+						</div>
+					</>
+				)}
+				{canManageMembers && (
+					<div className='share-tabs' role='tablist'>
+						<button
+							type='button'
+							className={tab === 'members' ? 'active' : ''}
+							onClick={() => setTab('members')}
+						>
+							Board members <b>{members.length}</b>
+						</button>
+						<button
+							type='button'
+							className={tab === 'invites' ? 'active' : ''}
+							onClick={() => setTab('invites')}
+						>
+							Invitations <b>{invites.length}</b>
+						</button>
 					</div>
-				</div>
-				<div className='share-invite-row'>
-					<div className='share-email-wrap'>
-						<Mail size={17} />
-						<input
-							id='invite-email'
-							type='email'
-							autoFocus={mode === 'email'}
-							value={email}
-							onChange={onChange}
-							placeholder='Email address or name'
-						/>
-					</div>
-					<select
-						className='share-role'
-						aria-label='Member role'
-						defaultValue='member'
-					>
-						<option value='member'>Member</option>
-						<option value='admin'>Admin</option>
-					</select>
-					<button
-						className='primary-button share-submit'
-						type='submit'
-						onClick={() => setMode('email')}
-					>
-						<Mail size={16} /> Share
-					</button>
-				</div>
-				<div className='share-link-box'>
-					<span className='share-link-icon'>
-						<Link2 size={18} />
-					</span>
-					<div>
-						<strong>Anyone with this link can join the board</strong>
-						<small>Share it anywhere · expires in 7 days</small>
-					</div>
-					<button
-						type='button'
-						className='quiet-button'
-						onClick={() => onSubmit({ preventDefault: () => {} }, 'link')}
-					>
-						<Link2 size={14} /> Copy
-					</button>
-				</div>
-				<div className='share-tabs' role='tablist'>
-					<button
-						type='button'
-						className={tab === 'members' ? 'active' : ''}
-						onClick={() => setTab('members')}
-					>
-						Board members <b>{members.length}</b>
-					</button>
-					<button
-						type='button'
-						className={tab === 'invites' ? 'active' : ''}
-						onClick={() => setTab('invites')}
-					>
-						Invitations <b>{invites.length}</b>
-					</button>
-				</div>
-				{tab === 'members' ? (
+				)}
+				{!canManageMembers || tab === 'members' ? (
 					<div className='share-member-list'>
 						{members.length ? (
 							members.map((member) => (

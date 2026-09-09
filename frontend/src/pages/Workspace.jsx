@@ -1073,7 +1073,15 @@ const Workspace = () => {
 											className='quiet-button'
 											onClick={() => setIsInviteOpen(true)}
 										>
-											<Mail size={16} /> Invite
+											{isBoardOwner || selectedBoard.role === 'admin' ? (
+												<>
+													<Mail size={16} /> Invite
+												</>
+											) : (
+												<>
+													<UsersRound size={16} /> People
+												</>
+											)}
 										</button>
 										<button
 											className='quiet-button'
