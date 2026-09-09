@@ -94,6 +94,9 @@ const Workspace = () => {
 	})
 	const [isInviteOpen, setIsInviteOpen] = useState(false)
 	const [inviteEmail, setInviteEmail] = useState('')
+	const [isDeleteBoardOpen, setIsDeleteBoardOpen] = useState(false)
+	const [isDeleteBoardArmed, setIsDeleteBoardArmed] = useState(false)
+	const [deleteConfirmation, setDeleteConfirmation] = useState('')
 
 	const visibleBoardInvites = boardInvites.filter(
 		(invite) => invite.status !== 'accepted',
@@ -455,12 +458,25 @@ const Workspace = () => {
 		}
 	}
 
+	const openDeleteBoardDialog = () => {
+		if (!selectedBoard) return
+		setDeleteConfirmation('')
+		setIsDeleteBoardArmed(false)
+		setIsDeleteBoardOpen(true)
+	}
+
+	const closeDeleteBoardDialog = () => {
+		setIsDeleteBoardOpen(false)
+		setIsDeleteBoardArmed(false)
+		setDeleteConfirmation('')
+	}
+
 	const removeCurrentBoard = async () => {
 		if (!selectedBoard) return
-		const confirmed = window.confirm(
-			`Delete “${selectedBoard.name}”? This permanently removes the room, columns, tasks, and invitations.`,
-		)
-		if (!confirmed) return
+		if (deleteConfirmation.trim().toLowerCase() !== 'удалить комнату') {
+			toast.error('Введите фразу «удалить комнату»')
+			return
+		}
 
 		if (isDevAuthBypass) {
 			const remainingBoards = boards.filter(
@@ -469,6 +485,7 @@ const Workspace = () => {
 			setBoards(remainingBoards)
 			setSelectedBoard(null)
 			navigate('/workspaces')
+			closeDeleteBoardDialog()
 			toast.success('Demo board deleted')
 			return
 		}
@@ -481,6 +498,7 @@ const Workspace = () => {
 			setSelectedBoard(null)
 			setColumns([])
 			navigate('/workspaces')
+			closeDeleteBoardDialog()
 			toast.success('Board deleted')
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not delete board')
@@ -1061,7 +1079,7 @@ const Workspace = () => {
 										{isBoardOwner ? (
 											<button
 												className='quiet-button danger'
-												onClick={removeCurrentBoard}
+												onClick={openDeleteBoardDialog}
 												type='button'
 											>
 												<Trash2 size={16} /> Delete room
@@ -1298,6 +1316,95 @@ const Workspace = () => {
 				onRevoke={revokeInvite}
 				onRoleChange={updateMemberRole}
 			/>
+			{isDeleteBoardOpen && selectedBoard && (
+				<div
+					className='modal-backdrop'
+					onMouseDown={closeDeleteBoardDialog}
+					role='presentation'
+				>
+					<div
+						className='modal-panel delete-board-panel'
+						onMouseDown={(event) => event.stopPropagation()}
+						role='dialog'
+						aria-modal='true'
+						aria-labelledby='delete-board-title'
+					>
+						<div className='modal-title'>
+							<div>
+								<p className='eyebrow'>Permanent action</p>
+								<h2 id='delete-board-title'>Удалить комнату?</h2>
+							</div>
+							<button
+								type='button'
+								className='icon-button'
+								onClick={closeDeleteBoardDialog}
+								aria-label='Close'
+								title='Close'
+							>
+								<X size={18} />
+							</button>
+						</div>
+						<p className='delete-board-copy'>
+							Комната «{selectedBoard.name}», все задачи, колонки и приглашения будут
+							удалены навсегда.
+						</p>
+						{!isDeleteBoardArmed ? (
+							<div className='delete-board-actions'>
+								<button
+									type='button'
+									className='quiet-button'
+									onClick={closeDeleteBoardDialog}
+								>
+									Нет, оставить
+								</button>
+								<button
+									type='button'
+									className='primary-button danger-button'
+									onClick={() => setIsDeleteBoardArmed(true)}
+								>
+									Да, удалить
+								</button>
+							</div>
+						) : (
+							<form
+								className='delete-board-confirmation'
+								onSubmit={(event) => {
+									event.preventDefault()
+									removeCurrentBoard()
+								}}
+							>
+								<label className='field-label' htmlFor='delete-board-confirmation'>
+									Введите «удалить комнату», чтобы подтвердить
+								</label>
+								<input
+									id='delete-board-confirmation'
+									autoFocus
+									value={deleteConfirmation}
+									onChange={(event) => setDeleteConfirmation(event.target.value)}
+									placeholder='удалить комнату'
+									autoComplete='off'
+								/>
+								<div className='delete-board-actions'>
+									<button
+										type='button'
+										className='quiet-button'
+										onClick={() => setIsDeleteBoardArmed(false)}
+									>
+										Назад
+									</button>
+									<button
+										type='submit'
+										className='primary-button danger-button'
+										disabled={deleteConfirmation.trim().toLowerCase() !== 'удалить комнату'}
+									>
+										Подтвердить удаление
+									</button>
+								</div>
+							</form>
+						)}
+					</div>
+				</div>
+			)}
 			{taskDetails && (
 				<div
 					className='modal-backdrop'

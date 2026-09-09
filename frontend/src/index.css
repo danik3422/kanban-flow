@@ -1365,6 +1365,37 @@ button {
 	background: #f9e9e7;
 	color: #8f3030;
 }
+.danger-button {
+	background: #a34b4b;
+	box-shadow: 0 8px 20px rgba(163, 75, 75, 0.18);
+}
+.danger-button:hover {
+	background: #8f3030;
+}
+.danger-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	transform: none;
+}
+.delete-board-panel {
+	max-width: 470px;
+}
+.delete-board-copy {
+	margin: 0 0 20px;
+	color: var(--muted);
+	line-height: 1.6;
+}
+.delete-board-actions {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 10px;
+	margin-top: 20px;
+}
+.delete-board-confirmation {
+	display: grid;
+	gap: 10px;
+}
 .board-overview {
 	display: flex;
 	align-items: center;
