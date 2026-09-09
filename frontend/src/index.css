@@ -1380,6 +1380,9 @@ button {
 .delete-board-panel {
 	max-width: 470px;
 }
+.leave-board-panel {
+	max-width: 470px;
+}
 .delete-board-copy {
 	margin: 0 0 20px;
 	color: var(--muted);

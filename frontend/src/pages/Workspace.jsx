@@ -97,6 +97,7 @@ const Workspace = () => {
 	const [isDeleteBoardOpen, setIsDeleteBoardOpen] = useState(false)
 	const [isDeleteBoardArmed, setIsDeleteBoardArmed] = useState(false)
 	const [deleteConfirmation, setDeleteConfirmation] = useState('')
+	const [isLeaveBoardOpen, setIsLeaveBoardOpen] = useState(false)
 
 	const visibleBoardInvites = boardInvites.filter(
 		(invite) => invite.status !== 'accepted',
@@ -507,10 +508,6 @@ const Workspace = () => {
 
 	const leaveCurrentBoard = async () => {
 		if (!selectedBoard) return
-		const confirmed = window.confirm(
-			`Leave “${selectedBoard.name}”? You will need a new invitation to join again.`,
-		)
-		if (!confirmed) return
 
 		if (isDevAuthBypass) {
 			setBoards((current) =>
@@ -518,6 +515,7 @@ const Workspace = () => {
 			)
 			setSelectedBoard(null)
 			navigate('/workspaces')
+			setIsLeaveBoardOpen(false)
 			toast.success('You left the demo board')
 			return
 		}
@@ -530,6 +528,7 @@ const Workspace = () => {
 			setSelectedBoard(null)
 			setColumns([])
 			navigate('/workspaces')
+			setIsLeaveBoardOpen(false)
 			toast.success('You left the board')
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not leave board')
@@ -1087,7 +1086,7 @@ const Workspace = () => {
 										) : (
 											<button
 												className='quiet-button danger'
-												onClick={leaveCurrentBoard}
+												onClick={() => setIsLeaveBoardOpen(true)}
 												type='button'
 											>
 												<LogOut size={16} /> Leave room
@@ -1095,6 +1094,57 @@ const Workspace = () => {
 										)}
 									</div>
 								</div>
+							{isLeaveBoardOpen && selectedBoard && (
+								<div
+									className='modal-backdrop'
+									onMouseDown={() => setIsLeaveBoardOpen(false)}
+									role='presentation'
+								>
+									<div
+										className='modal-panel leave-board-panel'
+										onMouseDown={(event) => event.stopPropagation()}
+										role='dialog'
+										aria-modal='true'
+										aria-labelledby='leave-board-title'
+									>
+										<div className='modal-title'>
+											<div>
+												<p className='eyebrow'>Leave room</p>
+												<h2 id='leave-board-title'>Leave this room?</h2>
+											</div>
+											<button
+												type='button'
+												className='icon-button'
+												onClick={() => setIsLeaveBoardOpen(false)}
+												aria-label='Close'
+												title='Close'
+											>
+												<X size={18} />
+											</button>
+										</div>
+										<p className='delete-board-copy'>
+											You will lose access to “{selectedBoard.name}” and need a new invitation
+											to join again.
+										</p>
+										<div className='delete-board-actions'>
+											<button
+												type='button'
+												className='quiet-button'
+												onClick={() => setIsLeaveBoardOpen(false)}
+											>
+												Cancel
+											</button>
+											<button
+												type='button'
+												className='primary-button danger-button'
+												onClick={leaveCurrentBoard}
+											>
+												Leave room
+											</button>
+										</div>
+									</div>
+								</div>
+							)}
 								<div className='board-scroll'>
 									<div className='kanban-grid'>
 										{visibleColumns.map((column) => (
