@@ -133,7 +133,7 @@ export const updateBoardMemberRole = async (req, res) => {
 				.status(403)
 				.json({ message: 'Only the board owner or an admin can edit member roles' })
 		const role = req.body.role
-		if (!['admin', 'member'].includes(role))
+		if (!['owner', 'admin', 'member'].includes(role))
 			return res.status(400).json({ message: 'Invalid member role' })
 		const membership = await BoardMember.findOne({
 			_id: req.params.memberId,
@@ -145,6 +145,25 @@ export const updateBoardMemberRole = async (req, res) => {
 			return res
 				.status(400)
 				.json({ message: 'The board owner role cannot be changed' })
+		if (role === 'owner') {
+			if (!isOwner) {
+				return res.status(403).json({
+					message: 'Only the current owner can transfer ownership',
+				})
+			}
+			const previousOwnerId = board.createdBy
+			board.createdBy = membership.user._id
+			await board.save()
+			await BoardMember.updateOne(
+				{ board: board._id, user: previousOwnerId },
+				{ $set: { role: 'admin' } },
+			)
+			return res.status(200).json({
+				...membership.toObject(),
+				ownershipTransferred: true,
+				boardOwnerId: membership.user._id.toString(),
+			})
+		}
 		membership.role = role
 		await membership.save()
 		return res.status(200).json(membership)

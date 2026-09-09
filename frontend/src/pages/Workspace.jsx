@@ -539,6 +539,9 @@ const Workspace = () => {
 	}
 
 	const updateMemberRole = async (memberId, role) => {
+		if (role === 'owner' && !window.confirm('Transfer ownership of this room?')) {
+			return
+		}
 		if (isDevAuthBypass) {
 			setBoardMemberRecords((current) =>
 				current.map((member) =>
@@ -553,10 +556,35 @@ const Workspace = () => {
 				`/board/boards/${selectedBoard._id}/members/${memberId}`,
 				{ role },
 			)
-			setBoardMemberRecords((current) =>
-				current.map((member) => (member._id === memberId ? data : member)),
-			)
-			toast.success('Member role updated')
+			if (data.ownershipTransferred) {
+				setBoardMemberRecords((current) =>
+					current.map((member) =>
+						member._id === memberId
+							? data
+							: member.user?._id === authUser?._id
+								? { ...member, role: 'admin' }
+								: member,
+					),
+				)
+				setBoards((current) =>
+					current.map((board) =>
+						board._id === selectedBoard._id
+							? { ...board, createdBy: data.boardOwnerId, access: 'invited', role: 'admin' }
+							: board,
+					),
+				)
+				setSelectedBoard((current) =>
+					current
+						? { ...current, createdBy: data.boardOwnerId, access: 'invited', role: 'admin' }
+						: current,
+				)
+				toast.success('Ownership transferred')
+			} else {
+				setBoardMemberRecords((current) =>
+					current.map((member) => (member._id === memberId ? data : member)),
+				)
+				toast.success('Member role updated')
+			}
 		} catch (error) {
 			toast.error(
 				error.response?.data?.message || 'Could not update member role',
@@ -1376,6 +1404,7 @@ const Workspace = () => {
 				members={boardMemberRecords}
 				invites={boardInvites}
 				currentUserId={authUser?._id}
+				boardOwnerId={selectedBoard?.createdBy}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}

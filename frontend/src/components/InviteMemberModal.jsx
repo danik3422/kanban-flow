@@ -14,6 +14,7 @@ const InviteMemberModal = ({
 	members = [],
 	invites = [],
 	currentUserId,
+	boardOwnerId,
 	canManageMembers = false,
 	isOpen,
 	onChange,
@@ -134,6 +135,15 @@ const InviteMemberModal = ({
 						{members.length ? (
 							members.map((member) => (
 								<div className='share-member-row' key={member._id}>
+									{(() => {
+										const memberUserId = member.user?._id || member._id
+										const isOwner = String(memberUserId) === String(boardOwnerId)
+										const canTransferOwnership =
+											canManageMembers &&
+											String(currentUserId) === String(boardOwnerId)
+
+										return (
+											<>
 									<span className='share-member-avatar'>
 										<UserRound size={18} />
 									</span>
@@ -149,11 +159,12 @@ const InviteMemberModal = ({
 									<select
 										className='share-member-role-select'
 										aria-label={`Role for ${member.user?.name || member.name || member.email}`}
-										value={member.role || 'member'}
+											value={isOwner ? 'owner' : member.role || 'member'}
 										disabled={
 											!canManageMembers ||
-											member.user?._id === currentUserId ||
-											member._id === currentUserId
+												isOwner ||
+												member.user?._id === currentUserId ||
+												member._id === currentUserId
 										}
 										onChange={(event) =>
 											onRoleChange(member._id, event.target.value)
@@ -161,7 +172,14 @@ const InviteMemberModal = ({
 									>
 										<option value='member'>Member</option>
 										<option value='admin'>Admin</option>
+											{isOwner && <option value='owner'>Owner</option>}
+											{canTransferOwnership && !isOwner && (
+												<option value='owner'>Owner</option>
+											)}
 									</select>
+											</>
+									)
+								})()}
 								</div>
 							))
 						) : (
