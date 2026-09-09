@@ -2406,8 +2406,12 @@ button {
 }
 .share-member-presence {
 	position: absolute;
-	right: -1px;
-	bottom: -1px;
+	right: -3px;
+	bottom: -3px;
+	width: 11px;
+	height: 11px;
+	border-width: 3px;
+	box-shadow: 0 1px 3px rgba(24, 39, 34, 0.18);
 }
 .share-member-avatar.is-online .share-member-presence {
 	background: #27a66f;
