@@ -54,7 +54,7 @@ const Home = () => {
 				<div className='workflow-intro reveal-item'>
 					<p className='eyebrow'>A simple working rhythm</p>
 					<h2>From scattered thoughts to steady progress.</h2>
-					<p>Kanban keeps your team aligned without adding another complicated process to manage.</p>
+					<p>KanbanHub keeps your team aligned without adding another complicated process to manage.</p>
 				</div>
 				<div className='workflow-steps'>
 					{workflowSteps.map((step) => (

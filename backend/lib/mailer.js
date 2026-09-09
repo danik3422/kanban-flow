@@ -40,6 +40,30 @@ export const sendPasswordResetEmail = async ({ email, resetUrl }) => {
 	})
 }
 
+export const sendAccountVerificationEmail = async ({ email, verificationUrl }) => {
+	const transporter = getTransporter()
+	if (!transporter) {
+		throw new Error('SMTP is not configured')
+	}
+
+	await transporter.sendMail({
+		from: env.mailFrom || env.smtp.user,
+		to: email,
+		subject: 'Verify your KanbanHub account',
+		text: `Verify your KanbanHub account by opening this link: ${verificationUrl}`,
+		html: `
+			<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #202c35; max-width: 600px; margin: 0 auto; padding: 24px;">
+				<div style="font-size: 28px; font-weight: 700; margin-bottom: 16px; color: #111827;">KanbanHub</div>
+				<h2 style="margin: 0 0 12px;">Verify your account</h2>
+				<p>Thanks for signing up. Please verify your email address to activate your account.</p>
+				<p><a href="${verificationUrl}">Verify my account</a></p>
+				<p>This link is valid for ${env.emailVerificationMinutes} minutes.</p>
+				<p>If you did not create this account, you can ignore this email.</p>
+			</div>
+		`,
+	})
+}
+
 export const sendBoardInviteEmail = async ({ email, boardName, boardUrl }) => {
 	const transporter = getTransporter()
 	if (!transporter) {

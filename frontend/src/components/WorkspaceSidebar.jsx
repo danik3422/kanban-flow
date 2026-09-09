@@ -1,28 +1,83 @@
-import { ChevronDown, ClipboardList, Home, Layers3, Plus, Search, Settings, Users } from 'lucide-react'
+import {
+	ChevronDown,
+	ClipboardList,
+	Home,
+	Layers3,
+	Plus,
+	Search,
+	Users,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 const MIN_WIDTH = 220
 const MAX_WIDTH = 390
 
-const RoomGroup = ({ title, items, isOpen, onToggle, search, selectedBoardId, onBoardSelect }) => {
-	const filteredItems = items.filter((board) => board.name.toLowerCase().includes(search.toLowerCase()))
+const RoomGroup = ({
+	title,
+	items,
+	isOpen,
+	onToggle,
+	search,
+	selectedBoardId,
+	onBoardSelect,
+}) => {
+	const filteredItems = items.filter((board) =>
+		board.name.toLowerCase().includes(search.toLowerCase()),
+	)
 
 	return (
 		<div className='workspace-room-group'>
-			<button className='workspace-room-group-heading' onClick={onToggle}><span>{title}</span><span className='workspace-room-group-meta'><b>{items.length}</b><ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} /></span></button>
-			{isOpen && <div className='workspace-room-list'>{filteredItems.map((board) => <button key={board._id} onClick={() => onBoardSelect(board)} className={`workspace-room ${selectedBoardId === board._id ? 'active' : ''}`} title={board.name}><span className='workspace-room-icon'><Layers3 size={15} /></span><span className='workspace-room-name'>{board.name}</span><span className='workspace-room-dot' /></button>)}{!filteredItems.length && <div className='workspace-rooms-empty'>{search ? 'No rooms match your search.' : 'No rooms here yet.'}</div>}</div>}
+			<button className='workspace-room-group-heading' onClick={onToggle}>
+				<span>{title}</span>
+				<span className='workspace-room-group-meta'>
+					<b>{items.length}</b>
+					<ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
+				</span>
+			</button>
+			{isOpen && (
+				<div className='workspace-room-list'>
+					{filteredItems.map((board) => (
+						<button
+							key={board._id}
+							onClick={() => onBoardSelect(board)}
+							className={`workspace-room ${selectedBoardId === board._id ? 'active' : ''}`}
+							title={board.name}
+						>
+							<span className='workspace-room-icon'>
+								<Layers3 size={15} />
+							</span>
+							<span className='workspace-room-name'>{board.name}</span>
+							<span className='workspace-room-dot' />
+						</button>
+					))}
+					{!filteredItems.length && (
+						<div className='workspace-rooms-empty'>
+							{search ? 'No rooms match your search.' : 'No rooms here yet.'}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	)
 }
 
-const WorkspaceSidebar = ({ isOpen, onClose, boards = [], selectedBoardId, onBoardSelect, onCreateBoard, isCollapsed = false }) => {
+const WorkspaceSidebar = ({
+	isOpen,
+	onClose,
+	boards = [],
+	selectedBoardId,
+	onBoardSelect,
+	onCreateBoard,
+	isCollapsed = false,
+}) => {
 	const [width, setWidth] = useState(286)
 	const [roomSearch, setRoomSearch] = useState('')
 	const [isOwnedOpen, setIsOwnedOpen] = useState(true)
 	const [isSharedOpen, setIsSharedOpen] = useState(true)
 	const isDragging = useRef(false)
 	const sidebarRef = useRef(null)
+	const [isResizing, setIsResizing] = useState(false)
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {
@@ -31,17 +86,27 @@ const WorkspaceSidebar = ({ isOpen, onClose, boards = [], selectedBoardId, onBoa
 		}
 		const handleMouseUp = () => {
 			isDragging.current = false
+			setIsResizing(false)
+			document.body.classList.remove('sidebar-resizing')
 			document.body.style.cursor = ''
+		}
+		const handleSelectStart = (event) => {
+			if (isDragging.current) event.preventDefault()
 		}
 		document.addEventListener('mousemove', handleMouseMove)
 		document.addEventListener('mouseup', handleMouseUp)
+		document.addEventListener('selectstart', handleSelectStart)
 		return () => {
 			document.removeEventListener('mousemove', handleMouseMove)
 			document.removeEventListener('mouseup', handleMouseUp)
+			document.removeEventListener('selectstart', handleSelectStart)
+			document.body.classList.remove('sidebar-resizing')
 		}
 	}, [])
 
-	const ownedBoards = boards.filter((board) => board.access === 'owned' || !board.access)
+	const ownedBoards = boards.filter(
+		(board) => board.access === 'owned' || !board.access,
+	)
 	const sharedBoards = boards.filter((board) => board.access === 'invited')
 	const navItems = [
 		{ icon: <Home size={17} />, label: 'Workspace home', to: '/workspaces' },
@@ -51,20 +116,107 @@ const WorkspaceSidebar = ({ isOpen, onClose, boards = [], selectedBoardId, onBoa
 
 	return (
 		<>
-			<div className={`workspace-overlay md:hidden ${isOpen ? 'is-open' : ''}`} onClick={onClose} />
-			<aside ref={sidebarRef} style={{ width: isCollapsed ? 76 : width }} className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} fixed md:static h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+			<div
+				className={`workspace-overlay md:hidden ${isOpen ? 'is-open' : ''}`}
+				onClick={onClose}
+			/>
+			<aside
+				ref={sidebarRef}
+				style={{ width: isCollapsed ? 76 : width }}
+				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} fixed md:static h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+			>
 				<div className='workspace-sidebar-main'>
-					<div className='workspace-brand-row'><Link to='/workspaces' className='workspace-brand'><span className='brand-mark'>K</span><span>Kanban</span></Link></div>
-					<div className='workspace-space-label'><span>My workspace</span><span className='workspace-private'>Private</span></div>
-					<nav className='workspace-primary-nav'>{navItems.map((item) => item.disabled ? <button key={item.label} className='workspace-nav-item workspace-nav-disabled' disabled title={item.label}>{item.icon}<span>{item.label}</span><small>Soon</small></button> : <Link key={item.label} to={item.to} onClick={onClose} className={`workspace-nav-item ${!selectedBoardId ? 'active' : ''}`} title={item.label}>{item.icon}<span>{item.label}</span></Link>)}</nav>
-					<div className='workspace-rooms-heading'><span>Rooms</span><button onClick={onCreateBoard} aria-label='Create a room' title='Create a room'><Plus size={16} /></button></div>
-					<label className='workspace-room-search'><Search size={15} /><input value={roomSearch} onChange={(event) => setRoomSearch(event.target.value)} placeholder='Find a room' aria-label='Find a room' /></label>
-					<RoomGroup title='My boards' items={ownedBoards} isOpen={isOwnedOpen} onToggle={() => setIsOwnedOpen((value) => !value)} search={roomSearch} selectedBoardId={selectedBoardId} onBoardSelect={onBoardSelect} />
-					<RoomGroup title='Shared with me' items={sharedBoards} isOpen={isSharedOpen} onToggle={() => setIsSharedOpen((value) => !value)} search={roomSearch} selectedBoardId={selectedBoardId} onBoardSelect={onBoardSelect} />
-					<button className='workspace-create-room' onClick={onCreateBoard}><Plus size={16} /> New room</button>
+					<div className='workspace-brand-row'>
+						<Link to='/workspaces' className='workspace-brand'>
+							<span className='brand-mark'>K</span>
+							<span>KanbanHub</span>
+						</Link>
+					</div>
+					<div className='workspace-space-label'>
+						<span>My workspace</span>
+						<span className='workspace-private'>Private</span>
+					</div>
+					<nav className='workspace-primary-nav'>
+						{navItems.map((item) =>
+							item.disabled ? (
+								<button
+									key={item.label}
+									className='workspace-nav-item workspace-nav-disabled'
+									disabled
+									title={item.label}
+								>
+									{item.icon}
+									<span>{item.label}</span>
+									<small>Soon</small>
+								</button>
+							) : (
+								<Link
+									key={item.label}
+									to={item.to}
+									onClick={onClose}
+									className={`workspace-nav-item ${!selectedBoardId ? 'active' : ''}`}
+									title={item.label}
+								>
+									{item.icon}
+									<span>{item.label}</span>
+								</Link>
+							),
+						)}
+					</nav>
+					<div className='workspace-rooms-heading'>
+						<span>Rooms</span>
+						<button
+							onClick={onCreateBoard}
+							aria-label='Create a room'
+							title='Create a room'
+						>
+							<Plus size={16} />
+						</button>
+					</div>
+					<label className='workspace-room-search'>
+						<Search size={15} />
+						<input
+							value={roomSearch}
+							onChange={(event) => setRoomSearch(event.target.value)}
+							placeholder='Find a room'
+							aria-label='Find a room'
+						/>
+					</label>
+					<RoomGroup
+						title='My boards'
+						items={ownedBoards}
+						isOpen={isOwnedOpen}
+						onToggle={() => setIsOwnedOpen((value) => !value)}
+						search={roomSearch}
+						selectedBoardId={selectedBoardId}
+						onBoardSelect={onBoardSelect}
+					/>
+					<RoomGroup
+						title='Shared with me'
+						items={sharedBoards}
+						isOpen={isSharedOpen}
+						onToggle={() => setIsSharedOpen((value) => !value)}
+						search={roomSearch}
+						selectedBoardId={selectedBoardId}
+						onBoardSelect={onBoardSelect}
+					/>
+					<button className='workspace-create-room' onClick={onCreateBoard}>
+						<Plus size={16} /> New room
+					</button>
 				</div>
 			</aside>
-			<div onMouseDown={() => { if (!isCollapsed && window.innerWidth >= 768) { isDragging.current = true; document.body.style.cursor = 'col-resize' } }} className={`workspace-resize-handle hidden md:block ${isCollapsed ? 'is-disabled' : ''}`} />
+			<div
+				onMouseDown={(event) => {
+					if (!isCollapsed && window.innerWidth >= 768) {
+						event.preventDefault()
+						isDragging.current = true
+						setIsResizing(true)
+						document.body.classList.add('sidebar-resizing')
+						document.body.style.cursor = 'col-resize'
+					}
+				}}
+				className={`workspace-resize-handle hidden md:block ${isCollapsed ? 'is-disabled' : ''}`}
+			/>
 		</>
 	)
 }

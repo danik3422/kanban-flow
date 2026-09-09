@@ -35,12 +35,19 @@ export const useAuthStore = create((set) => ({
 
 		try {
 			const res = await axiosInstance.post('/auth/signup', data)
+			const responseData = res.data
+
+			if (responseData.requiresVerification) {
+				toast.success('Account created. Check your email to verify it.')
+				return { success: true, requiresVerification: true, email: responseData.email }
+			}
+
 			toast.success('Account created successfully')
-			set({ authUser: res.data })
-			return true
+			set({ authUser: responseData })
+			return { success: true, requiresVerification: false }
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Signup failed')
-			return false
+			return { success: false, requiresVerification: false }
 		} finally {
 			set({ isSigningUp: false })
 		}
@@ -86,11 +93,34 @@ export const useAuthStore = create((set) => ({
 			)
 
 			set({ authUser: response.data })
-			toast.success('Google account created successfully')
+			toast.success(
+				response.data?.provider === 'google'
+					? 'Google account connected successfully'
+					: 'Google account created successfully'
+			)
 			return { success: true, user: response.data }
 		} catch (error) {
 			console.error('Google Signup Error:', error)
 			toast.error(error.response?.data?.message || 'Google signup failed')
+			return { success: false, error }
+		}
+	},
+
+	connectGoogleAccount: async () => {
+		try {
+			const result = await signInWithPopup(auth, googleProvider)
+			const idToken = await result.user.getIdToken()
+			const response = await axiosInstance.post(
+				'/auth/google/signup',
+				{ idToken },
+				{ withCredentials: true }
+			)
+			set({ authUser: response.data })
+			toast.success('Google account connected to your profile')
+			return { success: true, user: response.data }
+		} catch (error) {
+			console.error('Connect Google Error:', error)
+			toast.error(error.response?.data?.message || 'Could not connect Google')
 			return { success: false, error }
 		}
 	},

@@ -1,4 +1,4 @@
-import { CheckSquare, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -19,8 +19,8 @@ const Navbar = () => {
 			<div className='container mx-auto px-4 w-full flex justify-between items-center h-16'>
 				{/* Logo */}
 				<Link to='/' className='flex items-center gap-2 text-xl font-bold text-base-content'>
-					<span className='brand-mark'><CheckSquare size={15} /></span>
-					Kanban
+					<span className='brand-mark'>K</span>
+					KanbanHub
 				</Link>
 
 				{/* Right Side */}

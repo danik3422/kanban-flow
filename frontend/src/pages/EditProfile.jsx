@@ -53,7 +53,6 @@ const EditProfile = () => {
 					<div className='setup-field'><label htmlFor='edit-name'>Full name</label><div className='setup-input-wrap'><UserRound size={16} /><input id='edit-name' value={name} onChange={(event) => setName(event.target.value)} required /></div></div>
 					<div className='setup-field'><label htmlFor='edit-job'>Role or job title</label><input id='edit-job' className='plain-edit-input' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder='e.g. Product designer' /></div>
 					<div className='setup-field'><label htmlFor='edit-timezone'>Timezone</label><div className='setup-input-wrap'><Clock3 size={16} /><select id='edit-timezone' value={timezone} onChange={(event) => setTimezone(event.target.value)}>{timezones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}</select></div></div>
-					{authUser?.provider !== 'local' && <div className='setup-field'><label htmlFor='edit-password'>New local password <span>Optional</span></label><div className='setup-input-wrap'><LockKeyhole size={16} /><input id='edit-password' type='password' value={password} onChange={(event) => setPassword(event.target.value)} placeholder='Leave blank to keep current' /></div></div>}
 					<div className='edit-profile-actions'><Link to='/profile' className='quiet-button'>Cancel</Link><button type='submit' className='primary-button' disabled={isSaving}>{isSaving ? 'Saving...' : <><Save size={16} /> Save changes</>}</button></div>
 				</form>
 			</section>

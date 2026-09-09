@@ -1,19 +1,196 @@
-import { Link2, Mail, X } from 'lucide-react'
+import { CheckCircle2, Clock3, Link2, Mail, UserRound, X } from 'lucide-react'
 import { useState } from 'react'
 
-const InviteMemberModal = ({ email, isOpen, onChange, onClose, onSubmit }) => {
+const InviteMemberModal = ({
+	email,
+	members = [],
+	invites = [],
+	currentUserId,
+	isOpen,
+	onChange,
+	onClose,
+	onSubmit,
+	onRevoke,
+	onCopyInvite,
+	onRoleChange,
+}) => {
 	const [mode, setMode] = useState('email')
+	const [tab, setTab] = useState('members')
 	if (!isOpen) return null
 
 	return (
 		<div className='modal-backdrop' onMouseDown={onClose}>
-			<form className='modal-panel' onSubmit={(event) => onSubmit(event, mode)} onMouseDown={(event) => event.stopPropagation()}>
-				<div className='modal-title'>
-					<div><p className='eyebrow'>Collaborate</p><h2>Invite a teammate</h2></div>
-					<button type='button' className='icon-button' onClick={onClose} aria-label='Close' title='Close'><X size={18} /></button>
+			<form
+				className='modal-panel share-board-modal'
+				onSubmit={(event) => onSubmit(event, mode)}
+				onMouseDown={(event) => event.stopPropagation()}
+			>
+				<div className='modal-title share-header'>
+					<div className='share-header-copy'>
+						<span className='share-kicker'>Collaborate</span>
+						<h2>Invite people</h2>
+						<p>Bring teammates into the board with email or a share link.</p>
+					</div>
+					<button
+						type='button'
+						className='icon-button'
+						onClick={onClose}
+						aria-label='Close'
+						title='Close'
+					>
+						<X size={18} />
+					</button>
 				</div>
-				<div className='invite-mode-switch' role='tablist' aria-label='Invite method'><button type='button' className={mode === 'email' ? 'active' : ''} onClick={() => setMode('email')}><Mail size={15} /> Invite by email</button><button type='button' className={mode === 'link' ? 'active' : ''} onClick={() => setMode('link')}><Link2 size={15} /> Copy invite link</button></div>
-				{mode === 'email' ? <><p>We will send a one-time invite link to this email address. They can register first if they do not have an account.</p><label className='field-label' htmlFor='invite-email'>Email address</label><input id='invite-email' type='email' autoFocus value={email} onChange={onChange} placeholder='teammate@example.com' required /><button className='primary-button full-button' type='submit'><Mail size={17} /> Send invitation</button></> : <><p>Create a one-time link that you can send anywhere. It expires in 7 days and works once.</p><button className='primary-button full-button' type='submit'><Link2 size={17} /> Create invite link</button></>}
+				<div className='share-invite-row'>
+					<div className='share-email-wrap'>
+						<Mail size={17} />
+						<input
+							id='invite-email'
+							type='email'
+							autoFocus={mode === 'email'}
+							value={email}
+							onChange={onChange}
+							placeholder='Email address or name'
+						/>
+					</div>
+					<select
+						className='share-role'
+						aria-label='Member role'
+						defaultValue='member'
+					>
+						<option value='member'>Member</option>
+						<option value='admin'>Admin</option>
+					</select>
+					<button
+						className='primary-button share-submit'
+						type='submit'
+						onClick={() => setMode('email')}
+					>
+						<Mail size={16} /> Share
+					</button>
+				</div>
+				<div className='share-link-box'>
+					<span className='share-link-icon'>
+						<Link2 size={18} />
+					</span>
+					<div>
+						<strong>Anyone with this link can join the board</strong>
+						<small>Link expires in 7 days</small>
+					</div>
+					<button
+						type='button'
+						className='quiet-button'
+						onClick={() => onSubmit({ preventDefault: () => {} }, 'link')}
+					>
+						<Link2 size={14} /> Copy
+					</button>
+				</div>
+				<div className='share-tabs' role='tablist'>
+					<button
+						type='button'
+						className={tab === 'members' ? 'active' : ''}
+						onClick={() => setTab('members')}
+					>
+						Board members <b>{members.length}</b>
+					</button>
+					<button
+						type='button'
+						className={tab === 'invites' ? 'active' : ''}
+						onClick={() => setTab('invites')}
+					>
+						Invitations <b>{invites.length}</b>
+					</button>
+				</div>
+				{tab === 'members' ? (
+					<div className='share-member-list'>
+						{members.length ? (
+							members.map((member) => (
+								<div className='share-member-row' key={member._id}>
+									<span className='share-member-avatar'>
+										<UserRound size={18} />
+									</span>
+									<div>
+										<strong>
+											{member.user?.name ||
+												member.user?.email ||
+												member.name ||
+												member.email}
+										</strong>
+										<small>{member.user?.email || member.email}</small>
+									</div>
+									<select
+										className='share-member-role-select'
+										aria-label={`Role for ${member.user?.name || member.name || member.email}`}
+										value={member.role || 'member'}
+										disabled={
+											member.user?._id === currentUserId ||
+											member._id === currentUserId
+										}
+										onChange={(event) =>
+											onRoleChange(member._id, event.target.value)
+										}
+									>
+										<option value='member'>Member</option>
+										<option value='admin'>Admin</option>
+									</select>
+								</div>
+							))
+						) : (
+							<p className='share-empty'>No members yet.</p>
+						)}
+					</div>
+				) : (
+					<div className='share-member-list'>
+						{invites.length ? (
+							invites.map((invite) => (
+								<div className='share-member-row' key={invite._id}>
+									<span className='share-member-avatar'>
+										<Clock3 size={18} />
+									</span>
+									<div>
+										<strong>{invite.email || 'Link invitation'}</strong>
+										<small>
+											Sent {new Date(invite.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+										</small>
+									</div>
+									<span className={`board-invite-status ${invite.status}`}>
+										{invite.status === 'accepted' ? (
+											<>
+												<CheckCircle2 size={13} /> Accepted
+											</>
+										) : invite.status === 'expired' ? (
+											'Expired'
+										) : (
+											<>
+												<Clock3 size={13} /> Pending
+											</>
+										)}
+										{invite.status === 'pending' && (
+											<>
+												<button
+													type='button'
+													className='board-invite-copy'
+													onClick={() => onCopyInvite(invite._id)}
+												>
+													Copy link
+												</button>
+												<button
+													type='button'
+													className='board-invite-revoke'
+													onClick={() => onRevoke(invite._id)}
+												>
+													Cancel
+												</button>
+											</>
+										)}
+									</span>
+								</div>
+							))
+						) : (
+							<p className='share-empty'>No invitations yet.</p>
+						)}
+					</div>
+				)}
 			</form>
 		</div>
 	)

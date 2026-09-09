@@ -1,20 +1,27 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import {
+	Navigate,
+	Route,
+	Routes,
+	useLocation,
+	useNavigate,
+} from 'react-router-dom'
 import { Toaster } from 'sonner'
 
 import Navbar from './components/Navbar'
+import { axiosInstance } from './lib/axios'
+import BoardInvite from './pages/BoardInvite'
+import EditProfile from './pages/EditProfile'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import Profile from './pages/Profile'
-import EditProfile from './pages/EditProfile'
 import ResetPassword from './pages/ResetPassword'
 import Settings from './pages/Settings'
 import SetupProfile from './pages/SetupProfile'
 import Signup from './pages/Signup'
+import VerifyEmail from './pages/VerifyEmail'
 import Workspace from './pages/Workspace'
-import BoardInvite from './pages/BoardInvite'
-import { axiosInstance } from './lib/axios'
 import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
@@ -30,10 +37,20 @@ export const App = () => {
 	useEffect(() => {
 		const pendingInvite = localStorage.getItem('kanban-pending-invite')
 		if (!authUser || !pendingInvite) return
-		axiosInstance.post(`/board/invites/${pendingInvite}/accept`).then(({ data }) => {
-			localStorage.removeItem('kanban-pending-invite')
-			navigate(`/workspaces/${data.boardId}`, { replace: true })
-		}).catch(() => {})
+		axiosInstance
+			.post(`/board/invites/${pendingInvite}/accept`)
+			.then(({ data }) => {
+				localStorage.removeItem('kanban-pending-invite')
+				navigate(`/workspaces/${data.boardId}`, { replace: true })
+			})
+			.catch((error) => {
+				localStorage.removeItem('kanban-pending-invite')
+				const message =
+					error.response?.data?.message || 'This invite is no longer available'
+				navigate(`/invite/${pendingInvite}?error=${encodeURIComponent(message)}`, {
+					replace: true,
+				})
+			})
 	}, [authUser, navigate])
 
 	const needsSetup = authUser && authUser.profileSetup === false
@@ -72,11 +89,10 @@ export const App = () => {
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}
 						/>
+						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route
-							path='/login/resetpassword'
-							element={
-								!authUser ? <ResetPassword /> : <Navigate to='/' replace />
-							}
+							path='/login/verify-email'
+							element={!authUser ? <VerifyEmail /> : <Navigate to='/' replace />}
 						/>
 
 						<Route
@@ -89,15 +105,21 @@ export const App = () => {
 						/>
 						<Route
 							path='/profile'
-							element={authUser ? <Profile /> : <Navigate to='/login' replace />}
+							element={
+								authUser ? <Profile /> : <Navigate to='/login' replace />
+							}
 						/>
 						<Route
 							path='/profile/edit'
-							element={authUser ? <EditProfile /> : <Navigate to='/login' replace />}
+							element={
+								authUser ? <EditProfile /> : <Navigate to='/login' replace />
+							}
 						/>
 						<Route
 							path='/settings'
-							element={authUser ? <Settings /> : <Navigate to='/login' replace />}
+							element={
+								authUser ? <Settings /> : <Navigate to='/login' replace />
+							}
 						/>
 						<Route path='*' element={<NotFound />} />
 					</>

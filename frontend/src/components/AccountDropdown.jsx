@@ -1,8 +1,8 @@
 import { ChevronDown, LogOut, Palette, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useAuthStore } from '../store/useAuthStore'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useAuthStore } from '../store/useAuthStore'
 
 const AccountDropdown = () => {
 	const { authUser, logout } = useAuthStore()
@@ -18,9 +18,11 @@ const AccountDropdown = () => {
 
 	useEffect(() => {
 		const handleClickOutside = (event) => {
-			const insideDropdown = dropdownRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)
+			const insideDropdown =
+				dropdownRef.current?.contains(event.target) ||
+				triggerRef.current?.contains(event.target)
 
-            if (!insideDropdown) {
+			if (!insideDropdown) {
 				setIsClosing(true)
 				window.setTimeout(() => {
 					setIsDropdownOpen(false)
@@ -101,9 +103,26 @@ const AccountDropdown = () => {
 
 			{isDropdownOpen && (
 				<>
-					<div className={`account-backdrop ${isClosing ? 'is-closing' : ''}`} onClick={closeMenu} />
-					<div ref={dropdownRef} className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''}`} style={{ '--sheet-drag-offset': `${sheetOffset}px` }}>
-						<button type='button' className='account-sheet-handle' onPointerDown={handleSheetPointerDown} onPointerMove={handleSheetPointerMove} onPointerUp={handleSheetPointerUp} onPointerCancel={handleSheetPointerUp} aria-label='Drag account menu'><span /></button>
+					<div
+						className={`account-backdrop ${isClosing ? 'is-closing' : ''}`}
+						onClick={closeMenu}
+					/>
+					<div
+						ref={dropdownRef}
+						className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''}`}
+						style={{ '--sheet-drag-offset': `${sheetOffset}px` }}
+					>
+						<button
+							type='button'
+							className='account-sheet-handle'
+							onPointerDown={handleSheetPointerDown}
+							onPointerMove={handleSheetPointerMove}
+							onPointerUp={handleSheetPointerUp}
+							onPointerCancel={handleSheetPointerUp}
+							aria-label='Drag account menu'
+						>
+							<span />
+						</button>
 						<div className='account-popover-head'>
 							<div className='account-profile'>
 								<img src={authUser.avatar || '/avatar.png'} alt='' />
@@ -112,21 +131,71 @@ const AccountDropdown = () => {
 									<span>{authUser.email}</span>
 								</div>
 							</div>
-							<button className='account-close' onClick={closeMenu} aria-label='Close account menu' title='Close account menu'><X size={17} /></button>
+							<button
+								className='account-close'
+								onClick={closeMenu}
+								aria-label='Close account menu'
+								title='Close account menu'
+							>
+								<X size={17} />
+							</button>
 						</div>
 
 						{needsSetup ? (
-							<button className='account-action account-danger' onClick={logout}><LogOut size={17} /> Log out</button>
+							<button
+								className='account-action account-danger'
+								onClick={logout}
+							>
+								<LogOut size={17} /> Log out
+							</button>
 						) : (
 							<>
-								<div className='account-status'><span className='account-status-dot' /> Workspace member <span>·</span> Active</div>
+								<div className='account-status'>
+									<span className='account-status-dot' /> Workspace member{' '}
+									<span>·</span> Active
+								</div>
 								<div className='account-actions'>
-									<button className='account-action' onClick={() => goTo('/profile')}><span className='account-action-icon'>P</span><span><strong>Profile</strong><small>Personal details</small></span></button>
-									<button className='account-action' onClick={() => goTo('/settings')}><span className='account-action-icon'>S</span><span><strong>Settings</strong><small>Preferences and access</small></span></button>
-									<button className='account-action account-disabled' onClick={() => toast.info('Appearance settings are in development')}><Palette size={17} /><span><strong>Appearance</strong><small>In development</small></span><span className='account-coming-soon'>Soon</span></button>
+									<button
+										className='account-action'
+										onClick={() => goTo('/profile')}
+									>
+										<span className='account-action-icon'>P</span>
+										<span>
+											<strong>Profile</strong>
+											<small>Personal details</small>
+										</span>
+									</button>
+									<button
+										className='account-action'
+										onClick={() => goTo('/settings')}
+									>
+										<span className='account-action-icon'>S</span>
+										<span>
+											<strong>Settings</strong>
+											<small>Preferences and access</small>
+										</span>
+									</button>
+									<button
+										className='account-action account-disabled'
+										onClick={() =>
+											toast.info('Appearance settings are in development')
+										}
+									>
+										<Palette size={17} />
+										<span>
+											<strong>Appearance</strong>
+											<small>In development</small>
+										</span>
+										<span className='account-coming-soon'>Soon</span>
+									</button>
 								</div>
 								<div className='account-divider' />
-								<button className='account-action account-danger' onClick={logout}><LogOut size={17} /> Log out</button>
+								<button
+									className='account-action account-danger'
+									onClick={logout}
+								>
+									<LogOut size={17} /> Log out
+								</button>
 							</>
 						)}
 					</div>

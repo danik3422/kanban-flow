@@ -4,7 +4,7 @@ import { applyTheme } from '../utils/theme'
 
 const ThemeSelector = () => {
 	const [selected, setSelected] = useState(
-		() => localStorage.getItem('theme') || 'system'
+		() => localStorage.getItem('theme') || 'system',
 	)
 
 	const handleChange = (theme) => {
@@ -30,8 +30,8 @@ const ThemeSelector = () => {
 								theme.id === 'light'
 									? 'bg-gray-200'
 									: theme.id === 'dark'
-									? 'bg-gray-800'
-									: 'bg-linear-to-br from-white to-black'
+										? 'bg-gray-800'
+										: 'bg-linear-to-br from-white to-black'
 							}`}
 						/>
 						{selected === theme.id && (

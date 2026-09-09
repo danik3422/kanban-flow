@@ -1,9 +1,12 @@
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
-import cloudinary from '../lib/cloudinary.js'
 import { env } from '../config/env.js'
+import cloudinary from '../lib/cloudinary.js'
 import admin from '../lib/firebaseAdmin.js'
-import { sendPasswordResetEmail } from '../lib/mailer.js'
+import {
+	sendAccountVerificationEmail,
+	sendPasswordResetEmail,
+} from '../lib/mailer.js'
 import { generateToken } from '../lib/utils.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
@@ -30,10 +33,30 @@ export const googleSignup = async (req, res) => {
 		}
 
 		let user = await User.findOne({ email })
-		if (user) {
+		if (user && user.provider !== 'local') {
 			return res
 				.status(400)
 				.json({ message: 'User already exists. Please sign in.' })
+		}
+
+		if (user && user.provider === 'local') {
+			user.provider = 'google'
+			user.emailVerified = true
+			user.emailVerificationTokenHash = ''
+			user.emailVerificationTokenExpiresAt = null
+			if (!user.name) user.name = name || ''
+			if (!user.avatar) user.avatar = picture || ''
+			await user.save()
+
+			generateToken(user._id, res)
+			return res.status(200).json({
+				_id: user._id,
+				email: user.email,
+				name: user.name,
+				avatar: user.avatar,
+				profileSetup: user.profileSetup,
+				provider: user.provider,
+			})
 		}
 
 		user = new User({
@@ -42,6 +65,7 @@ export const googleSignup = async (req, res) => {
 			avatar: picture || '',
 			provider: 'google',
 			password: null,
+			emailVerified: true,
 			profileSetup: false,
 		})
 		await user.save()
@@ -54,6 +78,7 @@ export const googleSignup = async (req, res) => {
 			name: user.name,
 			avatar: user.avatar,
 			profileSetup: user.profileSetup,
+			provider: user.provider,
 		})
 	} catch (error) {
 		console.error('Google Signup Error:', error)
@@ -90,15 +115,14 @@ export const googleSignin = async (req, res) => {
 				.json({ message: 'User not found. Please sign up first.' })
 		}
 
-		// ❌ Prevent login if the user was created with 'local' provider
 		if (user.provider === 'local') {
-			return res.status(403).json({
-				message:
-					'This account was created with email & password. Please log in with your password.',
-			})
+			user.provider = 'google'
+			user.emailVerified = true
+			user.emailVerificationTokenHash = ''
+			user.emailVerificationTokenExpiresAt = null
+			await user.save()
 		}
 
-		// ✅ If user exists and is from Google (or other correct provider), continue
 		generateToken(user._id, res)
 
 		return res.status(200).json({
@@ -107,6 +131,7 @@ export const googleSignin = async (req, res) => {
 			name: user.name,
 			avatar: user.avatar,
 			profileSetup: user.profileSetup,
+			provider: user.provider,
 		})
 	} catch (error) {
 		console.error('Google Signin Error:', error)
@@ -118,7 +143,6 @@ export const signup = async (req, res) => {
 	try {
 		const { email, password, provider = 'local' } = req.body
 
-		// Validate required fields
 		if (!email || !provider) {
 			return res
 				.status(400)
@@ -138,34 +162,60 @@ export const signup = async (req, res) => {
 			}
 		}
 
-		// Check if user already exists
-		const existingUser = await User.findOne({ email })
+		const normalizedEmail = email.trim().toLowerCase()
+		const existingUser = await User.findOne({ email: normalizedEmail })
 		if (existingUser) {
 			return res.status(400).json({ message: 'User already exists.' })
 		}
 
-		// Hash password if local
 		let hashedPassword = null
 		if (provider === 'local') {
 			const salt = await bcrypt.genSalt(10)
 			hashedPassword = await bcrypt.hash(password, salt)
 		}
 
-		// Create user (name will be set later in profile setup)
+		const rawVerificationToken = crypto.randomBytes(32).toString('hex')
+		const verificationTokenHash = crypto
+			.createHash('sha256')
+			.update(rawVerificationToken)
+			.digest('hex')
+		const emailVerificationExpiresAt = new Date(
+			Date.now() + env.emailVerificationMinutes * 60 * 1000,
+		)
+
 		const newUser = new User({
-			email,
+			email: normalizedEmail,
 			password: hashedPassword,
 			provider,
+			emailVerified: provider !== 'local',
+			emailVerificationTokenHash: provider === 'local' ? verificationTokenHash : '',
+			emailVerificationTokenExpiresAt:
+			provider === 'local' ? emailVerificationExpiresAt : null,
 			profileSetup: false,
 		})
 
 		await newUser.save()
 
-		// Set JWT cookie
-		generateToken(newUser._id, res)
+		if (provider === 'local') {
+			const verificationUrl = `${env.frontendUrl}/login/verify-email?token=${rawVerificationToken}`
+			try {
+				await sendAccountVerificationEmail({
+					email: newUser.email,
+					verificationUrl,
+				})
+			} catch (mailError) {
+				console.error('Verification email failed:', mailError.message)
+			}
+			return res.status(201).json({
+				message:
+					'Account created. Please verify your email before continuing.',
+				requiresVerification: true,
+				email: newUser.email,
+			})
+		}
 
-		// Respond with user info
-		res.status(201).json({
+		generateToken(newUser._id, res)
+		return res.status(201).json({
 			_id: newUser._id,
 			email: newUser.email,
 			provider: newUser.provider,
@@ -197,13 +247,18 @@ export const login = async (req, res) => {
 			})
 		}
 
-		// Check password
+		if (!user.emailVerified) {
+			return res.status(403).json({
+				message:
+					'Please verify your email before logging in. Check your inbox for the verification link.',
+			})
+		}
+
 		const isPasswordCorrect = await bcrypt.compare(password, user.password)
 		if (!isPasswordCorrect) {
 			return res.status(400).json({ message: 'Credentials are not valid' })
 		}
 
-		// Generate token (cookie or JWT)
 		generateToken(user._id, res)
 
 		// Return user data
@@ -220,11 +275,57 @@ export const login = async (req, res) => {
 	}
 }
 
+export const validatePasswordResetToken = async (req, res) => {
+	try {
+		const token = req.query?.token
+		if (!token) {
+			return res.status(400).json({ message: 'Reset token is required' })
+		}
+
+		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+		const resetToken = await PasswordResetToken.findOne({ tokenHash })
+
+		if (!resetToken) {
+			return res.status(400).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
+
+		if (resetToken.usedAt) {
+			return res.status(410).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
+
+		if (new Date(resetToken.expiresAt) <= new Date()) {
+			return res.status(410).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
+
+		const user = await User.findById(resetToken.user).select('_id email')
+		if (!user) {
+			return res.status(404).json({ message: 'User not found' })
+		}
+
+		return res.status(200).json({ valid: true, email: user.email })
+	} catch (error) {
+		console.error('Password reset token validation failed:', error)
+		return res
+			.status(500)
+			.json({ message: 'Could not validate reset link' })
+	}
+}
+
 export const requestPasswordReset = async (req, res) => {
 	try {
 		const email = req.body.email?.trim().toLowerCase()
 		const genericResponse = {
-			message: 'If an account exists for this email, a reset link has been sent.',
+			message:
+				'If an account exists for this email, a reset link has been sent.',
 		}
 
 		if (!email) return res.status(400).json({ message: 'Email is required' })
@@ -236,7 +337,7 @@ export const requestPasswordReset = async (req, res) => {
 		const rawToken = crypto.randomBytes(32).toString('hex')
 		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 		const expiresAt = new Date(
-			Date.now() + env.passwordResetMinutes * 60 * 1000
+			Date.now() + env.passwordResetMinutes * 60 * 1000,
 		)
 
 		await PasswordResetToken.create({ user: user._id, tokenHash, expiresAt })
@@ -263,34 +364,92 @@ export const resetPassword = async (req, res) => {
 	try {
 		const { token, password } = req.body
 		if (!token || !password) {
-			return res.status(400).json({ message: 'Token and password are required' })
+			return res
+				.status(400)
+				.json({ message: 'Token and password are required' })
 		}
 		if (password.length < 8) {
-			return res.status(400).json({ message: 'Password must be at least 8 characters long' })
+			return res
+				.status(400)
+				.json({ message: 'Password must be at least 8 characters long' })
 		}
 
 		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
-		const resetToken = await PasswordResetToken.findOne({
-			tokenHash,
-			expiresAt: { $gt: new Date() },
-		})
+		const resetToken = await PasswordResetToken.findOne({ tokenHash })
 		if (!resetToken) {
-			return res.status(400).json({ message: 'Reset link is invalid or expired' })
+			return res.status(400).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
+		if (resetToken.usedAt) {
+			return res.status(410).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
+		if (new Date(resetToken.expiresAt) <= new Date()) {
+			return res.status(410).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
 		}
 
 		const user = await User.findById(resetToken.user)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
+		const isSameAsCurrentPassword = await bcrypt.compare(password, user.password)
+		if (isSameAsCurrentPassword) {
+			return res.status(400).json({
+				message: 'New password must be different from your current password',
+			})
+		}
+
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(password, salt)
 		user.provider = 'local'
 		await user.save()
-		await PasswordResetToken.deleteMany({ user: user._id })
+		resetToken.usedAt = new Date()
+		await resetToken.save()
+		await PasswordResetToken.deleteMany({ user: user._id, _id: { $ne: resetToken._id } })
 
 		return res.status(200).json({ message: 'Password updated successfully' })
 	} catch (error) {
 		console.error('Password reset failed:', error)
 		return res.status(500).json({ message: 'Could not reset password' })
+	}
+}
+
+export const verifyEmail = async (req, res) => {
+	try {
+		const token = req.body?.token || req.query?.token
+		if (!token) {
+			return res.status(400).json({ message: 'Verification token is required' })
+		}
+
+		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+		const user = await User.findOne({
+			emailVerificationTokenHash: tokenHash,
+			emailVerificationTokenExpiresAt: { $gt: new Date() },
+		})
+
+		if (!user) {
+			return res
+				.status(400)
+				.json({ message: 'Verification link is invalid or expired' })
+		}
+
+		user.emailVerified = true
+		user.emailVerificationTokenHash = ''
+		user.emailVerificationTokenExpiresAt = null
+		await user.save()
+
+		return res.status(200).json({
+			message: 'Email verified successfully. You can now sign in.',
+		})
+	} catch (error) {
+		console.error('Email verification failed:', error)
+		return res.status(500).json({ message: 'Could not verify email' })
 	}
 }
 
@@ -324,7 +483,7 @@ export const updateSettings = async (req, res) => {
 		const user = await User.findByIdAndUpdate(
 			req.user._id,
 			{ $set: req.body },
-			{ new: true, runValidators: true }
+			{ new: true, runValidators: true },
 		).select('-password')
 
 		if (!user) return res.status(404).json({ message: 'User not found' })
@@ -339,13 +498,29 @@ export const changePassword = async (req, res) => {
 	try {
 		const { currentPassword, newPassword } = req.body
 		if (!currentPassword || !newPassword || newPassword.length < 8) {
-			return res.status(400).json({ message: 'Current password and a new password of at least 8 characters are required' })
+			return res
+				.status(400)
+				.json({
+					message:
+						'Current password and a new password of at least 8 characters are required',
+				})
 		}
 
 		const user = await User.findById(req.user._id)
 		if (!user) return res.status(404).json({ message: 'User not found' })
-		if (!user.password) return res.status(400).json({ message: 'Set a local password from profile before changing it' })
-		if (!(await bcrypt.compare(currentPassword, user.password))) return res.status(400).json({ message: 'Current password is incorrect' })
+		if (!user.password)
+			return res
+				.status(400)
+				.json({
+					message: 'Set a local password from profile before changing it',
+				})
+		if (!(await bcrypt.compare(currentPassword, user.password)))
+			return res.status(400).json({ message: 'Current password is incorrect' })
+		if (await bcrypt.compare(newPassword, user.password)) {
+			return res.status(400).json({
+				message: 'New password must be different from your current password',
+			})
+		}
 
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(newPassword, salt)

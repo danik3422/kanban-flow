@@ -17,6 +17,10 @@ const passwordResetTokenSchema = new mongoose.Schema(
 			required: true,
 			index: { expires: 0 },
 		},
+		usedAt: {
+			type: Date,
+			default: null,
+		},
 	},
 	{ timestamps: true }
 )

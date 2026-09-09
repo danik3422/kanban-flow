@@ -26,8 +26,8 @@ export const passwordResetConfirmSchema = z.object({
 })
 
 export const settingsSchema = z.object({
-	emailNotifications: z.boolean(),
-	taskNotifications: z.boolean(),
-	weeklyDigest: z.boolean(),
-	language: z.enum(['en', 'uk']),
+	emailNotifications: z.boolean().optional(),
+	taskNotifications: z.boolean().optional(),
+	weeklyDigest: z.boolean().optional(),
+	language: z.enum(['en', 'uk', 'ru']).optional(),
 })

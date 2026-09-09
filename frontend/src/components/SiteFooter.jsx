@@ -6,8 +6,8 @@ const SiteFooter = () => {
 
 	return (
 		<footer className='site-footer'>
-			<div><span className='brand-mark'>K</span><strong>Kanban</strong></div>
-			<p>© {year} Kanban. Built by Danylo Syloats.</p>
+			<div><span className='brand-mark'>K</span><strong>KanbanHub</strong></div>
+			<p>© {year} KanbanHub. Built by Danylo Syloats.</p>
 			{portfolioUrl ? <a href={portfolioUrl} target='_blank' rel='noreferrer'>View portfolio <ArrowUpRight size={14} /></a> : <span className='footer-note'>Portfolio link coming soon</span>}
 		</footer>
 	)

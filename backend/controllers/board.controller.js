@@ -1,14 +1,14 @@
 import mongoose from 'mongoose'
 import crypto from 'node:crypto'
 
+import { sendBoardInviteEmail } from '../lib/mailer.js'
+import { emitBoardEvent } from '../lib/realtime.js'
 import Board from '../models/board.model.js'
+import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
 import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
-import { emitBoardEvent } from '../lib/realtime.js'
-import { sendBoardInviteEmail } from '../lib/mailer.js'
-import BoardInvite from '../models/boardInvite.model.js'
 
 const ensureBoardAccess = async (userId, boardId) => {
 	const board = await Board.findById(boardId)
@@ -106,12 +106,58 @@ export const getBoardMembers = async (req, res) => {
 	}
 }
 
+export const updateBoardMemberRole = async (req, res) => {
+	try {
+		const board = req.board
+		if (board.createdBy.toString() !== req.user._id.toString())
+			return res
+				.status(403)
+				.json({ message: 'Only the board owner can edit member roles' })
+		const role = req.body.role
+		if (!['admin', 'member'].includes(role))
+			return res.status(400).json({ message: 'Invalid member role' })
+		const membership = await BoardMember.findOne({
+			_id: req.params.memberId,
+			board: board._id,
+		}).populate('user', 'name email avatar provider')
+		if (!membership)
+			return res.status(404).json({ message: 'Board member not found' })
+		if (membership.user._id.toString() === board.createdBy.toString())
+			return res
+				.status(400)
+				.json({ message: 'The board owner role cannot be changed' })
+		membership.role = role
+		await membership.save()
+		return res.status(200).json(membership)
+	} catch (error) {
+		console.error('Board member role update failed:', error)
+		return res.status(500).json({ message: 'Could not update member role' })
+	}
+}
+
 export const getBoardInvites = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Only the board owner can view invites' })
-		const invites = await BoardInvite.find({ board: board._id }).sort({ createdAt: -1 }).select('email expiresAt usedAt createdAt').lean()
-		return res.status(200).json(invites.map((invite) => ({ ...invite, status: invite.usedAt ? 'accepted' : invite.expiresAt <= new Date() ? 'expired' : 'pending' })))
+		if (board.createdBy.toString() !== req.user._id.toString())
+			return res
+				.status(403)
+				.json({ message: 'Only the board owner can view invites' })
+		const invites = await BoardInvite.find({ board: board._id })
+			.sort({ createdAt: -1 })
+			.select('email expiresAt usedAt createdAt')
+			.lean()
+		return res
+			.status(200)
+			.json(
+				invites.map((invite) => ({
+					...invite,
+					status: invite.usedAt
+						? 'accepted'
+						: invite.expiresAt <= new Date()
+							? 'expired'
+							: 'pending',
+				})),
+			)
 	} catch (error) {
 		console.error('Board invites fetch failed:', error)
 		return res.status(500).json({ message: 'Could not load board invites' })
@@ -121,14 +167,55 @@ export const getBoardInvites = async (req, res) => {
 export const revokeBoardInvite = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Only the board owner can revoke invites' })
-		const invite = await BoardInvite.findOne({ _id: req.params.inviteId, board: board._id, usedAt: null })
-		if (!invite) return res.status(404).json({ message: 'Pending invite not found' })
+		if (board.createdBy.toString() !== req.user._id.toString())
+			return res
+				.status(403)
+				.json({ message: 'Only the board owner can revoke invites' })
+		const invite = await BoardInvite.findOne({
+			_id: req.params.inviteId,
+			board: board._id,
+			usedAt: null,
+		})
+		if (!invite)
+			return res.status(404).json({ message: 'Pending invite not found' })
 		await invite.deleteOne()
 		return res.status(200).json({ message: 'Invite revoked' })
 	} catch (error) {
 		console.error('Board invite revoke failed:', error)
 		return res.status(500).json({ message: 'Could not revoke board invite' })
+	}
+}
+
+export const copyBoardInviteLink = async (req, res) => {
+	try {
+		const board = req.board
+		if (board.createdBy.toString() !== req.user._id.toString())
+			return res
+				.status(403)
+				.json({ message: 'Only the board owner can copy invites' })
+
+		const invite = await BoardInvite.findOne({
+			_id: req.params.inviteId,
+			board: board._id,
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+		})
+
+		if (!invite) {
+			return res.status(404).json({ message: 'Pending invite not found' })
+		}
+
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		invite.tokenHash = tokenHash
+		invite.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+		await invite.save()
+
+		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
+		return res.status(200).json({ inviteUrl, expiresInDays: 7 })
+	} catch (error) {
+		console.error('Board invite copy failed:', error)
+		return res.status(500).json({ message: 'Could not copy board invite link' })
 	}
 }
 
@@ -170,7 +257,10 @@ export const getColumnTasks = async (req, res) => {
 			return res.status(404).json({ message: 'Column not found' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(req.user._id, column.board)
+		const { board, allowed } = await ensureBoardAccess(
+			req.user._id,
+			column.board,
+		)
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found' })
 		}
@@ -186,6 +276,46 @@ export const getColumnTasks = async (req, res) => {
 		return res.status(200).json(tasks)
 	} catch (error) {
 		console.error('Error fetching column tasks:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const updateBoard = async (req, res) => {
+	try {
+		const board = req.board
+		const userId = req.user._id
+		const { name } = req.body
+
+		if (!name || !name.trim()) {
+			return res.status(400).json({ message: 'Board name is required' })
+		}
+
+		const trimmedName = name.trim()
+		if (trimmedName.length > 100) {
+			return res.status(400).json({ message: 'Board name is too long' })
+		}
+
+		const isOwner = board.createdBy.toString() === userId.toString()
+		const isAdmin = !isOwner
+			? await BoardMember.exists({
+					board: board._id,
+					user: userId,
+					role: 'admin',
+				})
+			: true
+
+		if (!isOwner && !isAdmin) {
+			return res.status(403).json({
+				message: 'Only the board owner or admin can rename the board',
+			})
+		}
+
+		board.name = trimmedName
+		await board.save()
+
+		return res.status(200).json(board)
+	} catch (error) {
+		console.error('Error updating board:', error)
 		return res.status(500).json({ message: 'Internal server error' })
 	}
 }
@@ -238,7 +368,9 @@ export const getUserBoards = async (req, res) => {
 			return res.status(400).json({ message: 'User ID is required' })
 		}
 
-		const membership = await BoardMember.find({ user: userId }).select('board role').lean()
+		const membership = await BoardMember.find({ user: userId })
+			.select('board role')
+			.lean()
 
 		const boardIds = membership.map((member) => member.board)
 
@@ -249,7 +381,7 @@ export const getUserBoards = async (req, res) => {
 		}
 
 		const membershipByBoard = new Map(
-			membership.map((member) => [member.board.toString(), member])
+			membership.map((member) => [member.board.toString(), member]),
 		)
 		const boardsWithAccess = boards.map((board) => {
 			const member = membershipByBoard.get(board._id.toString())
@@ -293,7 +425,9 @@ export const addMemberToBoard = async (req, res) => {
 				.json({ message: 'User with this email not found.' })
 		}
 		if (userToAdd._id.toString() === requesterId.toString()) {
-			return res.status(400).json({ message: 'You cannot add yourself to the board' })
+			return res
+				.status(400)
+				.json({ message: 'You cannot add yourself to the board' })
 		}
 
 		const existingMember = await BoardMember.findOne({
@@ -316,7 +450,11 @@ export const addMemberToBoard = async (req, res) => {
 		await newMember.save()
 		let emailSent = true
 		try {
-			await sendBoardInviteEmail({ email: userToAdd.email, boardName: board.name, boardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/workspaces/${board._id}` })
+			await sendBoardInviteEmail({
+				email: userToAdd.email,
+				boardName: board.name,
+				boardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/workspaces/${board._id}`,
+			})
 		} catch (mailError) {
 			emailSent = false
 			console.warn('Board invite email was not sent:', mailError.message)
@@ -324,7 +462,13 @@ export const addMemberToBoard = async (req, res) => {
 
 		return res
 			.status(201)
-			.json({ message: emailSent ? 'User added and invite email sent' : 'User added, but invite email could not be sent', member: newMember, emailSent })
+			.json({
+				message: emailSent
+					? 'User added and invite email sent'
+					: 'User added, but invite email could not be sent',
+				member: newMember,
+				emailSent,
+			})
 	} catch (error) {
 		console.error('Error adding member to board:', error)
 		res.status(500).json({ message: 'Internal server error' })
@@ -334,25 +478,58 @@ export const addMemberToBoard = async (req, res) => {
 export const createBoardInvite = async (req, res) => {
 	try {
 		const board = req.board
-		if (board.createdBy.toString() !== req.user._id.toString()) return res.status(403).json({ message: 'Only the board owner can create invites' })
+		if (board.createdBy.toString() !== req.user._id.toString())
+			return res
+				.status(403)
+				.json({ message: 'Only the board owner can create invites' })
 		const email = (req.body.email || '').trim().toLowerCase()
-		if (email && email === req.user.email.toLowerCase()) return res.status(400).json({ message: 'You cannot invite yourself' })
+		if (email && email === req.user.email.toLowerCase())
+			return res.status(400).json({ message: 'You cannot invite yourself' })
 		if (email) {
 			const invitedUser = await User.findOne({ email }).select('_id')
 			if (invitedUser) {
-				const existingMember = await BoardMember.exists({ board: board._id, user: invitedUser._id })
-				if (existingMember) return res.status(400).json({ message: 'This user is already a member of the board' })
+				const existingMember = await BoardMember.exists({
+					board: board._id,
+					user: invitedUser._id,
+				})
+				if (existingMember)
+					return res
+						.status(400)
+						.json({ message: 'This user is already a member of the board' })
 			}
-			const activeInvite = await BoardInvite.exists({ board: board._id, email, usedAt: null, expiresAt: { $gt: new Date() } })
-			if (activeInvite) return res.status(400).json({ message: 'An active invite already exists for this email' })
+			const activeInvite = await BoardInvite.exists({
+				board: board._id,
+				email,
+				usedAt: null,
+				expiresAt: { $gt: new Date() },
+			})
+			if (activeInvite)
+				return res
+					.status(400)
+					.json({ message: 'An active invite already exists for this email' })
 		}
 		const rawToken = crypto.randomBytes(32).toString('hex')
 		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-		await BoardInvite.create({ board: board._id, email, tokenHash, createdBy: req.user._id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) })
+		await BoardInvite.create({
+			board: board._id,
+			email,
+			tokenHash,
+			createdBy: req.user._id,
+			expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+		})
 		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
 		let emailSent = false
 		if (email) {
-			try { await sendBoardInviteEmail({ email, boardName: board.name, boardUrl: inviteUrl }); emailSent = true } catch (error) { console.warn('Invite email was not sent:', error.message) }
+			try {
+				await sendBoardInviteEmail({
+					email,
+					boardName: board.name,
+					boardUrl: inviteUrl,
+				})
+				emailSent = true
+			} catch (error) {
+				console.warn('Invite email was not sent:', error.message)
+			}
 		}
 		return res.status(201).json({ inviteUrl, emailSent, expiresInDays: 7 })
 	} catch (error) {
@@ -361,18 +538,81 @@ export const createBoardInvite = async (req, res) => {
 	}
 }
 
+export const getBoardInviteDetails = async (req, res) => {
+	try {
+		const tokenHash = crypto
+			.createHash('sha256')
+			.update(req.params.token)
+			.digest('hex')
+
+		const invite = await BoardInvite.findOne({
+			tokenHash,
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+		}).populate('board', 'name')
+
+		if (!invite || !invite.board) {
+			return res.status(400).json({ message: 'Invite expired or invalid' })
+		}
+
+		return res.status(200).json({
+			boardId: invite.board._id.toString(),
+			boardName: invite.board.name,
+		})
+	} catch (error) {
+		console.error('Board invite details lookup failed:', error)
+		return res.status(500).json({ message: 'Could not load invite details' })
+	}
+}
+
 export const acceptBoardInvite = async (req, res) => {
 	try {
-		const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex')
+		const tokenHash = crypto
+			.createHash('sha256')
+			.update(req.params.token)
+			.digest('hex')
 		const userEmail = req.user.email.toLowerCase()
-		const invite = await BoardInvite.findOneAndUpdate(
-			{ tokenHash, usedAt: null, expiresAt: { $gt: new Date() }, $or: [{ email: '' }, { email: userEmail }] },
-			{ $set: { usedAt: new Date() } },
-			{ new: true }
+		const invite = await BoardInvite.findOne({
+			tokenHash,
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+			$or: [{ email: '' }, { email: userEmail }],
+		})
+
+		if (!invite)
+			return res.status(400).json({ message: 'Invite expired or invalid' })
+
+		const board = await Board.findById(invite.board).select('createdBy name')
+		if (!board) {
+			return res.status(404).json({ message: 'Board not found.' })
+		}
+
+		if (board.createdBy.toString() === req.user._id.toString()) {
+			return res.status(400).json({
+				message: 'You cannot invite yourself to this board.',
+			})
+		}
+
+		const alreadyMember = await BoardMember.exists({
+			board: invite.board,
+			user: req.user._id,
+		})
+		if (alreadyMember) {
+			return res.status(400).json({
+				message: 'You are already a member of this board.',
+			})
+		}
+
+		invite.usedAt = new Date()
+		await invite.save()
+		await BoardMember.updateOne(
+			{ board: invite.board, user: req.user._id },
+			{ $setOnInsert: { role: 'member' } },
+			{ upsert: true },
 		)
-		if (!invite) return res.status(400).json({ message: 'Invite is invalid, expired, or already used' })
-		await BoardMember.updateOne({ board: invite.board, user: req.user._id }, { $setOnInsert: { role: 'member' } }, { upsert: true })
-		return res.status(200).json({ boardId: invite.board.toString(), message: 'Invite accepted' })
+		return res
+			.status(200)
+			.json({ boardId: invite.board.toString(), message: 'Invite accepted' })
 	} catch (error) {
 		console.error('Board invite acceptance failed:', error)
 		return res.status(500).json({ message: 'Could not accept board invite' })
@@ -419,14 +659,24 @@ export const createColumn = async (req, res) => {
 export const createTask = async (req, res) => {
 	try {
 		const columnId = req.column._id
-		const { title, description, assignees = [], labels = [], checklist = [], position = 0 } = req.body
+		const {
+			title,
+			description,
+			assignees = [],
+			labels = [],
+			checklist = [],
+			position = 0,
+		} = req.body
 
 		const column = await Column.findById(columnId)
 		if (!column) {
 			return res.status(404).json({ message: 'Column not found' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(req.user._id, column.board)
+		const { board, allowed } = await ensureBoardAccess(
+			req.user._id,
+			column.board,
+		)
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found' })
 		}
@@ -449,7 +699,9 @@ export const createTask = async (req, res) => {
 		})
 
 		await newTask.save()
-		const savedTask = await Task.findById(newTask._id).populate('assignees', 'name email avatar').lean()
+		const savedTask = await Task.findById(newTask._id)
+			.populate('assignees', 'name email avatar')
+			.lean()
 		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
 		return res.status(201).json(savedTask)
 	} catch (error) {
@@ -464,15 +716,31 @@ export const updateTask = async (req, res) => {
 		if (!task) return res.status(404).json({ message: 'Task not found' })
 		const boardId = task.column.board.toString()
 		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
-		if (!board || !allowed) return res.status(403).json({ message: 'Access denied' })
+		if (!board || !allowed)
+			return res.status(403).json({ message: 'Access denied' })
 
-		const { title, description, dueDate, assignees, labels, checklist, position, column: targetColumnId } = req.body
+		const {
+			title,
+			description,
+			dueDate,
+			assignees,
+			labels,
+			checklist,
+			position,
+			column: targetColumnId,
+		} = req.body
 		const originalColumnId = task.column._id
 		const originalPosition = task.position
 		let targetColumn = task.column
-		if (targetColumnId && targetColumnId.toString() !== task.column._id.toString()) {
+		if (
+			targetColumnId &&
+			targetColumnId.toString() !== task.column._id.toString()
+		) {
 			targetColumn = await Column.findById(targetColumnId)
-			if (!targetColumn || targetColumn.board.toString() !== task.column.board.toString()) {
+			if (
+				!targetColumn ||
+				targetColumn.board.toString() !== task.column.board.toString()
+			) {
 				return res.status(400).json({ message: 'Invalid target column' })
 			}
 			task.column = targetColumn._id
@@ -487,19 +755,46 @@ export const updateTask = async (req, res) => {
 
 		if (position !== undefined) {
 			const nextPosition = Math.max(0, position)
-			const movedWithinColumn = originalColumnId.toString() === targetColumn._id.toString()
+			const movedWithinColumn =
+				originalColumnId.toString() === targetColumn._id.toString()
 			if (movedWithinColumn && nextPosition < originalPosition) {
-				await Task.updateMany({ column: originalColumnId, _id: { $ne: task._id }, position: { $gte: nextPosition, $lt: originalPosition } }, { $inc: { position: 1 } })
+				await Task.updateMany(
+					{
+						column: originalColumnId,
+						_id: { $ne: task._id },
+						position: { $gte: nextPosition, $lt: originalPosition },
+					},
+					{ $inc: { position: 1 } },
+				)
 			} else if (movedWithinColumn && nextPosition > originalPosition) {
-				await Task.updateMany({ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition, $lte: nextPosition } }, { $inc: { position: -1 } })
+				await Task.updateMany(
+					{
+						column: originalColumnId,
+						_id: { $ne: task._id },
+						position: { $gt: originalPosition, $lte: nextPosition },
+					},
+					{ $inc: { position: -1 } },
+				)
 			} else if (!movedWithinColumn) {
-				await Task.updateMany({ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition } }, { $inc: { position: -1 } })
-				await Task.updateMany({ column: targetColumn._id, position: { $gte: nextPosition } }, { $inc: { position: 1 } })
+				await Task.updateMany(
+					{
+						column: originalColumnId,
+						_id: { $ne: task._id },
+						position: { $gt: originalPosition },
+					},
+					{ $inc: { position: -1 } },
+				)
+				await Task.updateMany(
+					{ column: targetColumn._id, position: { $gte: nextPosition } },
+					{ $inc: { position: 1 } },
+				)
 			}
 			task.position = nextPosition
 		}
 		await task.save()
-		const updatedTask = await Task.findById(task._id).populate('assignees', 'name email avatar').lean()
+		const updatedTask = await Task.findById(task._id)
+			.populate('assignees', 'name email avatar')
+			.lean()
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
 		return res.status(200).json(updatedTask)
 	} catch (error) {

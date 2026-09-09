@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title>Kanban</title>
+  <title>KanbanHub</title>
   <rect width="64" height="64" rx="16" fill="#147d78"/>
-  <path d="m17 33 9 9 21-22" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+  <path d="M19 16h8v14l18-14h9L31 32l23 16h-9L27 34v14h-8z" fill="#ffffff"/>
 </svg>
