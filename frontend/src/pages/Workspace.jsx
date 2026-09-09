@@ -8,6 +8,7 @@ import {
 	CirclePlus,
 	ClipboardList,
 	LayoutDashboard,
+	LogOut,
 	Mail,
 	Menu,
 	MoreHorizontal,
@@ -17,6 +18,7 @@ import {
 	Plus,
 	Search,
 	Sparkles,
+	Trash2,
 	UserRound,
 	UsersRound,
 	X,
@@ -453,6 +455,69 @@ const Workspace = () => {
 		}
 	}
 
+	const removeCurrentBoard = async () => {
+		if (!selectedBoard) return
+		const confirmed = window.confirm(
+			`Delete “${selectedBoard.name}”? This permanently removes the room, columns, tasks, and invitations.`,
+		)
+		if (!confirmed) return
+
+		if (isDevAuthBypass) {
+			const remainingBoards = boards.filter(
+				(board) => board._id !== selectedBoard._id,
+			)
+			setBoards(remainingBoards)
+			setSelectedBoard(null)
+			navigate('/workspaces')
+			toast.success('Demo board deleted')
+			return
+		}
+
+		try {
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}`)
+			setBoards((current) =>
+				current.filter((board) => board._id !== selectedBoard._id),
+			)
+			setSelectedBoard(null)
+			setColumns([])
+			navigate('/workspaces')
+			toast.success('Board deleted')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not delete board')
+		}
+	}
+
+	const leaveCurrentBoard = async () => {
+		if (!selectedBoard) return
+		const confirmed = window.confirm(
+			`Leave “${selectedBoard.name}”? You will need a new invitation to join again.`,
+		)
+		if (!confirmed) return
+
+		if (isDevAuthBypass) {
+			setBoards((current) =>
+				current.filter((board) => board._id !== selectedBoard._id),
+			)
+			setSelectedBoard(null)
+			navigate('/workspaces')
+			toast.success('You left the demo board')
+			return
+		}
+
+		try {
+			await axiosInstance.post(`/board/boards/${selectedBoard._id}/leave`)
+			setBoards((current) =>
+				current.filter((board) => board._id !== selectedBoard._id),
+			)
+			setSelectedBoard(null)
+			setColumns([])
+			navigate('/workspaces')
+			toast.success('You left the board')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not leave board')
+		}
+	}
+
 	const updateMemberRole = async (memberId, role) => {
 		if (isDevAuthBypass) {
 			setBoardMemberRecords((current) =>
@@ -727,6 +792,7 @@ const Workspace = () => {
 			task.title.toLowerCase().includes(search.toLowerCase()),
 		),
 	}))
+	const isBoardOwner = selectedBoard?.createdBy === authUser?._id
 
 	return (
 		<div className='workspace-shell flex h-screen'>
@@ -992,6 +1058,23 @@ const Workspace = () => {
 											<Archive size={16} />{' '}
 											{isRefreshing ? 'Refreshing...' : 'Refresh'}
 										</button>
+										{isBoardOwner ? (
+											<button
+												className='quiet-button danger'
+												onClick={removeCurrentBoard}
+												type='button'
+											>
+												<Trash2 size={16} /> Delete room
+											</button>
+										) : (
+											<button
+												className='quiet-button danger'
+												onClick={leaveCurrentBoard}
+												type='button'
+											>
+												<LogOut size={16} /> Leave room
+											</button>
+										)}
 									</div>
 								</div>
 								<div className='board-scroll'>

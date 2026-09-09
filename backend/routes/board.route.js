@@ -14,6 +14,7 @@ import {
 	getBoardMembers,
 	getColumnTasks,
 	getUserBoards,
+	leaveBoard,
 	removeBoard,
 	revokeBoardInvite,
 	updateBoard,
@@ -34,6 +35,7 @@ router.post('/boards', authMiddleware, createBoard)
 router.get('/boards/:id', authMiddleware, boardMiddleware, getBoardById)
 router.patch('/boards/:id', authMiddleware, boardMiddleware, updateBoard)
 router.delete('/boards/:id', authMiddleware, boardMiddleware, removeBoard)
+router.post('/boards/:id/leave', authMiddleware, boardMiddleware, leaveBoard)
 
 // Members
 router.get(

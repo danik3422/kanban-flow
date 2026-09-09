@@ -350,6 +350,7 @@ export const removeBoard = async (req, res) => {
 		// Delete columns, board members, and board
 		await Column.deleteMany({ board: boardId })
 		await BoardMember.deleteMany({ board: boardId })
+		await BoardInvite.deleteMany({ board: boardId })
 		await Board.deleteOne({ _id: boardId })
 
 		return res
@@ -358,6 +359,33 @@ export const removeBoard = async (req, res) => {
 	} catch (error) {
 		console.error('Error removing board:', error)
 		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const leaveBoard = async (req, res) => {
+	try {
+		const board = req.board
+		const userId = req.user._id
+
+		if (board.createdBy.toString() === userId.toString()) {
+			return res.status(403).json({
+				message: 'The board owner cannot leave the board. Delete it instead.',
+			})
+		}
+
+		const membership = await BoardMember.findOneAndDelete({
+			board: board._id,
+			user: userId,
+		})
+
+		if (!membership) {
+			return res.status(404).json({ message: 'You are not a member of this board.' })
+		}
+
+		return res.status(200).json({ message: 'You left the board successfully' })
+	} catch (error) {
+		console.error('Leaving board failed:', error)
+		return res.status(500).json({ message: 'Could not leave the board' })
 	}
 }
 

@@ -1358,6 +1358,13 @@ button {
 	background: #e8eeea;
 	color: var(--ink);
 }
+.quiet-button.danger {
+	color: #a34b4b;
+}
+.quiet-button.danger:hover {
+	background: #f9e9e7;
+	color: #8f3030;
+}
 .board-overview {
 	display: flex;
 	align-items: center;
