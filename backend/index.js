@@ -22,6 +22,24 @@ const io = new Server(httpServer, {
 	cors: { origin: env.corsOrigin, credentials: true },
 })
 const boardPresence = new Map()
+
+const getPresenceSnapshot = (users) =>
+	Array.from(users, ([userId, presence]) => ({
+		userId,
+		status: Date.now() - presence.lastSeenAt > 45_000 ? 'away' : 'online',
+	}))
+
+const broadcastBoardPresence = (boardId) => {
+	const users = boardPresence.get(boardId)
+	if (users) {
+		io.to(`board:${boardId}`).emit('board:presence', getPresenceSnapshot(users))
+	}
+}
+
+setInterval(() => {
+	for (const boardId of boardPresence.keys()) broadcastBoardPresence(boardId)
+}, 15_000)
+
 setRealtimeServer(io)
 
 io.use(async (socket, next) => {
@@ -46,10 +64,7 @@ io.on('connection', (socket) => {
 				const count = previousUsers.get(socket.userId) || 0
 				if (count <= 1) previousUsers.delete(socket.userId)
 				else previousUsers.set(socket.userId, count - 1)
-				io.to(`board:${socket.boardId}`).emit(
-					'board:presence',
-					Array.from(previousUsers.keys()),
-				)
+				broadcastBoardPresence(socket.boardId)
 			}
 			socket.leave(`board:${socket.boardId}`)
 			socket.boardId = null
@@ -60,25 +75,33 @@ io.on('connection', (socket) => {
 			socket.join(`board:${boardId}`)
 			socket.boardId = boardId
 			const users = boardPresence.get(boardId) || new Map()
-			users.set(socket.userId, (users.get(socket.userId) || 0) + 1)
+			const presence = users.get(socket.userId) || {
+				connections: 0,
+				lastSeenAt: Date.now(),
+			}
+			presence.connections += 1
+			presence.lastSeenAt = Date.now()
+			users.set(socket.userId, presence)
 			boardPresence.set(boardId, users)
-			io.to(`board:${boardId}`).emit(
-				'board:presence',
-				Array.from(users.keys()),
-			)
+			broadcastBoardPresence(boardId)
 		}
+	})
+	socket.on('presence-heartbeat', () => {
+		if (!socket.boardId) return
+		const users = boardPresence.get(socket.boardId)
+		const presence = users?.get(socket.userId)
+		if (!presence) return
+		presence.lastSeenAt = Date.now()
+		broadcastBoardPresence(socket.boardId)
 	})
 	socket.on('disconnect', () => {
 		if (!socket.boardId) return
 		const users = boardPresence.get(socket.boardId)
 		if (!users) return
-		const count = users.get(socket.userId) || 0
-		if (count <= 1) users.delete(socket.userId)
-		else users.set(socket.userId, count - 1)
-		io.to(`board:${socket.boardId}`).emit(
-			'board:presence',
-			Array.from(users.keys()),
-		)
+		const presence = users.get(socket.userId)
+		if (!presence || presence.connections <= 1) users.delete(socket.userId)
+		else presence.connections -= 1
+		broadcastBoardPresence(socket.boardId)
 		if (users.size === 0) boardPresence.delete(socket.boardId)
 	})
 })

@@ -15,7 +15,7 @@ const InviteMemberModal = ({
 	invites = [],
 	currentUserId,
 	boardOwnerId,
-	onlineUserIds = [],
+	presenceByUserId = {},
 	canManageMembers = false,
 	isOpen,
 	onChange,
@@ -50,7 +50,8 @@ const InviteMemberModal = ({
 						</p>
 					</div>
 					<span className='share-online-count'>
-						<span className='share-online-dot' /> {onlineUserIds.length} online
+						<span className='share-online-dot' />{' '}
+						{Object.values(presenceByUserId).filter((status) => status === 'online').length} online
 					</span>
 					<button
 						type='button'
@@ -142,16 +143,16 @@ const InviteMemberModal = ({
 									{(() => {
 										const memberUserId = member.user?._id || member._id
 										const isOwner = String(memberUserId) === String(boardOwnerId)
-										const isOnline = onlineUserIds.includes(String(memberUserId))
+										const status = presenceByUserId[String(memberUserId)] || 'offline'
 										const canTransferOwnership =
 											canManageMembers &&
 											String(currentUserId) === String(boardOwnerId)
 
 										return (
 											<>
-									<span className={`share-member-avatar ${isOnline ? 'is-online' : ''}`}>
+									<span className={`share-member-avatar is-${status}`}>
 										<UserRound size={18} />
-										<span className='share-member-presence' aria-label={isOnline ? 'Online' : 'Offline'} />
+										<span className='share-member-presence' aria-label={status} />
 									</span>
 									<div>
 										<strong>
@@ -162,6 +163,10 @@ const InviteMemberModal = ({
 										</strong>
 										<small>{member.user?.email || member.email}</small>
 									</div>
+									<span className={`share-member-status is-${status}`}>
+										<span className='share-member-status-dot' />
+										{status[0].toUpperCase() + status.slice(1)}
+									</span>
 									<select
 										className='share-member-role-select'
 										aria-label={`Role for ${member.user?.name || member.name || member.email}`}

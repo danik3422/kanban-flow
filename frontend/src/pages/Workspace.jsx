@@ -78,7 +78,7 @@ const Workspace = () => {
 	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
-	const [onlineUserIds, setOnlineUserIds] = useState([])
+	const [presenceByUserId, setPresenceByUserId] = useState({})
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
@@ -233,8 +233,17 @@ const Workspace = () => {
 	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return
 		const socket = io('http://localhost:5001', { withCredentials: true })
-		socket.on('connect', () => socket.emit('join-board', selectedBoard._id))
-		socket.on('board:presence', (userIds) => setOnlineUserIds(userIds))
+		const heartbeat = () => socket.emit('presence-heartbeat')
+		socket.on('connect', () => {
+			socket.emit('join-board', selectedBoard._id)
+			heartbeat()
+		})
+		socket.on('board:presence', (presence) => {
+			setPresenceByUserId(
+				Object.fromEntries(presence.map((item) => [item.userId, item.status])),
+			)
+		})
+		const heartbeatTimer = window.setInterval(heartbeat, 20_000)
 		socket.on('task:created', (task) => {
 			setColumns((current) =>
 				current.map((column) =>
@@ -267,7 +276,8 @@ const Workspace = () => {
 			)
 		})
 		return () => {
-			setOnlineUserIds([])
+			setPresenceByUserId({})
+			window.clearInterval(heartbeatTimer)
 			socket.disconnect()
 		}
 	}, [selectedBoard])
@@ -1435,7 +1445,7 @@ const Workspace = () => {
 				invites={boardInvites}
 				currentUserId={authUser?._id}
 				boardOwnerId={selectedBoard?.createdBy}
-				onlineUserIds={onlineUserIds}
+				presenceByUserId={presenceByUserId}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}

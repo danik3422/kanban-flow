@@ -2412,6 +2412,39 @@ button {
 .share-member-avatar.is-online .share-member-presence {
 	background: #27a66f;
 }
+.share-member-avatar.is-away .share-member-presence {
+	background: #e2a63b;
+}
+.share-member-avatar.is-offline .share-member-presence {
+	background: #a6b5ad;
+}
+.share-member-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 68px;
+	color: #7a8982;
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+.share-member-status.is-online {
+	color: #23835d;
+}
+.share-member-status.is-away {
+	color: #a87522;
+}
+.share-member-status-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #a6b5ad;
+}
+.share-member-status.is-online .share-member-status-dot {
+	background: #27a66f;
+}
+.share-member-status.is-away .share-member-status-dot {
+	background: #e2a63b;
+}
 .share-member-row > div {
 	display: grid;
 	gap: 3px;
