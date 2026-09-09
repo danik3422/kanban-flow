@@ -473,8 +473,8 @@ const Workspace = () => {
 
 	const removeCurrentBoard = async () => {
 		if (!selectedBoard) return
-		if (deleteConfirmation.trim().toLowerCase() !== 'удалить комнату') {
-			toast.error('Введите фразу «удалить комнату»')
+		if (deleteConfirmation.trim().toLowerCase() !== 'delete room') {
+			toast.error('Enter the phrase “delete room”')
 			return
 		}
 
@@ -1332,7 +1332,7 @@ const Workspace = () => {
 						<div className='modal-title'>
 							<div>
 								<p className='eyebrow'>Permanent action</p>
-								<h2 id='delete-board-title'>Удалить комнату?</h2>
+								<h2 id='delete-board-title'>Delete room?</h2>
 							</div>
 							<button
 								type='button'
@@ -1345,8 +1345,8 @@ const Workspace = () => {
 							</button>
 						</div>
 						<p className='delete-board-copy'>
-							Комната «{selectedBoard.name}», все задачи, колонки и приглашения будут
-							удалены навсегда.
+							Room “{selectedBoard.name}”, all tasks, columns, and invitations will be
+							permanently deleted.
 						</p>
 						{!isDeleteBoardArmed ? (
 							<div className='delete-board-actions'>
@@ -1355,14 +1355,14 @@ const Workspace = () => {
 									className='quiet-button'
 									onClick={closeDeleteBoardDialog}
 								>
-									Нет, оставить
+									No, keep it
 								</button>
 								<button
 									type='button'
 									className='primary-button danger-button'
 									onClick={() => setIsDeleteBoardArmed(true)}
 								>
-									Да, удалить
+									Yes, delete
 								</button>
 							</div>
 						) : (
@@ -1374,14 +1374,14 @@ const Workspace = () => {
 								}}
 							>
 								<label className='field-label' htmlFor='delete-board-confirmation'>
-									Введите «удалить комнату», чтобы подтвердить
+									Type “delete room” to confirm
 								</label>
 								<input
 									id='delete-board-confirmation'
 									autoFocus
 									value={deleteConfirmation}
 									onChange={(event) => setDeleteConfirmation(event.target.value)}
-									placeholder='удалить комнату'
+									placeholder='delete room'
 									autoComplete='off'
 								/>
 								<div className='delete-board-actions'>
@@ -1395,9 +1395,9 @@ const Workspace = () => {
 									<button
 										type='submit'
 										className='primary-button danger-button'
-										disabled={deleteConfirmation.trim().toLowerCase() !== 'удалить комнату'}
+										disabled={deleteConfirmation.trim().toLowerCase() !== 'delete room'}
 									>
-										Подтвердить удаление
+										Confirm deletion
 									</button>
 								</div>
 							</form>
