@@ -1,5 +1,6 @@
 import {
 	CheckCircle2,
+	ChevronDown,
 	Clock3,
 	Link2,
 	Mail,
@@ -7,7 +8,7 @@ import {
 	UsersRound,
 	X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const InviteMemberModal = ({
 	email,
@@ -27,6 +28,59 @@ const InviteMemberModal = ({
 }) => {
 	const [mode, setMode] = useState('email')
 	const [tab, setTab] = useState('members')
+	const [openRoleMemberId, setOpenRoleMemberId] = useState(null)
+	const [membersPage, setMembersPage] = useState(1)
+	const [invitesPage, setInvitesPage] = useState(1)
+	const pageSize = 5
+	const onlineCount = Object.values(presenceByUserId).filter(
+		(status) => status === 'online',
+	).length
+	const membersPageCount = Math.max(1, Math.ceil(members.length / pageSize))
+	const invitesPageCount = Math.max(1, Math.ceil(invites.length / pageSize))
+	const visibleMembers = members.slice(
+		(membersPage - 1) * pageSize,
+		membersPage * pageSize,
+	)
+	const visibleInvites = invites.slice(
+		(invitesPage - 1) * pageSize,
+		invitesPage * pageSize,
+	)
+
+	useEffect(() => {
+		setMembersPage((page) => Math.min(page, membersPageCount))
+	}, [membersPageCount])
+
+	useEffect(() => {
+		setInvitesPage((page) => Math.min(page, invitesPageCount))
+	}, [invitesPageCount])
+
+	const renderPagination = (page, pageCount, setPage) => {
+		if (pageCount <= 1) return null
+		return (
+			<nav className='share-pagination' aria-label='Pagination'>
+				<button
+					type='button'
+					className='share-pagination-button'
+					disabled={page === 1}
+					onClick={() => setPage((current) => current - 1)}
+				>
+					Previous
+				</button>
+				<span>
+					Page {page} of {pageCount}
+				</span>
+				<button
+					type='button'
+					className='share-pagination-button'
+					disabled={page === pageCount}
+					onClick={() => setPage((current) => current + 1)}
+				>
+					Next
+				</button>
+			</nav>
+		)
+	}
+
 	if (!isOpen) return null
 
 	return (
@@ -51,7 +105,7 @@ const InviteMemberModal = ({
 					</div>
 					<span className='share-online-count'>
 						<span className='share-online-dot' />{' '}
-						{Object.values(presenceByUserId).filter((status) => status === 'online').length} online
+						{onlineCount} online
 					</span>
 					<button
 						type='button'
@@ -138,7 +192,7 @@ const InviteMemberModal = ({
 				{!canManageMembers || tab === 'members' ? (
 					<div className='share-member-list'>
 						{members.length ? (
-							members.map((member) => (
+							visibleMembers.map((member) => (
 								<div className='share-member-row' key={member._id}>
 									{(() => {
 										const memberUserId = member.user?._id || member._id
@@ -147,6 +201,12 @@ const InviteMemberModal = ({
 										const canTransferOwnership =
 											canManageMembers &&
 											String(currentUserId) === String(boardOwnerId)
+										const currentRole = isOwner ? 'owner' : member.role || 'member'
+										const canEditRole =
+											canManageMembers &&
+											!isOwner &&
+											member.user?._id !== currentUserId &&
+											member._id !== currentUserId
 
 										return (
 											<>
@@ -167,32 +227,35 @@ const InviteMemberModal = ({
 										<span className='share-member-status-dot' />
 										{status[0].toUpperCase() + status.slice(1)}
 									</span>
-									<div className='share-member-role-control'>
-										<span>
-											{isOwner ? 'Owner' : (member.role || 'member').replace(/^./, (letter) => letter.toUpperCase())}
-										</span>
-										<select
-											className='share-member-role-select'
-											aria-label={`Role for ${member.user?.name || member.name || member.email}`}
-											value={isOwner ? 'owner' : member.role || 'member'}
-											disabled={
-												!canManageMembers ||
-												isOwner ||
-												member.user?._id === currentUserId ||
-												member._id === currentUserId
-											}
-											onChange={(event) =>
-												onRoleChange(member._id, event.target.value)
-											}
+									<div className='share-role-menu'>
+										<button
+											type='button'
+											className={`share-member-role-select ${!canEditRole ? 'is-disabled' : ''}`}
+											disabled={!canEditRole}
+											onClick={() => setOpenRoleMemberId((current) => current === member._id ? null : member._id)}
+											aria-haspopup='menu'
+											aria-expanded={openRoleMemberId === member._id}
 										>
-											<option value='member'>Member</option>
-											<option value='admin'>Admin</option>
-											{isOwner && <option value='owner'>Owner</option>}
-											{canTransferOwnership && !isOwner && (
-												<option value='owner'>Owner</option>
-											)}
-										</select>
-										<span className='share-member-role-chevron'>⌄</span>
+											{currentRole.replace(/^./, (letter) => letter.toUpperCase())}
+											<ChevronDown size={14} />
+										</button>
+										{openRoleMemberId === member._id && canEditRole && (
+											<div className='share-role-menu-list' role='menu'>
+												{['member', 'admin', ...(canTransferOwnership ? ['owner'] : [])].map((role) => (
+													<button
+														type='button'
+														role='menuitem'
+														className={role === currentRole ? 'active' : ''}
+														onClick={() => {
+															setOpenRoleMemberId(null)
+															onRoleChange(member._id, role)
+														}}
+													>
+														{role.replace(/^./, (letter) => letter.toUpperCase())}
+													</button>
+												))}
+											</div>
+										)}
 									</div>
 											</>
 									)
@@ -202,19 +265,24 @@ const InviteMemberModal = ({
 						) : (
 							<p className='share-empty'>No members yet.</p>
 						)}
+						{renderPagination(membersPage, membersPageCount, setMembersPage)}
 					</div>
 				) : (
-					<div className='share-member-list'>
+					<div className='share-member-list share-invite-list'>
 						{invites.length ? (
-							invites.map((invite) => (
-								<div className='share-member-row' key={invite._id}>
-									<span className='share-member-avatar'>
-										<Clock3 size={18} />
+							visibleInvites.map((invite) => (
+								<div className='share-member-row share-invite-row-item' key={invite._id}>
+									<span className={`share-member-avatar invite-source-avatar ${invite.email ? 'is-email' : 'is-link'}`}>
+										{invite.email ? <Mail size={18} /> : <Link2 size={18} />}
 									</span>
 									<div>
-										<strong>{invite.email || 'Link invitation'}</strong>
+										<strong>{invite.email || 'Anyone with the link'}</strong>
 										<small>
-											Sent {new Date(invite.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+											<span className={`invite-source-label ${invite.email ? 'is-email' : 'is-link'}`}>
+												{invite.email ? 'Email invitation' : 'Link invitation'}
+											</span>{' '}
+											{invite.email ? invite.email : 'Anyone who has the invite link'} · Sent{' '}
+											{new Date(invite.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
 										</small>
 									</div>
 									<span className={`board-invite-status ${invite.status}`}>
@@ -253,6 +321,7 @@ const InviteMemberModal = ({
 						) : (
 							<p className='share-empty'>No invitations yet.</p>
 						)}
+						{renderPagination(invitesPage, invitesPageCount, setInvitesPage)}
 					</div>
 				)}
 			</form>

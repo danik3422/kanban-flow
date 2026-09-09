@@ -2,13 +2,27 @@ import mongoose from 'mongoose'
 import crypto from 'node:crypto'
 
 import { sendBoardInviteEmail } from '../lib/mailer.js'
-import { emitBoardEvent } from '../lib/realtime.js'
+import { emitBoardEvent, emitUserEvent } from '../lib/realtime.js'
 import Board from '../models/board.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
 import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
+import Notification from '../models/notification.model.js'
+import TaskActivity from '../models/taskActivity.model.js'
+
+const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0 }) =>
+	TaskActivity.create({
+		task: taskId,
+		board: boardId,
+		user: userId,
+		type,
+		message,
+		fromColumn,
+		toColumn,
+		durationMinutes,
+	})
 
 const ensureBoardAccess = async (userId, boardId) => {
 	const board = await Board.findById(boardId)
@@ -38,6 +52,23 @@ const canManageBoard = async (board, userId) => {
 			board: board._id,
 			user: userId,
 			role: 'admin',
+		}),
+	)
+}
+
+const notifyTaskAssignees = async ({ userIds, task, board }) => {
+	const uniqueUserIds = [...new Set(userIds.map((userId) => userId.toString()))]
+	await Promise.all(
+		uniqueUserIds.map(async (userId) => {
+			const notification = await Notification.create({
+				user: userId,
+				type: 'task_assigned',
+				title: 'You were assigned a task',
+				message: `You were assigned “${task.title}” in ${board.name}.`,
+				board: board._id,
+				task: task._id,
+			})
+			emitUserEvent(userId, 'notification:new', notification.toObject())
 		}),
 	)
 }
@@ -466,6 +497,25 @@ export const getUserBoards = async (req, res) => {
 	}
 }
 
+export const getMyTasks = async (req, res) => {
+	try {
+		const tasks = await Task.find({ assignees: req.user._id })
+			.populate({
+				path: 'column',
+				select: 'title board',
+				populate: { path: 'board', select: 'name' },
+			})
+			.populate('assignees', 'name email avatar')
+			.sort({ dueDate: 1, updatedAt: -1 })
+			.lean()
+
+		return res.status(200).json(tasks)
+	} catch (error) {
+		console.error('My tasks fetch failed:', error)
+		return res.status(500).json({ message: 'Could not load your tasks' })
+	}
+}
+
 export const addMemberToBoard = async (req, res) => {
 	try {
 		const boardId = req.params.id
@@ -722,6 +772,159 @@ export const createColumn = async (req, res) => {
 	}
 }
 
+export const updateColumn = async (req, res) => {
+	try {
+		const columnId = req.params.id
+		const userId = req.user._id
+		const { title } = req.body
+
+		if (!mongoose.Types.ObjectId.isValid(columnId)) {
+			return res.status(400).json({ message: 'Invalid column ID' })
+		}
+
+		const column = await Column.findById(columnId)
+		if (!column) {
+			return res.status(404).json({ message: 'Column not found' })
+		}
+
+		const board = await Board.findById(column.board)
+		if (!board) {
+			return res.status(404).json({ message: 'Board not found' })
+		}
+
+		// Check if user is board creator or admin
+		const canManage = board.createdBy.toString() === userId.toString() ||
+			await BoardMember.exists({ board: board._id, user: userId, role: 'admin' })
+
+		if (!canManage) {
+			return res.status(403).json({
+				message: 'Access denied: Only board admins can update columns.',
+			})
+		}
+
+		if (!title || title.trim() === '') {
+			return res.status(400).json({ message: 'Column title is required' })
+		}
+
+		column.title = title.trim()
+		const updatedColumn = await column.save()
+		const columnData = updatedColumn.toObject()
+
+		emitBoardEvent(column.board.toString(), 'column:updated', columnData)
+
+		return res.status(200).json(columnData)
+	} catch (error) {
+		console.error('Error updating column:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const reorderColumn = async (req, res) => {
+	try {
+		const columnId = req.params.id
+		const userId = req.user._id
+		const requestedPosition = Number(req.body.position)
+
+		if (!mongoose.Types.ObjectId.isValid(columnId)) {
+			return res.status(400).json({ message: 'Invalid column ID' })
+		}
+		if (!Number.isInteger(requestedPosition) || requestedPosition < 0) {
+			return res.status(400).json({ message: 'Invalid column position' })
+		}
+
+		const column = await Column.findById(columnId)
+		if (!column) return res.status(404).json({ message: 'Column not found' })
+
+		const board = await Board.findById(column.board)
+		if (!board) return res.status(404).json({ message: 'Board not found' })
+
+		const canManage = board.createdBy.toString() === userId.toString() ||
+			await BoardMember.exists({ board: board._id, user: userId, role: 'admin' })
+		if (!canManage) {
+			return res.status(403).json({
+				message: 'Access denied: Only board admins can reorder columns.',
+			})
+		}
+
+		const columnCount = await Column.countDocuments({ board: board._id })
+		const nextPosition = Math.min(requestedPosition, Math.max(0, columnCount - 1))
+		const originalPosition = column.position
+		if (nextPosition < originalPosition) {
+			await Column.updateMany(
+				{ board: board._id, _id: { $ne: column._id }, position: { $gte: nextPosition, $lt: originalPosition } },
+				{ $inc: { position: 1 } },
+			)
+		} else if (nextPosition > originalPosition) {
+			await Column.updateMany(
+				{ board: board._id, _id: { $ne: column._id }, position: { $gt: originalPosition, $lte: nextPosition } },
+				{ $inc: { position: -1 } },
+			)
+		}
+		column.position = nextPosition
+		await column.save()
+
+		const columns = await Column.find({ board: board._id })
+			.sort({ position: 1, createdAt: 1 })
+			.lean()
+		emitBoardEvent(board._id.toString(), 'columns:reordered', { columns })
+		return res.status(200).json(columns)
+	} catch (error) {
+		console.error('Error reordering column:', error)
+		return res.status(500).json({ message: 'Could not reorder column' })
+	}
+}
+
+export const updateColumnSort = async (req, res) => {
+	try {
+		const columnId = req.params.id
+		const userId = req.user._id
+		const { sortBy } = req.body
+
+		if (!mongoose.Types.ObjectId.isValid(columnId)) {
+			return res.status(400).json({ message: 'Invalid column ID' })
+		}
+
+		const column = await Column.findById(columnId)
+		if (!column) {
+			return res.status(404).json({ message: 'Column not found' })
+		}
+
+		const board = await Board.findById(column.board)
+		if (!board) {
+			return res.status(404).json({ message: 'Board not found' })
+		}
+
+		// Check if user has access to this board
+		const hasAccess = await ensureBoardAccess(board._id, userId)
+		if (!hasAccess) {
+			return res.status(403).json({ message: 'Access denied' })
+		}
+
+		// Validate sortBy value
+		const validSortValues = [
+			'date-newest',
+			'date-oldest',
+			'name-alpha',
+			'custom',
+			null,
+		]
+		if (!validSortValues.includes(sortBy)) {
+			return res.status(400).json({ message: 'Invalid sort option' })
+		}
+
+		column.sortBy = sortBy
+		const updatedColumn = await column.save()
+		const columnData = updatedColumn.toObject()
+
+		emitBoardEvent(column.board.toString(), 'column:sort-updated', columnData)
+
+		return res.status(200).json(columnData)
+	} catch (error) {
+		console.error('Error updating column sort:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
 export const createTask = async (req, res) => {
 	try {
 		const columnId = req.column._id
@@ -768,6 +971,18 @@ export const createTask = async (req, res) => {
 		const savedTask = await Task.findById(newTask._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
+		await recordTaskActivity({
+			taskId: savedTask._id,
+			boardId: column.board,
+			userId: req.user._id,
+			type: 'created',
+			message: `added this card to ${column.title}`,
+		})
+		await notifyTaskAssignees({
+			userIds: assignees,
+			task: savedTask,
+			board,
+		})
 		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
 		return res.status(201).json(savedTask)
 	} catch (error) {
@@ -796,7 +1011,9 @@ export const updateTask = async (req, res) => {
 			column: targetColumnId,
 		} = req.body
 		const originalColumnId = task.column._id
+		const originalColumn = await Column.findById(originalColumnId).select('title')
 		const originalPosition = task.position
+		const originalAssigneeIds = task.assignees.map((assignee) => assignee.toString())
 		let targetColumn = task.column
 		if (
 			targetColumnId &&
@@ -861,10 +1078,153 @@ export const updateTask = async (req, res) => {
 		const updatedTask = await Task.findById(task._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
+		if (position !== undefined) {
+			const affectedColumnIds = [originalColumnId.toString()]
+			if (!affectedColumnIds.includes(targetColumn._id.toString())) {
+				affectedColumnIds.push(targetColumn._id.toString())
+			}
+			for (const affectedColumnId of affectedColumnIds) {
+				const reorderedTasks = await Task.find({ column: affectedColumnId })
+					.populate('assignees', 'name email avatar')
+					.sort({ position: 1, createdAt: 1 })
+					.lean()
+				emitBoardEvent(boardId, 'column:tasks-reordered', {
+					columnId: affectedColumnId,
+					tasks: reorderedTasks,
+				})
+			}
+		}
+		const moved = originalColumnId.toString() !== targetColumn._id.toString()
+		await recordTaskActivity({
+			taskId: task._id,
+			boardId,
+			userId: req.user._id,
+			type: moved ? 'moved' : 'updated',
+			message: moved
+				? `moved this card from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}`
+				: 'updated this card',
+			fromColumn: originalColumn?.title || '',
+			toColumn: targetColumn.title || '',
+		})
+		const newlyAssignedIds = (assignees === undefined ? [] : assignees)
+			.map((assignee) => assignee.toString())
+			.filter((assigneeId) => !originalAssigneeIds.includes(assigneeId))
+		if (newlyAssignedIds.length) {
+			await notifyTaskAssignees({
+				userIds: newlyAssignedIds,
+				task: updatedTask,
+				board,
+			})
+		}
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
 		return res.status(200).json(updatedTask)
 	} catch (error) {
 		console.error('Error updating task:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const deleteColumn = async (req, res) => {
+	try {
+		const columnId = req.params.id
+		const userId = req.user._id
+
+		if (!mongoose.Types.ObjectId.isValid(columnId)) {
+			return res.status(400).json({ message: 'Invalid column ID' })
+		}
+
+		const column = await Column.findById(columnId)
+		if (!column) {
+			return res.status(404).json({ message: 'Column not found' })
+		}
+
+		const board = await Board.findById(column.board)
+		if (!board) {
+			return res.status(404).json({ message: 'Board not found' })
+		}
+
+		// Check if user is board creator or admin
+		const canManage = board.createdBy.toString() === userId.toString() ||
+			await BoardMember.exists({ board: board._id, user: userId, role: 'admin' })
+
+		if (!canManage) {
+			return res.status(403).json({
+				message: 'Access denied: Only board admins can delete columns.',
+			})
+		}
+
+		// Delete all tasks in this column
+		const taskIds = await Task.find({ column: columnId }).distinct('_id')
+		await Task.deleteMany({ column: columnId })
+		await TaskActivity.deleteMany({ task: { $in: taskIds } })
+		await Notification.deleteMany({ task: { $in: taskIds } })
+
+		// Delete the column
+		await Column.deleteOne({ _id: columnId })
+
+		// Adjust positions of remaining columns
+		await Column.updateMany(
+			{ board: column.board, position: { $gt: column.position } },
+			{ $inc: { position: -1 } },
+		)
+
+		emitBoardEvent(column.board.toString(), 'column:deleted', { columnId })
+
+		return res.status(200).json({ message: 'Column deleted successfully' })
+	} catch (error) {
+		console.error('Error deleting column:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const deleteTask = async (req, res) => {
+	try {
+		const taskId = req.params.id
+		const userId = req.user._id
+
+		if (!mongoose.Types.ObjectId.isValid(taskId)) {
+			return res.status(400).json({ message: 'Invalid task ID' })
+		}
+
+		const task = await Task.findById(taskId).populate('column', 'board title')
+		if (!task) {
+			return res.status(404).json({ message: 'Task not found' })
+		}
+
+		const { board, allowed } = await ensureBoardAccess(userId, task.column.board)
+		if (!board || !allowed) {
+			return res.status(403).json({ message: 'Access denied' })
+		}
+
+		const columnId = task.column._id
+		const position = task.position
+		const columnTitle = task.column.title
+
+		// Delete all activities related to this task
+		await TaskActivity.deleteMany({ task: taskId })
+
+		// Delete the task
+		await Task.deleteOne({ _id: taskId })
+
+		// Adjust positions of remaining tasks in the same column
+		await Task.updateMany(
+			{ column: columnId, position: { $gt: position } },
+			{ $inc: { position: -1 } },
+		)
+
+		await recordTaskActivity({
+			taskId,
+			boardId: board._id,
+			userId,
+			type: 'deleted',
+			message: `removed this card from ${columnTitle}`,
+		})
+
+		emitBoardEvent(board._id.toString(), 'task:deleted', { taskId })
+
+		return res.status(200).json({ message: 'Task deleted successfully' })
+	} catch (error) {
+		console.error('Error deleting task:', error)
 		return res.status(500).json({ message: 'Internal server error' })
 	}
 }

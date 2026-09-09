@@ -4,7 +4,9 @@
 	"main": "index.js",
 	"scripts": {
 		"dev": "nodemon index.js",
-		"start": "node index.js"
+		"start": "node index.js",
+		"seed:demo": "node scripts/seed-test-room-demo.js",
+		"test": "NODE_ENV=test node --test"
 	},
 	"keywords": [],
 	"author": "Danylo Syloats <mr.siloacd@gmail.com>",
@@ -29,6 +31,7 @@
 	},
 	"devDependencies": {
 		"mongodb-memory-server": "^10.2.0",
-		"nodemon": "^3.1.14"
+		"nodemon": "^3.1.14",
+		"supertest": "^7.2.2"
 	}
 }

@@ -7,3 +7,7 @@ export const setRealtimeServer = (server) => {
 export const emitBoardEvent = (boardId, event, payload) => {
 	if (io) io.to(`board:${boardId}`).emit(event, payload)
 }
+
+export const emitUserEvent = (userId, event, payload) => {
+	if (io) io.to(`user:${userId}`).emit(event, payload)
+}

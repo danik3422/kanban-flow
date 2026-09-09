@@ -15,6 +15,11 @@ const columnSchema = new mongoose.Schema(
 			type: Number,
 			default: 0,
 		},
+		sortBy: {
+			type: String,
+			enum: ['date-newest', 'date-oldest', 'name-alpha', 'custom', null],
+			default: null,
+		},
 	},
 	{ timestamps: true }
 )

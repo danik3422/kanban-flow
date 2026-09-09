@@ -15,6 +15,7 @@ import User from './models/user.model.js'
 import { setRealtimeServer } from './lib/realtime.js'
 import authRoutes from './routes/auth.route.js'
 import boardRoutes from './routes/board.route.js'
+import notificationRoutes from './routes/notification.route.js'
 
 const app = express()
 const httpServer = http.createServer(app)
@@ -36,9 +37,10 @@ const broadcastBoardPresence = (boardId) => {
 	}
 }
 
-setInterval(() => {
+const presenceInterval = setInterval(() => {
 	for (const boardId of boardPresence.keys()) broadcastBoardPresence(boardId)
 }, 15_000)
+presenceInterval.unref?.()
 
 setRealtimeServer(io)
 
@@ -56,6 +58,7 @@ io.use(async (socket, next) => {
 })
 
 io.on('connection', (socket) => {
+	socket.join(`user:${socket.userId}`)
 	socket.on('join-board', async (boardId) => {
 		if (socket.boardId === boardId) return
 		if (socket.boardId) {
@@ -122,17 +125,22 @@ app.use('/api', apiLimiter)
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/board', boardRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // Connect the database before accepting requests so auth never runs against an
 // unready MongoDB connection.
-const startServer = async () => {
+export const startServer = async () => {
 	await connectDB()
 	httpServer.listen(env.port, () => {
 		console.log(`Server is running on port ${env.port}`)
 	})
 }
 
-startServer().catch((error) => {
-	console.error('Server startup failed:', error)
-	process.exitCode = 1
-})
+export { app, httpServer, io }
+
+if (process.env.NODE_ENV !== 'test') {
+	startServer().catch((error) => {
+		console.error('Server startup failed:', error)
+		process.exitCode = 1
+	})
+}

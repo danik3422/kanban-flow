@@ -6,21 +6,23 @@ import {
 	Link2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 
 const BoardInvite = () => {
 	const { token } = useParams()
-	const navigate = useNavigate()
 	const [searchParams] = useSearchParams()
 	const authUser = useAuthStore((state) => state.authUser)
-	const [error, setError] = useState(searchParams.get('error') || '')
+	const [requestError, setRequestError] = useState('')
 	const [boardName, setBoardName] = useState('this board')
+	const error = searchParams.get('error') || requestError
 	const normalizedError = error.toLowerCase()
 	const isSelfInviteError = normalizedError.includes('yourself')
+	const isAlreadyMemberError = normalizedError.includes('already a member')
 	const isExpiredInviteError =
 		!isSelfInviteError &&
+		!isAlreadyMemberError &&
 		/(expired|invalid|already used|no longer available|not found|unavailable)/i.test(
 			error,
 		)
@@ -32,31 +34,21 @@ const BoardInvite = () => {
 				setBoardName(data.boardName || 'this board')
 			})
 			.catch((requestError) => {
+				localStorage.removeItem('kanban-pending-invite')
 				const message =
 					requestError.response?.data?.message ||
 					'This invite is no longer available'
-				setError(message)
+				setRequestError(message)
 			})
 	}, [token])
 
 	useEffect(() => {
-		if (!authUser) {
-			localStorage.setItem('kanban-pending-invite', token)
+		if (searchParams.get('error')) {
+			localStorage.removeItem('kanban-pending-invite')
 			return
 		}
-		axiosInstance
-			.post(`/board/invites/${token}/accept`)
-			.then(({ data }) => {
-				localStorage.removeItem('kanban-pending-invite')
-				navigate(`/workspaces/${data.boardId}`, { replace: true })
-			})
-			.catch((requestError) =>
-				setError(
-					requestError.response?.data?.message ||
-						'This invite is no longer available',
-				),
-			)
-	}, [authUser, navigate, token])
+		localStorage.setItem('kanban-pending-invite', token)
+	}, [searchParams, token])
 
 	return (
 		<main className='invite-page'>
@@ -70,6 +62,8 @@ const BoardInvite = () => {
 					{error
 						? isSelfInviteError
 							? 'Link invitation'
+							: isAlreadyMemberError
+								? 'Already a member'
 							: isExpiredInviteError
 								? 'Invite expired'
 								: 'Invitation unavailable'
@@ -77,11 +71,13 @@ const BoardInvite = () => {
 				</p>
 				<h1>
 					{error
-						? (isSelfInviteError
+						? isSelfInviteError
 							? 'You can’t invite yourself.'
+							: isAlreadyMemberError
+								? 'You already belong to this board.'
 							: isExpiredInviteError
 								? 'This invitation has expired.'
-								: 'This invite can’t be used.')
+								: 'This invite can’t be used.'
 						: `You’re invited to join ${boardName}.`}
 				</h1>
 				{error ? (
@@ -90,6 +86,8 @@ const BoardInvite = () => {
 							<strong>
 								{isSelfInviteError
 									? 'Sorry, you can’t invite yourself to a board you already own.'
+									: isAlreadyMemberError
+										? 'You are already a member of this board.'
 									: isExpiredInviteError
 										? 'Invite expired'
 										: error}
@@ -97,6 +95,8 @@ const BoardInvite = () => {
 							<p>
 								{isSelfInviteError
 									? 'This link was created from your own workspace, so it can’t be used to add yourself again.'
+										: isAlreadyMemberError
+											? 'This invitation cannot be used because you already have access to the board.'
 									: isExpiredInviteError
 										? 'This invite link is expired, invalid, or has already been used.'
 										: 'The link may have expired, already been accepted, or been cancelled by the board owner.'}

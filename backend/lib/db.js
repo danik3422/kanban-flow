@@ -5,38 +5,37 @@ import { env } from '../config/env.js'
 
 let memoryServer = null
 
-export const connectDB = async () => {
-	try {
-		if (!env.mongoUri) {
-			memoryServer = await MongoMemoryServer.create()
-			const mongoUri = memoryServer.getUri()
-			const connect = await mongoose.connect(mongoUri, {
-				serverSelectionTimeoutMS: 5000,
-			})
-			console.log(
-				`MongoMemoryServer connected ${connect.connection.host}`
-			)
-			return
-		}
+const connectToMemoryDatabase = async () => {
+	memoryServer = await MongoMemoryServer.create()
+	const mongoUri = memoryServer.getUri()
+	const connect = await mongoose.connect(mongoUri, {
+		serverSelectionTimeoutMS: 5000,
+	})
+	console.warn(
+		`MongoMemoryServer connected ${connect.connection.host}. Data will not persist after shutdown.`,
+	)
+}
 
+export const connectDB = async () => {
+	if (!env.mongoUri) {
+		if (!env.allowMemoryDb) {
+			throw new Error('MONGO_URI is required when ALLOW_MEMORY_DB is not enabled')
+		}
+		await connectToMemoryDatabase()
+		return
+	}
+
+	try {
 		const connect = await mongoose.connect(env.mongoUri, {
 			serverSelectionTimeoutMS: 5000,
 		})
 		console.log(`MongoDB connected ${connect.connection.host}`)
 	} catch (error) {
-		console.log('MongoDB connection failed, falling back to in-memory database...')
-		try {
-			memoryServer = await MongoMemoryServer.create()
-			const mongoUri = memoryServer.getUri()
-			const connect = await mongoose.connect(mongoUri, {
-				serverSelectionTimeoutMS: 5000,
-			})
-			console.log(
-				`MongoMemoryServer connected ${connect.connection.host}`
-			)
-		} catch (memoryError) {
-			console.error('MongoMemoryServer fallback failed:', memoryError)
-		}
+		console.error('MongoDB connection failed:', error)
+		if (!env.allowMemoryDb) throw error
+
+		console.warn('Using the explicitly enabled in-memory database fallback.')
+		await connectToMemoryDatabase()
 	}
 }
 

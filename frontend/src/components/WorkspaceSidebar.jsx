@@ -8,10 +8,19 @@ import {
 	Users,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 const MIN_WIDTH = 220
 const MAX_WIDTH = 390
+const SIDEBAR_WIDTH_KEY = 'kanban-sidebar-width'
+
+const readStoredWidth = () => {
+	if (typeof window === 'undefined') return 286
+	const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY))
+	return Number.isFinite(storedWidth)
+		? Math.min(Math.max(storedWidth, MIN_WIDTH), MAX_WIDTH)
+		: 286
+}
 
 const RoomGroup = ({
 	title,
@@ -71,13 +80,18 @@ const WorkspaceSidebar = ({
 	onCreateBoard,
 	isCollapsed = false,
 }) => {
-	const [width, setWidth] = useState(286)
+	const [width, setWidth] = useState(readStoredWidth)
 	const [roomSearch, setRoomSearch] = useState('')
 	const [isOwnedOpen, setIsOwnedOpen] = useState(true)
 	const [isSharedOpen, setIsSharedOpen] = useState(true)
 	const isDragging = useRef(false)
 	const sidebarRef = useRef(null)
 	const [isResizing, setIsResizing] = useState(false)
+	const location = useLocation()
+
+	useEffect(() => {
+		window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width))
+	}, [width])
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {
@@ -110,7 +124,7 @@ const WorkspaceSidebar = ({
 	const sharedBoards = boards.filter((board) => board.access === 'invited')
 	const navItems = [
 		{ icon: <Home size={17} />, label: 'Workspace home', to: '/workspaces' },
-		{ icon: <ClipboardList size={17} />, label: 'My tasks', disabled: true },
+		{ icon: <ClipboardList size={17} />, label: 'My tasks', to: '/my-tasks' },
 		{ icon: <Users size={17} />, label: 'Team', disabled: true },
 	]
 
@@ -123,7 +137,7 @@ const WorkspaceSidebar = ({
 			<aside
 				ref={sidebarRef}
 				style={{ width: isCollapsed ? 76 : width }}
-				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} fixed md:static h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
 			>
 				<div className='workspace-sidebar-main'>
 					<div className='workspace-brand-row'>
@@ -154,7 +168,7 @@ const WorkspaceSidebar = ({
 									key={item.label}
 									to={item.to}
 									onClick={onClose}
-									className={`workspace-nav-item ${!selectedBoardId ? 'active' : ''}`}
+									className={`workspace-nav-item ${location.pathname === item.to ? 'active' : ''}`}
 									title={item.label}
 								>
 									{item.icon}

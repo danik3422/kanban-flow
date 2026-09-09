@@ -1,10 +1,8 @@
 import axios from 'axios'
+import { apiBaseUrl } from './runtimeConfig'
 
 export const axiosInstance = axios.create({
-	baseURL:
-		import.meta.env.MODE === 'development'
-			? 'http://localhost:5001/api'
-			: '/api',
+	baseURL: apiBaseUrl,
 	withCredentials: true,
 	timeout: 8000,
 })

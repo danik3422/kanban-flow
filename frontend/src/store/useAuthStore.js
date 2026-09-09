@@ -7,6 +7,7 @@ import { auth, googleProvider } from '../lib/firebase'
 
 export const useAuthStore = create((set) => ({
 	authUser: null,
+	clearAuth: () => set({ authUser: null }),
 	isSigningIn: false,
 	isSigningUp: false,
 	isCheckingAuth: true,

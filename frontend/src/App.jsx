@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
 	Navigate,
 	Route,
@@ -14,6 +14,7 @@ import BoardInvite from './pages/BoardInvite'
 import EditProfile from './pages/EditProfile'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import MyTasks from './pages/MyTasks'
 import NotFound from './pages/NotFound'
 import Profile from './pages/Profile'
 import ResetPassword from './pages/ResetPassword'
@@ -27,7 +28,9 @@ import { useAuthStore } from './store/useAuthStore'
 export const App = () => {
 	const location = useLocation()
 	const navigate = useNavigate()
-	const isWorkspace = location.pathname.startsWith('/workspaces')
+	const handledInviteRef = useRef(null)
+	const isWorkspace =
+		location.pathname.startsWith('/workspaces') || location.pathname === '/my-tasks'
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 
 	useEffect(() => {
@@ -35,8 +38,35 @@ export const App = () => {
 	}, [checkAuth])
 
 	useEffect(() => {
-		const pendingInvite = localStorage.getItem('kanban-pending-invite')
+		const interceptorId = axiosInstance.interceptors.response.use(
+			(response) => response,
+			(error) => {
+				const requestUrl = error.config?.url || ''
+				const isAuthRequest = requestUrl.includes('/auth/')
+				if (error.response?.status === 401 && !isAuthRequest) {
+					useAuthStore.getState().clearAuth()
+					const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
+					const isLoginPage = window.location.pathname === '/login'
+					if (!isLoginPage) {
+						navigate(`/login?redirect=${encodeURIComponent(currentUrl)}`, {
+							replace: true,
+						})
+					}
+				}
+				return Promise.reject(error)
+			},
+		)
+
+		return () => axiosInstance.interceptors.response.eject(interceptorId)
+	}, [navigate])
+
+	useEffect(() => {
+		const inviteMatch = location.pathname.match(/^\/invite\/([^/?]+)/)
+		const pendingInvite =
+			localStorage.getItem('kanban-pending-invite') || inviteMatch?.[1]
 		if (!authUser || !pendingInvite) return
+		if (handledInviteRef.current === pendingInvite) return
+		handledInviteRef.current = pendingInvite
 		axiosInstance
 			.post(`/board/invites/${pendingInvite}/accept`)
 			.then(({ data }) => {
@@ -51,9 +81,14 @@ export const App = () => {
 					replace: true,
 				})
 			})
-	}, [authUser, navigate])
+	}, [authUser, location.pathname, navigate])
 
 	const needsSetup = authUser && authUser.profileSetup === false
+	const requestedRedirect = new URLSearchParams(location.search).get('redirect')
+	const loginRedirect =
+		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+			? requestedRedirect
+			: '/'
 
 	if (isCheckingAuth) {
 		return (
@@ -87,7 +122,9 @@ export const App = () => {
 						<Route path='/' element={<Home />} />
 						<Route
 							path='/login'
-							element={!authUser ? <Login /> : <Navigate to='/' replace />}
+							element={
+								!authUser ? <Login /> : <Navigate to={loginRedirect} replace />
+							}
 						/>
 						<Route path='/invite/:token' element={<BoardInvite />} />
 						<Route
@@ -103,6 +140,10 @@ export const App = () => {
 						<Route
 							path='/workspaces'
 							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
+						/>
+						<Route
+							path='/my-tasks'
+							element={authUser ? <MyTasks /> : <Navigate to='/login' replace />}
 						/>
 						<Route
 							path='/workspaces/:boardId'
