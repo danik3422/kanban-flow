@@ -98,6 +98,8 @@ const Workspace = () => {
 	const [isDeleteBoardArmed, setIsDeleteBoardArmed] = useState(false)
 	const [deleteConfirmation, setDeleteConfirmation] = useState('')
 	const [isLeaveBoardOpen, setIsLeaveBoardOpen] = useState(false)
+	const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
+	const [ownershipConfirmation, setOwnershipConfirmation] = useState('')
 
 	const visibleBoardInvites = boardInvites.filter(
 		(invite) => invite.status !== 'accepted',
@@ -538,8 +540,11 @@ const Workspace = () => {
 		}
 	}
 
-	const updateMemberRole = async (memberId, role) => {
-		if (role === 'owner' && !window.confirm('Transfer ownership of this room?')) {
+	const updateMemberRole = async (memberId, role, skipOwnershipPrompt = false) => {
+		if (role === 'owner' && !skipOwnershipPrompt) {
+			const target = boardMemberRecords.find((member) => member._id === memberId)
+			setOwnershipTransferTarget(target || null)
+			setOwnershipConfirmation('')
 			return
 		}
 		if (isDevAuthBypass) {
@@ -590,6 +595,22 @@ const Workspace = () => {
 				error.response?.data?.message || 'Could not update member role',
 			)
 		}
+	}
+
+	const closeOwnershipTransferDialog = () => {
+		setOwnershipTransferTarget(null)
+		setOwnershipConfirmation('')
+	}
+
+	const confirmOwnershipTransfer = async () => {
+		if (!ownershipTransferTarget) return
+		if (ownershipConfirmation.trim().toLowerCase() !== 'transfer ownership') {
+			toast.error('Enter the phrase “transfer ownership”')
+			return
+		}
+		const targetId = ownershipTransferTarget._id
+		closeOwnershipTransferDialog()
+		await updateMemberRole(targetId, 'owner', true)
 	}
 
 	const openOverviewBoard = (board) => selectBoard(board)
@@ -1501,6 +1522,78 @@ const Workspace = () => {
 							</form>
 						)}
 					</div>
+				</div>
+			)}
+			{ownershipTransferTarget && selectedBoard && (
+				<div
+					className='modal-backdrop'
+					onMouseDown={closeOwnershipTransferDialog}
+					role='presentation'
+				>
+					<form
+						className='modal-panel delete-board-panel'
+						onSubmit={(event) => {
+							event.preventDefault()
+							confirmOwnershipTransfer()
+						}}
+						onMouseDown={(event) => event.stopPropagation()}
+						role='dialog'
+						aria-modal='true'
+						aria-labelledby='transfer-ownership-title'
+					>
+						<div className='modal-title'>
+							<div>
+								<p className='eyebrow'>Permanent change</p>
+								<h2 id='transfer-ownership-title'>Transfer ownership?</h2>
+							</div>
+							<button
+								type='button'
+								className='icon-button'
+								onClick={closeOwnershipTransferDialog}
+								aria-label='Close'
+								title='Close'
+							>
+								<X size={18} />
+							</button>
+						</div>
+						<p className='delete-board-copy'>
+							<strong>
+								{ownershipTransferTarget.user?.name ||
+									ownershipTransferTarget.user?.email ||
+									ownershipTransferTarget.name ||
+									ownershipTransferTarget.email}
+							</strong>{' '}
+							will become the owner of “{selectedBoard.name}”. You will become an
+							admin.
+						</p>
+						<label className='field-label' htmlFor='ownership-confirmation'>
+							Type “transfer ownership” to confirm
+						</label>
+						<input
+							id='ownership-confirmation'
+							autoFocus
+							value={ownershipConfirmation}
+							onChange={(event) => setOwnershipConfirmation(event.target.value)}
+							placeholder='transfer ownership'
+							autoComplete='off'
+						/>
+						<div className='delete-board-actions'>
+							<button
+								type='button'
+								className='quiet-button'
+								onClick={closeOwnershipTransferDialog}
+							>
+								Cancel
+							</button>
+							<button
+								type='submit'
+								className='primary-button danger-button'
+								disabled={ownershipConfirmation.trim().toLowerCase() !== 'transfer ownership'}
+							>
+								Transfer ownership
+							</button>
+						</div>
+					</form>
 				</div>
 			)}
 			{taskDetails && (
