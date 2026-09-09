@@ -2009,6 +2009,7 @@ button {
 .share-header-copy {
 	display: grid;
 	gap: 3px;
+	flex: 1;
 	min-width: 0;
 }
 .share-kicker {
@@ -2026,11 +2027,14 @@ button {
 }
 .share-header-copy h2 {
 	margin: 0;
+	color: var(--ink);
+	display: block;
 	font-size: 1.2rem;
 }
 .share-header-copy p {
 	margin: 0;
 	color: var(--muted);
+	display: block;
 	font-size: 0.72rem;
 	line-height: 1.45;
 }
@@ -2261,9 +2265,12 @@ button {
 	gap: 3px;
 	min-width: 0;
 	flex: 1;
+	color: var(--ink);
 }
 .share-member-row strong {
+	display: block;
 	overflow: hidden;
+	color: var(--ink);
 	font-size: 0.82rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -2283,7 +2290,10 @@ button {
 	font-size: 0.72rem;
 }
 .share-member-role-select {
+	width: 108px;
 	min-width: 108px;
+	min-height: 40px;
+	flex: 0 0 108px;
 	padding: 8px 9px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
