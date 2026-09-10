@@ -57,8 +57,10 @@ const RoomGroup = ({
 							<span className='workspace-room-icon'>
 								<Layers3 size={15} />
 							</span>
-							<span className='workspace-room-name'>{board.name}</span>
-							<span className='workspace-room-dot' />
+											<span className='workspace-room-copy'>
+												<span className='workspace-room-name'>{board.name}</span>
+												<span className='workspace-room-dot' />
+											</span>
 						</button>
 					))}
 					{!filteredItems.length && (

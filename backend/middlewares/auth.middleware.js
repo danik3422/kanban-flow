@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/user.model.js'
 import { env } from '../config/env.js'
+import { publicUserFields } from '../lib/userProjection.js'
 
 export const authMiddleware = async (req, res, next) => {
 	try {
@@ -18,15 +19,20 @@ export const authMiddleware = async (req, res, next) => {
 			return res.status(401).json({ message: 'Unauthorized - Invalid token' })
 		}
 
-		const user = await User.findById(decoded.userId).select('-password')
+		const user = await User.findById(decoded.userId).select(`${publicUserFields} sessionVersion`)
 
 		if (!user) {
 			return res.status(401).json({
 				message: 'Unauthorized - User not found',
 			})
 		}
+		if (Number(decoded.sessionVersion || 0) !== Number(user.sessionVersion || 0)) {
+			return res.status(401).json({ message: 'Unauthorized - Session expired' })
+		}
 
-		req.user = user
+		const publicUser = user.toObject()
+		delete publicUser.sessionVersion
+		req.user = publicUser
 
 		next()
 	} catch (error) {

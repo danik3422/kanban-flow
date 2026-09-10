@@ -2,8 +2,10 @@ import {
 	CheckCircle2,
 	ChevronDown,
 	Clock3,
+	Copy,
 	Link2,
 	Mail,
+	ShieldCheck,
 	UserRound,
 	UsersRound,
 	X,
@@ -21,22 +23,26 @@ const InviteMemberModal = ({
 	canManageMembers = false,
 	showPresence = false,
 	roomVisibility = 'private',
+	inviteLink = null,
 	publicLink = '',
 	onCreatePublicLink,
+	onRevokePublicLink,
+	onRevokeInviteLink,
 	isOpen,
 	onChange,
 	onClose,
 	onSubmit,
-	onRevoke,
-	onCopyInvite,
 	onRoleChange,
 }) => {
 	const [mode, setMode] = useState('email')
 	const [role, setRole] = useState('member')
+	const [linkRole, setLinkRole] = useState('member')
 	const [tab, setTab] = useState('members')
 	const [openRoleMemberId, setOpenRoleMemberId] = useState(null)
 	const [membersPage, setMembersPage] = useState(1)
 	const [invitesPage, setInvitesPage] = useState(1)
+	const [isRevokeConfirmOpen, setIsRevokeConfirmOpen] = useState(false)
+	const [isInviteRevokeConfirmOpen, setIsInviteRevokeConfirmOpen] = useState(false)
 	const pageSize = 5
 	const onlineCount = showPresence
 		? Object.values(presenceByUserId).filter((status) => status === 'online').length
@@ -157,28 +163,113 @@ const InviteMemberModal = ({
 								<Mail size={16} /> Share
 							</button>
 						</div>
-						<div className='share-link-box'>
-							<span className='share-link-icon'>
-								<Link2 size={18} />
-							</span>
-							<div>
-								<strong>Anyone with this link can join the board</strong>
-								<small>Share it anywhere · expires in 7 days</small>
+						<div className='public-link-panel invite-link-panel'>
+							<div className='public-link-heading'>
+								<span className='public-link-heading-icon'><Link2 size={18} /></span>
+								<div>
+									<div className='public-link-title-row'>
+										<strong>Invite link</strong>
+										<span className={`public-link-status ${inviteLink ? 'is-active' : 'is-ready'}`}>
+											{inviteLink ? 'Active' : 'Not created'}
+										</span>
+									</div>
+									<small>One person can accept this link and join the room.</small>
+								</div>
 							</div>
-							<button
-								type='button'
-								className='quiet-button'
-								onClick={() => onSubmit({ preventDefault: () => {} }, 'link')}
-							>
-								<Link2 size={14} /> Copy
-							</button>
+							{inviteLink ? (
+								<>
+									<div className='invite-link-meta'>
+										<span className='invite-link-meta-label'>Role</span>
+										<strong>{inviteLink.role === 'admin' ? 'Admin access' : 'Member access'}</strong>
+									</div>
+									<div className='public-link-field'>
+										<input value={inviteLink.inviteUrl} readOnly aria-label='Invite link' />
+										<button
+											type='button'
+											className='public-link-copy-button'
+											onClick={() => navigator.clipboard?.writeText?.(inviteLink.inviteUrl)}
+											aria-label='Copy invite link'
+											title='Copy invite link'
+										>
+											<Copy size={16} />
+										</button>
+									</div>
+									{isInviteRevokeConfirmOpen ? (
+										<div className='public-link-revoke-confirm invite-link-revoke-confirm'>
+											<span>This immediately disables the invite link.</span>
+											<div>
+												<button type='button' className='quiet-button' onClick={() => setIsInviteRevokeConfirmOpen(false)}>Keep link</button>
+												<button type='button' className='quiet-button danger' onClick={() => { setIsInviteRevokeConfirmOpen(false); onRevokeInviteLink() }}>Revoke link</button>
+											</div>
+										</div>
+									) : (
+										<button type='button' className='public-link-revoke invite-link-revoke' onClick={() => setIsInviteRevokeConfirmOpen(true)}>Revoke current invite link</button>
+									)}
+								</>
+							) : (
+								<div className='invite-link-controls'>
+									<label htmlFor='invite-link-role'>Role</label>
+									<select
+										id='invite-link-role'
+										className='share-role invite-link-role'
+										value={linkRole}
+										onChange={(event) => setLinkRole(event.target.value)}
+									>
+										<option value='member'>Member</option>
+										<option value='admin'>Admin</option>
+									</select>
+									<button
+										type='button'
+										className='primary-button public-link-create'
+										onClick={() => onSubmit({ preventDefault: () => {} }, 'link', linkRole)}
+									>
+										<Link2 size={15} /> Create link
+									</button>
+								</div>
+							)}
 						</div>
 					</>
 				)}
 				{roomVisibility === 'public' && canManageMembers && (
 					<div className='public-link-panel'>
-						<div><strong>Public view link</strong><small>Share this link to let people view without joining.</small></div>
-						<button type='button' className='quiet-button' onClick={onCreatePublicLink}>{publicLink ? 'Copy link again' : 'Create link'}</button>
+						<div className='public-link-heading'>
+							<span className='public-link-heading-icon'><ShieldCheck size={18} /></span>
+							<div>
+								<div className='public-link-title-row'>
+									<strong>Public view link</strong>
+									<span className={`public-link-status ${publicLink ? 'is-active' : 'is-ready'}`}>
+										{publicLink ? 'Active' : 'Not created'}
+									</span>
+								</div>
+								<small>Anyone with the link can view this room without joining.</small>
+							</div>
+						</div>
+						{publicLink ? (
+							<>
+								<div className='public-link-field'>
+									<input value={publicLink} readOnly aria-label='Public view link' />
+									<button type='button' className='public-link-copy-button' onClick={onCreatePublicLink} aria-label='Copy public view link' title='Copy public view link'>
+										<Copy size={16} />
+									</button>
+								</div>
+								{isRevokeConfirmOpen ? (
+									<div className='public-link-revoke-confirm'>
+										<span>This immediately disables the current link.</span>
+										<div>
+											<button type='button' className='quiet-button' onClick={() => setIsRevokeConfirmOpen(false)}>Keep link</button>
+											<button type='button' className='quiet-button danger' onClick={() => { setIsRevokeConfirmOpen(false); onRevokePublicLink() }}>Revoke link</button>
+										</div>
+									</div>
+								) : (
+									<button type='button' className='public-link-revoke' onClick={() => setIsRevokeConfirmOpen(true)}>Revoke current link</button>
+								)}
+							</>
+						) : (
+							<div className='public-link-empty'>
+								<span>Create one stable link and share it anywhere. You can revoke it whenever access should stop.</span>
+								<button type='button' className='primary-button public-link-create' onClick={onCreatePublicLink}><Link2 size={15} /> Create public link</button>
+							</div>
+						)}
 					</div>
 				)}
 				{canManageMembers && (
@@ -287,13 +378,22 @@ const InviteMemberModal = ({
 									</span>
 									<div>
 										<strong>{invite.email || 'Anyone with the link'}</strong>
-										<small>
+										<small className='invite-meta-line'>
 											<span className={`invite-source-label ${invite.email ? 'is-email' : 'is-link'}`}>
 												{invite.email ? 'Email invitation' : 'Link invitation'}
 											</span>{' '}
 											{invite.email ? invite.email : 'Anyone who has the invite link'} · Sent{' '}
 											{new Date(invite.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
 										</small>
+										<small className='invite-history-line'>
+											Created by {invite.createdBy?.name || invite.createdBy?.email || 'Board admin'} ·{' '}
+											{invite.role === 'admin' ? 'Admin' : 'Member'} access
+										</small>
+										{invite.acceptedBy && (
+											<small className='invite-history-line is-accepted'>
+												Joined by {invite.acceptedBy.name || invite.acceptedBy.email}
+											</small>
+										)}
 									</div>
 									<span className={`board-invite-status ${invite.status}`}>
 										{invite.status === 'accepted' ? (
@@ -305,24 +405,6 @@ const InviteMemberModal = ({
 										) : (
 											<>
 												<Clock3 size={13} /> Pending
-											</>
-										)}
-										{invite.status === 'pending' && (
-											<>
-												<button
-													type='button'
-													className='board-invite-copy'
-													onClick={() => onCopyInvite(invite._id)}
-												>
-													Copy link
-												</button>
-												<button
-													type='button'
-													className='board-invite-revoke'
-													onClick={() => onRevoke(invite._id)}
-												>
-													Cancel
-												</button>
 											</>
 										)}
 									</span>

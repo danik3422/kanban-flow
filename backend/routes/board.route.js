@@ -10,12 +10,14 @@ import {
 	deleteColumn,
 	deleteTask,
 	getBoardById,
+	getPublicBoardLink,
 	createPublicBoardLink,
 	getPublicBoard,
 	getBoardActivities,
 	getBoardInviteDetails,
 	getBoardColumns,
 	getBoardInvites,
+	getBoardInviteLink,
 	getBoardMembers,
 	getColumnTasks,
 	getMyTasks,
@@ -23,6 +25,7 @@ import {
 	leaveBoard,
 	removeBoard,
 	revokeBoardInvite,
+	revokePublicBoardLink,
 	updateBoard,
 	updateBoardMemberRole,
 	updateColumn,
@@ -50,7 +53,9 @@ router.get('/my-tasks', authMiddleware, getMyTasks)
 router.get('/public/:token', getPublicBoard)
 router.post('/boards', authMiddleware, createBoard)
 router.get('/boards/:id', authMiddleware, boardMiddleware, getBoardById)
+router.get('/boards/:id/public-link', authMiddleware, boardMiddleware, getPublicBoardLink)
 router.post('/boards/:id/public-link', authMiddleware, boardMiddleware, createPublicBoardLink)
+router.delete('/boards/:id/public-link', authMiddleware, boardMiddleware, revokePublicBoardLink)
 router.get('/boards/:id/activity', authMiddleware, boardMiddleware, getBoardActivities)
 router.patch('/boards/:id', authMiddleware, boardMiddleware, updateBoard)
 router.delete('/boards/:id', authMiddleware, boardMiddleware, removeBoard)
@@ -75,6 +80,7 @@ router.get(
 	boardMiddleware,
 	getBoardInvites,
 )
+router.get('/boards/:id/invites/link', authMiddleware, boardMiddleware, getBoardInviteLink)
 router.delete(
 	'/boards/:id/invites/:inviteId',
 	authMiddleware,

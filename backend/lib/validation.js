@@ -52,6 +52,6 @@ export const changePasswordSchema = z.object({
 export const setSocialPasswordSchema = z.object({
 	idToken: z.string().min(1).max(10000),
 	provider: z.enum(['google', 'microsoft', 'apple']),
-	password: z.string().max(128),
+	password: passwordSchema,
 	currentPassword: z.string().max(128).optional(),
 })

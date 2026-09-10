@@ -1,8 +1,13 @@
 import mongoose from 'mongoose'
 import crypto from 'node:crypto'
 
+import { env } from '../config/env.js'
 import { sendBoardInviteEmail } from '../lib/mailer.js'
-import { emitBoardEvent, revokeUserBoardAccess } from '../lib/realtime.js'
+import {
+	emitBoardEvent,
+	emitUserEvent,
+	revokeUserBoardAccess,
+} from '../lib/realtime.js'
 import Board from '../models/board.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
@@ -161,20 +166,85 @@ export const getBoardById = async (req, res) => {
 
 export const createPublicBoardLink = async (req, res) => {
 	try {
-		const board = req.board
+		const board = await Board.findById(req.board._id).select('+publicTokenHash')
 		if (board.visibility !== 'public') {
 			return res.status(400).json({ message: 'Only public rooms can have a public link' })
 		}
 		if (!(await canManageBoard(board, req.user._id))) {
 			return res.status(403).json({ message: 'Only the board owner or an admin can create a public link' })
 		}
-		const rawToken = crypto.randomBytes(32).toString('hex')
-		board.publicTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-		await board.save()
-		return res.status(200).json({ publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/public/${rawToken}` })
+		const publicTokenVersion = Number(board.publicTokenVersion || 0)
+		const existingToken = crypto
+			.createHmac('sha256', env.jwtSecret)
+			.update(`${board._id.toString()}:${publicTokenVersion}`)
+			.digest('hex')
+		const existingTokenHash = crypto.createHash('sha256').update(existingToken).digest('hex')
+		if (board.publicTokenHash !== existingTokenHash) {
+			board.publicTokenVersion = publicTokenVersion + 1
+			const rawToken = crypto
+				.createHmac('sha256', env.jwtSecret)
+				.update(`${board._id.toString()}:${board.publicTokenVersion}`)
+				.digest('hex')
+			board.publicTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+			const updatedBoard = await Board.findOneAndUpdate(
+				{ _id: board._id, visibility: 'public', publicTokenVersion },
+				{
+					$set: { publicTokenHash: board.publicTokenHash },
+					$inc: { publicTokenVersion: 1 },
+				},
+				{ returnDocument: 'after' },
+			)
+			if (!updatedBoard) {
+				return res.status(409).json({ message: 'Public link changed. Please try again.' })
+			}
+			return res.status(200).json({ publicUrl: `${env.frontendUrl}/public/${rawToken}` })
+		}
+		return res.status(200).json({ publicUrl: `${env.frontendUrl}/public/${existingToken}` })
 	} catch (error) {
 		console.error('Public board link creation failed:', error)
 		return res.status(500).json({ message: 'Could not create public board link' })
+	}
+}
+
+export const getPublicBoardLink = async (req, res) => {
+	try {
+		const board = await Board.findById(req.board._id).select('+publicTokenHash')
+		if (board.visibility !== 'public') return res.status(404).json({ message: 'Public link is unavailable' })
+		if (!(await canManageBoard(board, req.user._id))) {
+			return res.status(403).json({ message: 'Only the board owner or an admin can view the public link' })
+		}
+		const rawToken = crypto
+			.createHmac('sha256', env.jwtSecret)
+			.update(`${board._id.toString()}:${Number(board.publicTokenVersion || 0)}`)
+			.digest('hex')
+		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		if (!board.publicTokenHash || board.publicTokenHash !== tokenHash) {
+			return res.status(404).json({ message: 'Public link has not been created' })
+		}
+		return res.status(200).json({ publicUrl: `${env.frontendUrl}/public/${rawToken}` })
+	} catch (error) {
+		console.error('Public board link lookup failed:', error)
+		return res.status(500).json({ message: 'Could not load public view link' })
+	}
+}
+
+export const revokePublicBoardLink = async (req, res) => {
+	try {
+		const board = await Board.findById(req.board._id).select('+publicTokenHash')
+		if (!(await canManageBoard(board, req.user._id))) {
+			return res.status(403).json({ message: 'Only the board owner or an admin can revoke the public link' })
+		}
+		await Board.updateOne(
+			{ _id: board._id },
+			{
+				$set: { publicTokenHash: '' },
+				$inc: { publicTokenVersion: 1 },
+			},
+		)
+		return res.status(204).send()
+	} catch (error) {
+		console.error('Public board link revoke failed:', error)
+		return res.status(500).json({ message: 'Could not revoke public view link' })
 	}
 }
 
@@ -183,7 +253,10 @@ export const getPublicBoard = async (req, res) => {
 		const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex')
 		const board = await Board.findOne({ visibility: 'public', publicTokenHash: tokenHash }).select('name visibility createdAt').lean()
 		if (!board) return res.status(404).json({ message: 'Public room link is invalid or expired' })
-		const columns = await Column.find({ board: board._id }).sort({ position: 1, createdAt: 1 }).lean()
+		const columns = await Column.find({ board: board._id })
+			.select('title position sortBy pinned createdAt')
+			.sort({ position: 1, createdAt: 1 })
+			.lean()
 		const tasks = await Task.find({ column: { $in: columns.map((column) => column._id) } })
 			.select('title description dueDate column position labels checklist priority trackedSeconds')
 			.sort({ position: 1, createdAt: 1 })
@@ -323,9 +396,17 @@ export const getBoardInvites = async (req, res) => {
 			return res
 				.status(403)
 				.json({ message: 'Only the board owner or an admin can view invites' })
-		const invites = await BoardInvite.find({ board: board._id })
+		const invites = await BoardInvite.find({
+			board: board._id,
+			$or: [
+				{ email: { $ne: '' } },
+				{ email: '', visibilityVersion: Number(board.visibilityVersion || 0) },
+			],
+		})
 			.sort({ createdAt: -1 })
-			.select('email expiresAt usedAt createdAt')
+			.select('email role expiresAt usedAt acceptedBy createdAt createdBy')
+			.populate('acceptedBy', 'name email')
+			.populate('createdBy', 'name email')
 			.lean()
 		return res
 			.status(200)
@@ -345,6 +426,41 @@ export const getBoardInvites = async (req, res) => {
 	}
 }
 
+export const getBoardInviteLink = async (req, res) => {
+	try {
+		const board = req.board
+		if (!(await canManageBoard(board, req.user._id))) {
+			return res.status(403).json({ message: 'Only the board owner or an admin can view the invite link' })
+		}
+		const invite = await BoardInvite.findOne({
+			board: board._id,
+			createdBy: req.user._id,
+			email: '',
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+			visibilityVersion: Number(board.visibilityVersion || 0),
+		}).select('role createdBy createdAt expiresAt tokenVersion tokenHash')
+		if (!invite) return res.status(404).json({ message: 'Invite link has not been created' })
+		const rawToken = crypto
+			.createHmac('sha256', env.jwtSecret)
+			.update(`invite:${board._id.toString()}:${req.user._id.toString()}:${Number(invite.tokenVersion || 0)}`)
+			.digest('hex')
+		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		if (invite.tokenHash !== tokenHash) return res.status(404).json({ message: 'Invite link has been revoked' })
+		return res.status(200).json({
+			inviteId: invite._id,
+			inviteUrl: `${env.frontendUrl}/invite/${rawToken}`,
+			role: invite.role,
+			createdBy: invite.createdBy,
+			createdAt: invite.createdAt,
+			expiresAt: invite.expiresAt,
+		})
+	} catch (error) {
+		console.error('Board invite link lookup failed:', error)
+		return res.status(500).json({ message: 'Could not load board invite link' })
+	}
+}
+
 export const revokeBoardInvite = async (req, res) => {
 	try {
 		const board = req.board
@@ -359,6 +475,8 @@ export const revokeBoardInvite = async (req, res) => {
 		})
 		if (!invite)
 			return res.status(404).json({ message: 'Pending invite not found' })
+		if (!invite.email && invite.createdBy.toString() !== req.user._id.toString())
+			return res.status(403).json({ message: 'Only the creator can revoke this invite link' })
 		await invite.deleteOne()
 		await recordBoardActivity({
 			boardId: board._id,
@@ -394,8 +512,17 @@ export const copyBoardInviteLink = async (req, res) => {
 		if (!invite) {
 			return res.status(404).json({ message: 'Pending invite not found' })
 		}
+		if (!invite.email && invite.createdBy.toString() !== req.user._id.toString())
+			return res.status(403).json({ message: 'Only the creator can copy this invite link' })
 
-		const rawToken = crypto.randomBytes(32).toString('hex')
+		let rawToken = crypto.randomBytes(32).toString('hex')
+		if (!invite.email) {
+			invite.tokenVersion = Number(invite.tokenVersion || 0) + 1
+			rawToken = crypto
+				.createHmac('sha256', env.jwtSecret)
+				.update(`invite:${board._id.toString()}:${req.user._id.toString()}:${invite.tokenVersion}`)
+				.digest('hex')
+		}
 		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 		invite.tokenHash = tokenHash
 		invite.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -517,8 +644,12 @@ export const updateBoard = async (req, res) => {
 		board.name = trimmedName
 		if (visibility !== undefined) {
 			board.visibility = visibility
+			if (previousVisibility !== visibility) {
+				board.visibilityVersion = Number(board.visibilityVersion || 0) + 1
+			}
 			if (previousVisibility === 'public' && visibility !== 'public') {
 				board.publicTokenHash = ''
+				board.publicTokenVersion = Number(board.publicTokenVersion || 0) + 1
 			}
 		}
 		await board.save()
@@ -534,6 +665,10 @@ export const updateBoard = async (req, res) => {
 			})
 		}
 		if (visibility !== undefined && previousVisibility !== visibility) {
+			const expiredLinkDetails =
+				previousVisibility === 'public' && visibility !== 'public'
+					? 'Automatically expired active invite links and the public view link'
+					: 'Automatically expired active invite links'
 			await recordBoardActivity({
 				boardId: board._id,
 				userId,
@@ -541,9 +676,10 @@ export const updateBoard = async (req, res) => {
 				entityType: 'board',
 				entityId: board._id,
 				entityName: trimmedName,
-				details: `changed room visibility from ${previousVisibility} to ${visibility}`,
+				details: `changed room visibility from ${previousVisibility} to ${visibility}. ${expiredLinkDetails}`,
 			})
 		}
+		emitBoardEvent(board._id.toString(), 'board:updated', board.toObject())
 
 		return res.status(200).json(board)
 	} catch (error) {
@@ -823,7 +959,7 @@ export const addMemberToBoard = async (req, res) => {
 
 export const createBoardInvite = async (req, res) => {
 	try {
-		const board = req.board
+		const board = await Board.findById(req.board._id)
 		if (!(await canManageBoard(board, req.user._id)))
 			return res
 				.status(403)
@@ -857,15 +993,61 @@ export const createBoardInvite = async (req, res) => {
 				return res
 					.status(400)
 					.json({ message: 'An active invite already exists for this email' })
+		} else {
+			const existingNextVersion = Number(board.inviteTokenVersion || 0)
+			const activeLinkInvite = await BoardInvite.findOne({
+				board: board._id,
+				createdBy: req.user._id,
+				email: '',
+				usedAt: null,
+				expiresAt: { $gt: new Date() },
+				visibilityVersion: Number(board.visibilityVersion || 0),
+			})
+			if (activeLinkInvite) {
+				const existingToken = crypto
+					.createHmac('sha256', env.jwtSecret)
+					.update(`invite:${board._id.toString()}:${req.user._id.toString()}:${Number(activeLinkInvite.tokenVersion || 0)}`)
+					.digest('hex')
+				const existingTokenHash = crypto.createHash('sha256').update(existingToken).digest('hex')
+				if (activeLinkInvite.tokenHash === existingTokenHash) {
+					return res.status(201).json({
+						inviteUrl: `${env.frontendUrl}/invite/${existingToken}`,
+						emailSent: false,
+						expiresInDays: 7,
+					})
+				}
+				await activeLinkInvite.deleteOne()
+			}
+			const nextTokenVersion = existingNextVersion + 1
+			const updatedBoard = await Board.findOneAndUpdate(
+				{ _id: board._id },
+				{ $set: { inviteTokenVersion: nextTokenVersion } },
+				{ new: true },
+			)
+			if (!updatedBoard) {
+				return res.status(409).json({ message: 'Invite link changed. Please try again.' })
+			}
+			board.inviteTokenVersion = nextTokenVersion
 		}
-		const rawToken = crypto.randomBytes(32).toString('hex')
-		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		let rawToken = crypto.randomBytes(32).toString('hex')
+		let tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		let tokenVersion = 0
+		if (!email) {
+			tokenVersion = Number(board.inviteTokenVersion || 0)
+			rawToken = crypto
+				.createHmac('sha256', env.jwtSecret)
+				.update(`invite:${board._id.toString()}:${req.user._id.toString()}:${tokenVersion}`)
+				.digest('hex')
+			tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		}
 		const invite = await BoardInvite.create({
 			board: board._id,
 			email,
 			role,
 			tokenHash,
+			tokenVersion,
 			createdBy: req.user._id,
+			visibilityVersion: Number(board.visibilityVersion || 0),
 			expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 		})
 		await recordBoardActivity({
@@ -909,15 +1091,20 @@ export const getBoardInviteDetails = async (req, res) => {
 			tokenHash,
 			usedAt: null,
 			expiresAt: { $gt: new Date() },
-		}).populate('board', 'name')
+		}).populate('board', 'name visibilityVersion').populate('createdBy', 'name email')
 
 		if (!invite || !invite.board) {
+			return res.status(400).json({ message: 'Invite expired or invalid' })
+		}
+		if (!invite.email && Number(invite.visibilityVersion || 0) !== Number(invite.board.visibilityVersion || 0)) {
 			return res.status(400).json({ message: 'Invite expired or invalid' })
 		}
 
 		return res.status(200).json({
 			boardId: invite.board._id.toString(),
 			boardName: invite.board.name,
+			invitedBy: invite.createdBy,
+			role: invite.role,
 		})
 	} catch (error) {
 		console.error('Board invite details lookup failed:', error)
@@ -942,9 +1129,12 @@ export const acceptBoardInvite = async (req, res) => {
 		if (!invite)
 			return res.status(400).json({ message: 'Invite expired or invalid' })
 
-		const board = await Board.findById(invite.board).select('createdBy name')
+		const board = await Board.findById(invite.board).select('createdBy name visibilityVersion')
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found.' })
+		}
+		if (!invite.email && Number(invite.visibilityVersion || 0) !== Number(board.visibilityVersion || 0)) {
+			return res.status(400).json({ message: 'Invite expired or invalid' })
 		}
 
 		if (board.createdBy.toString() === req.user._id.toString()) {
@@ -963,13 +1153,15 @@ export const acceptBoardInvite = async (req, res) => {
 			})
 		}
 
-				const claimedInvite = await BoardInvite.findOneAndUpdate(
-					{
-						_id: invite._id,
-						usedAt: null,
-						expiresAt: { $gt: new Date() },
-					},
-					{ $set: { usedAt: new Date() } },
+		const claimFilter = {
+			_id: invite._id,
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+		}
+		if (!invite.email) claimFilter.visibilityVersion = Number(board.visibilityVersion || 0)
+		const claimedInvite = await BoardInvite.findOneAndUpdate(
+					claimFilter,
+					{ $set: { usedAt: new Date(), acceptedBy: req.user._id } },
 					{ returnDocument: 'after' },
 				)
 				if (!claimedInvite) {
@@ -987,7 +1179,7 @@ export const acceptBoardInvite = async (req, res) => {
 			entityType: 'member',
 			entityId: req.user._id,
 			entityName: req.user.name || req.user.email,
-			details: 'joined this board from an invite',
+			details: `joined this board from an invite created by ${invite.createdBy?.name || invite.createdBy?.email || 'a board admin'}`,
 		})
 		return res
 			.status(200)

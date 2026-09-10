@@ -23,6 +23,18 @@ const boardModel = new mongoose.Schema(
 			select: false,
 			index: true,
 		},
+		publicTokenVersion: {
+			type: Number,
+			default: 0,
+		},
+		inviteTokenVersion: {
+			type: Number,
+			default: 0,
+		},
+		visibilityVersion: {
+			type: Number,
+			default: 0,
+		},
 	},
 	{ timestamps: true }
 )

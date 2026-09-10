@@ -105,6 +105,21 @@ describe('social auth security helpers', () => {
 		})
 	})
 
+	it('checks revocation when verifying provider tokens', async () => {
+		let checkRevoked
+		await withFirebaseVerifier(async (_idToken, receivedCheckRevoked) => {
+			checkRevoked = receivedCheckRevoked
+			return {
+				email: 'user@example.com',
+				email_verified: true,
+				firebase: { sign_in_provider: 'google.com' },
+			}
+		}, async () => {
+			await verifySocialProviderToken('token', 'google')
+		})
+		assert.equal(checkRevoked, true)
+	})
+
 	it('rejects an unverified provider token before local-account matching', async () => {
 		await User.create({ email: 'local-match@example.com', password: await bcrypt.hash('Password123!', 10) })
 		await withFirebaseVerifier(async () => ({
@@ -158,5 +173,43 @@ describe('social auth security helpers', () => {
 			}, res)
 		})
 		assert.equal(response.status, 409)
+	})
+
+	it('requires re-authentication before checking provider ownership', async () => {
+		const providerOwner = await User.create({
+			email: 'provider-owner-order@example.com',
+			provider: 'google',
+			providerUid: 'occupied-order-uid',
+		})
+		const sessionUser = await User.create({
+			email: 'session-user-order@example.com',
+			password: await bcrypt.hash('CorrectPassword123!', 10),
+		})
+		const response = {}
+		const res = {
+			status(code) {
+				response.status = code
+				return { json(body) { response.body = body } }
+			},
+		}
+
+		await withFirebaseVerifier(async () => ({
+			uid: providerOwner.providerUid,
+			email: sessionUser.email,
+			email_verified: true,
+			firebase: { sign_in_provider: 'google.com' },
+		}), async () => {
+			await connectSocialAccount({
+				body: {
+					idToken: 'token',
+					provider: 'google',
+					currentPassword: 'WrongPassword123!',
+				},
+				user: { _id: sessionUser._id },
+			}, res)
+		})
+
+		assert.equal(response.status, 401)
+		assert.equal(response.body.message, 'Re-authentication required.')
 	})
 })

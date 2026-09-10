@@ -31,7 +31,7 @@ const Signup = () => {
 	const [confirmVisible, setConfirmVisible] = useState(false)
 
 	const signup = useAuthStore((state) => state.signup)
-	const handleGoogleSignup = useAuthStore((state) => state.handleGoogleSignup)
+	const handleSocialSignup = useAuthStore((state) => state.handleSocialSignup)
 	const isSigningUp = useAuthStore((state) => state.isSigningUp)
 
 	const navigate = useNavigate()
@@ -87,10 +87,9 @@ const Signup = () => {
 		}
 	}
 
-	const handleMicrosoftSignIn = () =>
-		toast.info('Microsoft sign-in not implemented yet')
-	const handleAppleSignIn = () =>
-		toast.info('Apple sign-in not implemented yet')
+	const handleMicrosoftSignIn = () => handleSocialSignup('microsoft')
+	const handleAppleSignIn = () => handleSocialSignup('apple')
+	const handleGoogleSignup = () => handleSocialSignup('google')
 
 	return (
 		<div className='auth-page'>

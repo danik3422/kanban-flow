@@ -60,7 +60,7 @@ const getMailOptions = ({ email, subject, text, html }) => ({
 	subject,
 	text,
 	html,
-	...(env.mailRedirectTo ? { replyTo: email } : {}),
+	...(env.mailReplyTo ? { replyTo: env.mailReplyTo } : {}),
 })
 
 export const sendPasswordResetEmail = async ({ email, resetUrl }) => {

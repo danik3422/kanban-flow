@@ -8,13 +8,10 @@ import {
 	CirclePlus,
 	ClipboardList,
 	Clock3,
-	Link2,
 	ListChecks,
 	LogOut,
-	Mail,
 	MessageSquare,
 	MoreHorizontal,
-	PencilLine,
 	Pin,
 	Plus,
 	Play,
@@ -145,10 +142,10 @@ const Workspace = () => {
 	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
+	const [inviteLink, setInviteLink] = useState(null)
 	const [publicBoardLink, setPublicBoardLink] = useState('')
 	const [boardActivities, setBoardActivities] = useState([])
 	const [isActivityLoading, setIsActivityLoading] = useState(false)
-	const [isInvitationsExpanded, setIsInvitationsExpanded] = useState(false)
 	const [presenceByUserId, setPresenceByUserId] = useState({})
 	const [realtimeStatus, setRealtimeStatus] = useState(
 		isDevAuthBypass ? 'connected' : 'connecting',
@@ -190,6 +187,7 @@ const Workspace = () => {
 	const [isLeaveBoardArmed, setIsLeaveBoardArmed] = useState(false)
 	const [leaveConfirmation, setLeaveConfirmation] = useState('')
 	const [isLeavingBoard, setIsLeavingBoard] = useState(false)
+	const [isRoomActionsOpen, setIsRoomActionsOpen] = useState(false)
 	const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
 	const [ownershipConfirmation, setOwnershipConfirmation] = useState('')
 	const [deleteColumnTarget, setDeleteColumnTarget] = useState(null)
@@ -199,9 +197,8 @@ const Workspace = () => {
 	const [editingColumnTitle, setEditingColumnTitle] = useState('')
 	const [columnSortBy, setColumnSortBy] = useState({}) // { columnId: 'sortType' }
 	const [sortSubmenuOpen, setSortSubmenuOpen] = useState(null) // null or columnId
-
-	const visibleBoardInvites = boardInvites.filter(
-		(invite) => invite.status !== 'accepted',
+	const isBoardContentLoading = isLoading || Boolean(
+		selectedBoard && !isDevAuthBypass && isRefreshing && columns.length === 0,
 	)
 
 	const toggleColumnPin = async (columnId) => {
@@ -590,6 +587,20 @@ const Workspace = () => {
 				...current.filter((item) => item._id !== activity._id),
 			].slice(0, 200))
 		})
+		socket.on('board:updated', (updatedBoard) => {
+			if (updatedBoard._id !== selectedBoard._id) return
+			setSelectedBoard((current) =>
+				current ? { ...current, ...updatedBoard } : current,
+			)
+			setBoards((current) =>
+				current.map((board) =>
+					board._id === updatedBoard._id
+						? { ...board, ...updatedBoard }
+						: board,
+				),
+			)
+			setBoardNameDraft(updatedBoard.name || '')
+		})
 		const heartbeatTimer = window.setInterval(heartbeat, 20_000)
 		socket.on('task:created', (task) => {
 			const localSorts = readLocalSorts(selectedBoard._id, authUser?._id)
@@ -768,12 +779,7 @@ const Workspace = () => {
 			}
 			setBoards((current) => {
 				const nextBoards = [...current, board]
-				localStorage.setItem(
-					'kanban-dev-boards',
-					JSON.stringify(
-						nextBoards.filter((item) => item._id !== devBoard._id),
-					),
-				)
+				localStorage.setItem('kanban-dev-boards', JSON.stringify(nextBoards.filter((item) => item._id !== devBoard._id)))
 				return nextBoards
 			})
 			setSelectedBoard(board)
@@ -815,9 +821,7 @@ const Workspace = () => {
 		setNewBoardVisibility(event.target.value)
 	}
 
-	const closePublicBoardConfirmation = () => {
-		setIsPublicBoardConfirmOpen(false)
-	}
+	const closePublicBoardConfirmation = () => setIsPublicBoardConfirmOpen(false)
 
 	const confirmPublicBoard = () => {
 		setNewBoardVisibility('public')
@@ -829,6 +833,8 @@ const Workspace = () => {
 		if (isDevAuthBypass) {
 			setSelectedBoard((current) => current ? { ...current, visibility } : current)
 			setBoards((current) => current.map((board) => board._id === selectedBoard._id ? { ...board, visibility } : board))
+			setBoardInvites([])
+			setInviteLink(null)
 			setVisibilityDraft(visibility)
 			setIsVisibilityOpen(false)
 			toast.success('Room visibility updated')
@@ -838,7 +844,10 @@ const Workspace = () => {
 			const { data } = await axiosInstance.patch(`/board/boards/${selectedBoard._id}`, { visibility })
 			setSelectedBoard((current) => current ? { ...current, ...data } : current)
 			setBoards((current) => current.map((board) => board._id === selectedBoard._id ? { ...board, ...data } : board))
+			setBoardInvites([])
+			setInviteLink(null)
 			setVisibilityDraft(visibility)
+			if (visibility !== 'public') setPublicBoardLink('')
 			setIsVisibilityOpen(false)
 			toast.success('Room visibility updated')
 		} catch (error) {
@@ -857,10 +866,13 @@ const Workspace = () => {
 
 	const selectBoard = (board) => {
 		setSelectedBoard(board)
+		setColumns([])
+		setInviteLink(null)
 		setIsActivityLoading(true)
 		setBoardActivities([])
 		setBoardNameDraft(board.name || '')
 		setIsEditingBoardName(false)
+		setPublicBoardLink('')
 		setIsSidebarOpen(false)
 		navigate(`/workspaces/${board._id}`)
 	}
@@ -880,16 +892,13 @@ const Workspace = () => {
 		textArea.remove()
 	}
 
-	const copyPendingInvite = async (inviteId) => {
-		if (!selectedBoard) return
+	const loadInviteLink = async (board = selectedBoard) => {
+		if (!board || isDevAuthBypass) return
 		try {
-			const { data } = await axiosInstance.post(
-				`/board/boards/${selectedBoard._id}/invites/${inviteId}/copy`,
-			)
-			await copyInviteUrl(data.inviteUrl)
-			toast.success('Invite link copied again')
+			const { data } = await axiosInstance.get(`/board/boards/${board._id}/invites/link`)
+			setInviteLink(data)
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not copy invite link')
+			if (error.response?.status === 404) setInviteLink(null)
 		}
 	}
 
@@ -921,12 +930,16 @@ const Workspace = () => {
 				{ email: mode === 'email' ? inviteEmail.trim() : '', role },
 			)
 			setInviteEmail('')
-			setIsInviteOpen(false)
+			if (mode === 'email') setIsInviteOpen(false)
 			await copyInviteUrl(data.inviteUrl)
 			const { data: invites } = await axiosInstance.get(
 				`/board/boards/${selectedBoard._id}/invites`,
 			)
 			setBoardInvites(invites)
+			if (mode === 'link') {
+				await loadInviteLink()
+				setIsInviteOpen(true)
+			}
 			toast.success(
 				mode === 'email' && data.emailSent
 					? 'Invite email sent and link copied'
@@ -936,6 +949,56 @@ const Workspace = () => {
 			toast.error(error.response?.data?.message || 'Could not invite member')
 		}
 	}
+
+	const revokeInviteLink = async () => {
+		if (!selectedBoard || !inviteLink?.inviteId) return
+		try {
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/invites/${inviteLink.inviteId}`)
+			setInviteLink(null)
+			setBoardInvites((current) => current.filter((invite) => invite._id !== inviteLink.inviteId))
+			toast.success('Invite link revoked')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not revoke invite link')
+		}
+	}
+
+	useEffect(() => {
+		if (!selectedBoard || isDevAuthBypass) return undefined
+		const canManage = selectedBoard.access === 'owned' || selectedBoard.role === 'admin'
+		if (!canManage) return undefined
+		let isCurrent = true
+		axiosInstance
+			.get(`/board/boards/${selectedBoard._id}/invites/link`)
+			.then(({ data }) => {
+				if (isCurrent) setInviteLink(data)
+			})
+			.catch((error) => {
+				if (isCurrent && error.response?.status === 404) setInviteLink(null)
+			})
+		return () => {
+			isCurrent = false
+		}
+	}, [selectedBoard, authUser?._id])
+
+	useEffect(() => {
+		if (!selectedBoard || selectedBoard.visibility !== 'public' || isDevAuthBypass) {
+			return undefined
+		}
+		const canManage = selectedBoard.access === 'owned' || selectedBoard.role === 'admin'
+		if (!canManage) return undefined
+		let isCurrent = true
+		axiosInstance
+			.get(`/board/boards/${selectedBoard._id}/public-link`)
+			.then(({ data }) => {
+				if (isCurrent) setPublicBoardLink(data.publicUrl)
+			})
+			.catch((error) => {
+				if (isCurrent && error.response?.status === 404) setPublicBoardLink('')
+			})
+		return () => {
+			isCurrent = false
+		}
+	}, [selectedBoard, authUser?._id])
 
 	const createPublicBoardLink = async () => {
 		if (!selectedBoard) return
@@ -949,24 +1012,14 @@ const Workspace = () => {
 		}
 	}
 
-	const revokeInvite = async (inviteId) => {
-		if (isDevAuthBypass) {
-			setBoardInvites((current) =>
-				current.filter((invite) => invite._id !== inviteId),
-			)
-			toast.success('Demo invite revoked')
-			return
-		}
+	const revokePublicBoardLink = async () => {
+		if (!selectedBoard) return
 		try {
-			await axiosInstance.delete(
-				`/board/boards/${selectedBoard._id}/invites/${inviteId}`,
-			)
-			setBoardInvites((current) =>
-				current.filter((invite) => invite._id !== inviteId),
-			)
-			toast.success('Invite revoked')
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/public-link`)
+			setPublicBoardLink('')
+			toast.success('Public view link revoked')
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not revoke invite')
+			toast.error(error.response?.data?.message || 'Could not revoke public view link')
 		}
 	}
 
@@ -1615,6 +1668,7 @@ const Workspace = () => {
 		.concat(columns.filter((column) => !column.pinned))
 
 	const isBoardOwner = selectedBoard?.createdBy === authUser?._id
+	const canEditBoardName = isBoardOwner || selectedBoard?.role === 'admin'
 
 	return (
 		<div className='workspace-shell flex h-screen'>
@@ -1651,7 +1705,19 @@ const Workspace = () => {
 							<div className='workspace-context-copy'>
 										<div className='workspace-context-label'>Workspace</div>
 								<div className='workspace-board-title-row'>
-									<span className='workspace-board-name'>
+											<span
+												className={`workspace-board-name ${canEditBoardName ? 'is-editable' : ''}`}
+												title={selectedBoard?.name || 'Room'}
+												onClick={() => canEditBoardName && setIsEditingBoardName(true)}
+												onKeyDown={(event) => {
+													if (canEditBoardName && (event.key === 'Enter' || event.key === ' ')) {
+														event.preventDefault()
+														setIsEditingBoardName(true)
+													}
+												}}
+												tabIndex={canEditBoardName ? 0 : undefined}
+												role={canEditBoardName ? 'button' : undefined}
+											>
 										<ChevronRight size={13} />
 										{isEditingBoardName ? (
 											<input
@@ -1669,41 +1735,89 @@ const Workspace = () => {
 												className='workspace-board-name-input'
 											/>
 										) : (
-											selectedBoard?.name || 'Rooms'
+													<span className='workspace-board-name-text'>
+														{selectedBoard?.name || 'Rooms'}
+													</span>
 										)}
 									</span>
 									{selectedBoard && !isEditingBoardName && (
-										<button
-											className='workspace-board-edit-button'
-											onClick={() => setIsEditingBoardName(true)}
-											type='button'
-											aria-label={`Rename board ${selectedBoard.name}`}
+										<Popover
+											isOpen={isRoomActionsOpen}
+											onClose={() => setIsRoomActionsOpen(false)}
+											className='room-actions-menu'
 										>
-											<PencilLine size={12} />
-											<span>Edit name</span>
-										</button>
+											<button
+												type='button'
+												className='workspace-board-actions-button'
+												aria-label='Room actions'
+												aria-expanded={isRoomActionsOpen}
+												title='Room actions'
+												onClick={() => setIsRoomActionsOpen((value) => !value)}
+											>
+												<MoreHorizontal size={16} />
+											</button>
+											{isRoomActionsOpen && (
+												<div className='room-actions-popover' role='menu'>
+													<button
+														type='button'
+														className='room-action-danger'
+														onClick={() => {
+															setIsRoomActionsOpen(false)
+															if (isBoardOwner) openDeleteBoardDialog()
+															else setIsLeaveBoardOpen(true)
+														}}
+													>
+														{isBoardOwner ? <Trash2 size={15} /> : <LogOut size={15} />}
+														{isBoardOwner ? 'Delete room' : 'Leave room'}
+													</button>
+												</div>
+											)}
+										</Popover>
 									)}
 								</div>
 							</div>
 				</WorkspaceTopbar>
 
 				{!boardId ? (
-					<WorkspaceOverview
-						boards={boards}
-						onOpenBoard={openOverviewBoard}
-						onCreateBoard={() => setIsCreatingBoard(true)}
-					/>
+					isLoading ? (
+						<div className='workspace-content rooms-overview'>
+							<div className='workspace-overview-loading' role='status' aria-live='polite'>
+								<div className='workspace-overview-loading-heading'><div className='workspace-overview-loading-heading-copy'><p className='eyebrow workspace-overview-loading-eyebrow'>Your rooms</p><h1 className='workspace-overview-loading-title'>Everything in one place.</h1><p className='heading-copy workspace-overview-loading-copy'>Choose a room to jump into a board, or create a new one for the next project.</p></div><span className='workspace-overview-loading-button' /></div>
+								<div className='workspace-overview-loading-summary'><span /><span /></div>
+								{[1, 2].map((group) => <div className='workspace-overview-loading-group' key={group}><div className='workspace-overview-loading-group-heading'><div><span /><span /></div><i /></div><div className='workspace-overview-loading-grid'>{[1, 2, 3].map((card) => <div className='workspace-overview-loading-card' key={card}><b /><div><span /><span /></div><i /></div>)}</div></div>)}
+							</div>
+						</div>
+					) : (
+						<WorkspaceOverview
+							boards={boards}
+							onOpenBoard={openOverviewBoard}
+							onCreateBoard={() => setIsCreatingBoard(true)}
+						/>
+					)
 				) : (
 					<div className='workspace-content'>
-						{isLoading ? (
-							<div className='empty-state workspace-loading-state' role='status'>
-								<div className='loading-orbit' aria-hidden='true'>
-									<span />
-									<span />
-									<span />
+						{isBoardContentLoading ? (
+							!selectedBoard && !boardId ? (
+								<div className='workspace-overview-loading' role='status' aria-live='polite'>
+									<div className='workspace-overview-loading-heading'><div className='workspace-overview-loading-heading-copy'><p className='eyebrow workspace-overview-loading-eyebrow'>Your rooms</p><h1 className='workspace-overview-loading-title'>Everything in one place.</h1><p className='heading-copy workspace-overview-loading-copy'>Choose a room to jump into a board, or create a new one for the next project.</p></div><span className='workspace-overview-loading-button' /></div>
+									<div className='workspace-overview-loading-summary'><span /><span /></div>
+									{[1, 2].map((group) => <div className='workspace-overview-loading-group' key={group}><div className='workspace-overview-loading-group-heading'><div><span /><span /></div><i /></div><div className='workspace-overview-loading-grid'>{[1, 2, 3].map((card) => <div className='workspace-overview-loading-card' key={card}><b /><div><span /><span /></div><i /></div>)}</div></div>)}
 								</div>
-								<p className='loading-label'>Setting up your workspace<span className='loading-dots'>...</span></p>
+							) : (
+							<div className='workspace-board-loading' role='status' aria-live='polite'>
+								<div className='workspace-board-loading-toolbar'><span /><div className='workspace-board-loading-actions'><span /></div></div>
+								<div className='workspace-board-loading-columns'>
+									{[1, 2, 3, 4, 5].map((column) => (
+										<div className='workspace-board-loading-column' key={column}>
+											<div className='workspace-board-loading-column-title'><span /><i /></div>
+											<div className='workspace-board-loading-card' />
+											{column % 2 === 1 && <div className='workspace-board-loading-card short' />}
+										</div>
+									))}
+								</div>
+								<p className='workspace-board-loading-label'>Loading your board<span className='loading-dots'>...</span></p>
 							</div>
+							)
 						) : !selectedBoard ? (
 							<div className='empty-state empty-state-accent'>
 								<div className='empty-icon'>
@@ -1723,85 +1837,6 @@ const Workspace = () => {
 							</div>
 						) : (
 							<>
-								{visibleBoardInvites.length > 0 && (
-									<section className='board-invites'>
-										<div className='board-invites-heading'>
-											<button
-												type='button'
-												className='board-invites-toggle'
-												onClick={() => setIsInvitationsExpanded((value) => !value)}
-												aria-expanded={isInvitationsExpanded}
-											>
-												<div>
-												<p className='eyebrow'>Invitations</p>
-												<h2>People invited to this room</h2>
-												</div>
-											</button>
-											<div className='board-invites-heading-actions'>
-												<span>{visibleBoardInvites.length}</span>
-												<button
-													type='button'
-													className='board-invites-expand-button'
-													onClick={() => setIsInvitationsExpanded((value) => !value)}
-													aria-label={isInvitationsExpanded ? 'Hide invitations' : 'Show invitations'}
-													aria-expanded={isInvitationsExpanded}
-												>
-													<ChevronDown className={isInvitationsExpanded ? 'is-expanded' : ''} size={18} />
-												</button>
-											</div>
-										</div>
-										{isInvitationsExpanded && <div className='board-invite-list'>
-											{visibleBoardInvites.map((invite) => (
-												<div className='board-invite-row' key={invite._id}>
-													<div className='board-invite-person'>
-														<span className={`board-invite-icon ${invite.email ? 'is-email' : 'is-link'}`}>
-															{invite.email ? <Mail size={15} /> : <Link2 size={15} />}
-														</span>
-														<div>
-															<strong>{invite.email || 'Anyone with the link'}</strong>
-															<small>
-																<span className={`invite-source-label ${invite.email ? 'is-email' : 'is-link'}`}>
-																	{invite.email ? 'Email invitation' : 'Link invitation'}
-																</span>{' '}
-																{invite.email || 'Anyone who has the invite link'} · Sent{' '}
-																{new Date(invite.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-															</small>
-														</div>
-													</div>
-													<div className='board-invite-actions'>
-														<span
-															className={`board-invite-status ${invite.status}`}
-														>
-															{invite.status === 'accepted'
-																? 'Accepted'
-																: invite.status === 'expired'
-																	? 'Expired'
-																	: 'Pending'}
-														</span>
-														{invite.status === 'pending' && (
-															<>
-																<button
-																	type='button'
-																	className='board-invite-copy'
-																	onClick={() => copyPendingInvite(invite._id)}
-																>
-																	Copy link
-																</button>
-																<button
-																	type='button'
-																	className='board-invite-revoke'
-																	onClick={() => revokeInvite(invite._id)}
-																>
-																	Cancel
-																</button>
-															</>
-														)}
-													</div>
-												</div>
-											))}
-										</div>}
-									</section>
-								)}
 								<div className='board-toolbar'>
 									<div className='board-toolbar-actions'>
 										<button
@@ -1812,23 +1847,6 @@ const Workspace = () => {
 											<Archive size={16} />{' '}
 											{isRefreshing ? 'Refreshing...' : 'Refresh'}
 										</button>
-										{isBoardOwner ? (
-											<button
-												className='quiet-button danger'
-												onClick={openDeleteBoardDialog}
-												type='button'
-											>
-												<Trash2 size={16} /> Delete room
-											</button>
-										) : (
-											<button
-												className='quiet-button danger'
-												onClick={() => setIsLeaveBoardOpen(true)}
-												type='button'
-											>
-												<LogOut size={16} /> Leave room
-											</button>
-										)}
 									</div>
 								</div>
 							{isLeaveBoardOpen && selectedBoard && (
@@ -2390,15 +2408,17 @@ const Workspace = () => {
 				presenceByUserId={presenceByUserId}
 				showPresence={Boolean(selectedBoard?._id)}
 				roomVisibility={selectedBoard?.visibility}
+				inviteLink={inviteLink}
 				publicLink={publicBoardLink}
 				onCreatePublicLink={createPublicBoardLink}
+				onRevokePublicLink={revokePublicBoardLink}
+				onRevokeInviteLink={revokeInviteLink}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}
 				onChange={(event) => setInviteEmail(event.target.value)}
 				onClose={() => setIsInviteOpen(false)}
 				onSubmit={inviteMember}
-				onRevoke={revokeInvite}
 				onRoleChange={updateMemberRole}
 			/>
 			{isDeleteBoardOpen && selectedBoard && (

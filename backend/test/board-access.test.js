@@ -121,10 +121,95 @@ describe('board access and invitation flow', () => {
 		assert.ok((await PasswordResetToken.findOne({ user: user._id })).usedAt)
 	})
 
+	it('invalidates an existing session after changing the password', async () => {
+		const password = await bcrypt.hash('OldPassword123!', 10)
+		const user = await User.create({
+			email: 'change-session@example.com',
+			password,
+			emailVerified: true,
+			profileSetup: true,
+		})
+		const oldSession = authCookie(user._id)
+
+		const changeResponse = await request(app)
+			.patch('/api/auth/change-password')
+			.set('Cookie', oldSession)
+			.send({ currentPassword: 'OldPassword123!', newPassword: 'NewPassword123!' })
+		assert.equal(changeResponse.status, 200)
+
+		const oldSessionResponse = await request(app)
+			.get('/api/auth/get-user')
+			.set('Cookie', oldSession)
+		assert.equal(oldSessionResponse.status, 401)
+	})
+
+	it('invalidates an existing session after a password reset', async () => {
+		const password = await bcrypt.hash('OldPassword123!', 10)
+		const user = await User.create({
+			email: 'reset-session@example.com',
+			password,
+			emailVerified: true,
+			profileSetup: true,
+		})
+		const oldSession = authCookie(user._id)
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		await PasswordResetToken.create({
+			user: user._id,
+			tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+			expiresAt: new Date(Date.now() + 60_000),
+		})
+
+		const resetResponse = await request(app)
+			.post('/api/auth/password-reset/confirm')
+			.send({ token: rawToken, password: 'ResetPassword123!' })
+		assert.equal(resetResponse.status, 200)
+
+		const oldSessionResponse = await request(app)
+			.get('/api/auth/get-user')
+			.set('Cookie', oldSession)
+		assert.equal(oldSessionResponse.status, 401)
+	})
+
 	it('rejects protected requests without a session', async () => {
 		const response = await request(app).get('/api/board/boards')
 
 		assert.equal(response.status, 401)
+	})
+
+	it('does not allow setup-profile to change a password', async () => {
+		const user = await createUser('profile@example.com', 'Profile User')
+		const response = await request(app)
+			.patch('/api/auth/setup-profile')
+			.set('Cookie', authCookie(user._id))
+			.send({ name: 'Updated User', password: 'Password123!' })
+
+		assert.equal(response.status, 400)
+		const updatedUser = await User.findById(user._id).select('+password')
+		assert.equal(updatedUser.password, undefined)
+	})
+
+	it('returns only public user fields from get-user', async () => {
+		const user = await User.create({
+			email: 'private-fields@example.com',
+			password: 'hashed-password',
+			name: 'Private Fields',
+			emailVerified: true,
+			profileSetup: true,
+			emailVerificationTokenHash: 'verification-hash',
+			emailVerificationTokenExpiresAt: new Date(Date.now() + 60_000),
+		})
+
+		const response = await request(app)
+			.get('/api/auth/get-user')
+			.set('Cookie', authCookie(user._id))
+
+		assert.equal(response.status, 200)
+		assert.equal(response.body.email, user.email)
+		assert.equal(response.body.name, user.name)
+		assert.equal(response.body.password, undefined)
+		assert.equal(response.body.sessionVersion, undefined)
+		assert.equal(response.body.emailVerificationTokenHash, undefined)
+		assert.equal(response.body.emailVerificationTokenExpiresAt, undefined)
 	})
 
 	it('rejects social provider claims on public signup', async () => {
@@ -207,13 +292,212 @@ describe('board access and invitation flow', () => {
 			.post(`/api/board/boards/${board._id}/public-link`)
 			.set('Cookie', authCookie(owner._id))
 		assert.equal(linkResponse.status, 200)
+		const repeatedLinkResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(repeatedLinkResponse.body.publicUrl, linkResponse.body.publicUrl)
+		const restoredLinkResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(restoredLinkResponse.body.publicUrl, linkResponse.body.publicUrl)
 		const token = linkResponse.body.publicUrl.split('/').pop()
 
 		const publicResponse = await request(app).get(`/api/board/public/${token}`)
 		assert.equal(publicResponse.status, 200)
 		assert.equal(publicResponse.body.board.name, board.name)
 		assert.equal(publicResponse.body.columns[0].tasks[0].title, 'Visible card')
+		assert.equal(publicResponse.body.board.publicTokenHash, undefined)
+		assert.equal(publicResponse.body.board.publicTokenVersion, undefined)
+		assert.equal(publicResponse.body.columns[0].board, undefined)
+		assert.equal(publicResponse.body.columns[0].tasks[0].assignees, undefined)
 		assert.equal(await BoardMember.exists({ board: board._id, user: viewer._id }), null)
+		assert.equal(
+			(await request(app)
+				.get(`/api/board/boards/${board._id}/public-link`)
+				.set('Cookie', authCookie(viewer._id))).status,
+			403,
+		)
+	})
+
+	it('revokes a public link and creates a new one afterward', async () => {
+		const { owner } = await createBoardWithOwner()
+		const board = await Board.create({ name: 'Revocable public room', createdBy: owner._id, visibility: 'public' })
+		const firstResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		const firstUrl = firstResponse.body.publicUrl
+		const firstToken = firstUrl.split('/').pop()
+
+		const revokeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(revokeResponse.status, 204)
+		assert.equal((await request(app).get(`/api/board/public/${firstToken}`)).status, 404)
+
+		const secondResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(secondResponse.status, 200)
+		assert.notEqual(secondResponse.body.publicUrl, firstUrl)
+	})
+
+	it('keeps a general invite link stable until it is revoked', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const firstResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		const secondResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		assert.equal(firstResponse.status, 201)
+		assert.equal(secondResponse.body.inviteUrl, firstResponse.body.inviteUrl)
+		const linkDetails = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(linkDetails.status, 200)
+		assert.equal(linkDetails.body.role, 'member')
+		assert.equal(linkDetails.body.createdBy, owner._id.toString())
+
+		const invite = (await request(app)
+			.get(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))).body.find((item) => !item.email)
+		const revokeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/invites/${invite._id}`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(revokeResponse.status, 200)
+
+		const thirdResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		assert.notEqual(thirdResponse.body.inviteUrl, firstResponse.body.inviteUrl)
+	})
+
+	it('scopes invite links to the user who created them', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const admin = await createUser('admin-link@example.com', 'Admin link')
+		await BoardMember.create({ board: board._id, user: admin._id, role: 'admin' })
+
+		const ownerResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		assert.equal(ownerResponse.status, 201)
+
+		const ownerLinkResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(ownerLinkResponse.status, 200)
+		assert.equal(ownerLinkResponse.body.role, 'member')
+		assert.equal(ownerLinkResponse.body.createdBy, owner._id.toString())
+
+		const adminViewResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(admin._id))
+		assert.equal(adminViewResponse.status, 404)
+
+		const adminResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(admin._id))
+			.send({ email: '', role: 'admin' })
+		assert.equal(adminResponse.status, 201)
+
+		const adminLinkResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(admin._id))
+		assert.equal(adminLinkResponse.status, 200)
+		assert.equal(adminLinkResponse.body.role, 'admin')
+		assert.equal(adminLinkResponse.body.createdBy, admin._id.toString())
+		assert.notEqual(adminLinkResponse.body.inviteUrl, ownerLinkResponse.body.inviteUrl)
+
+		const ownerSeesAdminResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(ownerSeesAdminResponse.status, 200)
+		assert.equal(ownerSeesAdminResponse.body.createdBy, owner._id.toString())
+		assert.notEqual(ownerSeesAdminResponse.body.inviteUrl, adminLinkResponse.body.inviteUrl)
+	})
+
+	it('does not allow another manager to copy or revoke a link invite', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const admin = await createUser('foreign-link-admin@example.com', 'Foreign link admin')
+		await BoardMember.create({ board: board._id, user: admin._id, role: 'admin' })
+
+		await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		const ownerInvite = (await request(app)
+			.get(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))).body.find((invite) => !invite.email)
+
+		const copyResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites/${ownerInvite._id}/copy`)
+			.set('Cookie', authCookie(admin._id))
+		assert.equal(copyResponse.status, 403)
+
+		const revokeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/invites/${ownerInvite._id}`)
+			.set('Cookie', authCookie(admin._id))
+		assert.equal(revokeResponse.status, 403)
+
+		const ownerLinkResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/invites/link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(ownerLinkResponse.status, 200)
+	})
+
+	it('invalidates a public link across every non-public visibility', async () => {
+		const { owner } = await createBoardWithOwner()
+		const board = await Board.create({ name: 'Visibility transitions', createdBy: owner._id, visibility: 'public' })
+		const firstUrl = (await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))).body.publicUrl
+		const firstToken = firstUrl.split('/').pop()
+
+		for (const visibility of ['private', 'workspace']) {
+			const updateResponse = await request(app)
+				.patch(`/api/board/boards/${board._id}`)
+				.set('Cookie', authCookie(owner._id))
+				.send({ visibility })
+			assert.equal(updateResponse.status, 200)
+			assert.equal((await request(app).get(`/api/board/public/${firstToken}`)).status, 404)
+			await Board.findByIdAndUpdate(board._id, { visibility: 'public' })
+		}
+	})
+
+	it('invalidates a general invite link after room visibility changes', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const invited = await createUser('visibility-invite@example.com', 'Visibility invite')
+		const inviteResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		const rawToken = inviteResponse.body.inviteUrl.split('/').pop()
+
+		for (const visibility of ['workspace', 'public', 'private']) {
+			const updateResponse = await request(app)
+				.patch(`/api/board/boards/${board._id}`)
+				.set('Cookie', authCookie(owner._id))
+				.send({ visibility })
+			assert.equal(updateResponse.status, 200)
+			const activity = await BoardActivity.findOne({ board: board._id, action: 'changed visibility' }).sort({ createdAt: -1 })
+			assert.match(activity.details, new RegExp(`changed room visibility from .* to ${visibility}`))
+			assert.match(activity.details, /Automatically expired active invite links/)
+			if (visibility === 'private') assert.match(activity.details, /public view link/)
+			assert.equal((await request(app).get(`/api/board/invites/${rawToken}/details`)).status, 400)
+			const visibleInvites = (await request(app)
+				.get(`/api/board/boards/${board._id}/invites`)
+				.set('Cookie', authCookie(owner._id))).body
+			assert.equal(visibleInvites.some((invite) => !invite.email), false)
+			const acceptResponse = await request(app)
+				.post(`/api/board/invites/${rawToken}/accept`)
+				.set('Cookie', authCookie(invited._id))
+			assert.equal(acceptResponse.status, 400)
+			assert.equal(await BoardMember.exists({ board: board._id, user: invited._id }), null)
+		}
 	})
 
 	it('applies the selected admin role from an invite', async () => {
@@ -277,7 +561,9 @@ describe('board access and invitation flow', () => {
 		assert.equal(response.status, 200)
 		assert.equal(response.body.boardId, board._id.toString())
 		assert.ok(await BoardMember.exists({ board: board._id, user: member._id }))
-		assert.ok((await BoardInvite.findById(invite._id)).usedAt)
+		const acceptedInvite = await BoardInvite.findById(invite._id)
+		assert.ok(acceptedInvite.usedAt)
+		assert.equal(acceptedInvite.acceptedBy.toString(), member._id.toString())
 		assert.equal(owner.email, 'owner@example.com')
 	})
 
@@ -486,6 +772,26 @@ describe('board access and invitation flow', () => {
 		assert.equal(updateResponse.status, 400)
 		assert.deepEqual((await Task.findById(task._id)).assignees, [])
 		assert.equal(await Notification.countDocuments({ task: task._id }), 0)
+	})
+
+	it('creates assigned tasks and notifications successfully', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('assigned-member@example.com', 'Assigned Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const column = await Column.create({ board: board._id, title: 'Tasks' })
+
+		const response = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Assigned task', assignees: [member._id.toString()] })
+
+		assert.equal(response.status, 201)
+		assert.equal(response.body.title, 'Assigned task')
+		assert.equal(await Notification.countDocuments({
+			user: member._id,
+			task: response.body._id,
+			type: 'task_assigned',
+		}), 1)
 	})
 
 	it('transfers ownership and demotes the previous owner to admin', async () => {

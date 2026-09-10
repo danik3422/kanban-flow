@@ -43,6 +43,13 @@ const Team = () => {
 		const loadTeam = async () => {
 			try {
 				const { data: boardList } = await axiosInstance.get('/board/boards')
+				if (!Array.isArray(boardList) || boardList.length === 0) {
+					if (isCurrent) {
+						setBoards([])
+						setPeople([])
+					}
+					return
+				}
 				const results = await Promise.all(
 					boardList.map(async (board) => {
 						const { data: members } = await axiosInstance.get(
@@ -79,7 +86,9 @@ const Team = () => {
 					setPeople(Array.from(peopleById.values()))
 				}
 			} catch (error) {
-				if (isCurrent) toast.error(error.response?.data?.message || 'Could not load team')
+				if (isCurrent && ![404, 204].includes(error.response?.status)) {
+					toast.error(error.response?.data?.message || 'Could not load team')
+				}
 			} finally {
 				if (isCurrent) setIsLoading(false)
 			}
@@ -150,14 +159,17 @@ const Team = () => {
 				<section className='workspace-content team-page'>
 					<header className='team-page-header'>
 						<div className='team-summary'>
-							<span>{people.length} people</span>
-							<span>{ownerCount} {ownerCount === 1 ? 'owner' : 'owners'}</span>
-							<span>{adminCount} {adminCount === 1 ? 'admin' : 'admins'}</span>
-							<span>{memberCount} {memberCount === 1 ? 'member' : 'members'}</span>
+							{isLoading ? [1, 2, 3, 4].map((item) => <span className='team-loading-summary-pill' key={item} />) : <>
+								<span>{people.length} people</span>
+								<span>{ownerCount} {ownerCount === 1 ? 'owner' : 'owners'}</span>
+								<span>{adminCount} {adminCount === 1 ? 'admin' : 'admins'}</span>
+								<span>{memberCount} {memberCount === 1 ? 'member' : 'members'}</span>
+							</>}
 						</div>
 					</header>
-					<div className='team-toolbar'>
-						<div className='team-search-wrap'>
+					<div className={`team-toolbar ${isLoading ? 'is-loading' : ''}`}>
+						<div className={`team-search-wrap ${isLoading ? 'team-loading-control' : ''}`}>
+							{isLoading ? <><Search size={15} aria-hidden='true' /><span className='team-loading-control-fill' /></> : <>
 							<Search size={15} />
 							<input
 								value={search}
@@ -165,8 +177,10 @@ const Team = () => {
 								placeholder='Search people'
 								aria-label='Search people'
 							/>
+							</>}
 						</div>
-						<div className='team-filter-wrap'>
+						<div className={`team-filter-wrap ${isLoading ? 'team-loading-control' : ''}`}>
+							{isLoading ? <span className='team-loading-control-fill' /> : <>
 							<select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label='Filter by role'>
 								<option value='all'>All roles</option>
 								<option value='owner'>Owners</option>
@@ -174,18 +188,32 @@ const Team = () => {
 								<option value='member'>Members</option>
 							</select>
 							<ChevronDown size={14} />
+							</>}
 						</div>
-						<div className='team-filter-wrap'>
+						<div className={`team-filter-wrap ${isLoading ? 'team-loading-control' : ''}`}>
+							{isLoading ? <span className='team-loading-control-fill' /> : <>
 							<select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label='Sort team'>
 								<option value='name'>Sort by name</option>
 								<option value='rooms'>Most rooms</option>
 							</select>
 							<ChevronDown size={14} />
+							</>}
 						</div>
-						<span className='team-results-count'>{isLoading ? 'Loading...' : `${sortedPeople.length} shown`}</span>
+						<span className={`team-results-count ${isLoading ? 'team-loading-results' : ''}`}>{isLoading ? '' : `${sortedPeople.length} shown`}</span>
 					</div>
 					{isLoading ? (
-						<div className='team-empty'>Loading your team...</div>
+						<div className='team-loading-grid' role='status' aria-live='polite'>
+							{Array.from({ length: 8 }, (_, index) => index + 1).map((card) => (
+								<article className='team-person-card team-loading-card' key={card}>
+									<div className='team-avatar team-loading-avatar' />
+									<strong className='team-loading-line wide' />
+									<button type='button' className='team-email-copy team-loading-line' aria-hidden='true' tabIndex='-1' />
+									<div className='team-role-list team-loading-tags'><span className='team-role' /><span className='team-role' /></div>
+									<div className='team-room-list team-loading-room-list'><span /><span /><i /></div>
+									<div className='team-card-footer team-loading-footer' />
+								</article>
+							))}
+						</div>
 					) : sortedPeople.length ? (
 						<div className='team-grid'>
 							{sortedPeople.map((person, index) => (

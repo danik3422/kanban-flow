@@ -56,7 +56,7 @@ const WorkspaceTopbar = ({
 			{realtimeStatus && (
 				<div
 					className={`realtime-status realtime-status-${realtimeStatus}`}
-					title={`Realtime: ${realtimeStatus}`}
+					aria-describedby='realtime-status-help'
 					aria-live='polite'
 				>
 					{realtimeStatus === 'connected' && <Wifi size={14} />}
@@ -70,6 +70,13 @@ const WorkspaceTopbar = ({
 							: realtimeStatus === 'reconnecting'
 								? 'Reconnecting'
 								: 'Offline'}
+					</span>
+					<span id='realtime-status-help' className='realtime-status-tooltip' role='tooltip'>
+						{realtimeStatus === 'connected'
+							? 'Live updates are active. Changes from other users appear automatically.'
+							: realtimeStatus === 'reconnecting'
+								? 'The connection is being restored. Live updates may be delayed.'
+								: 'Live updates are unavailable. Refresh or check your connection.'}
 					</span>
 				</div>
 			)}

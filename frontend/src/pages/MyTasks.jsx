@@ -6,6 +6,7 @@ import {
 	ChevronDown,
 	ChevronRight,
 	ClipboardList,
+	RotateCcw,
 	Layers3,
 	Search,
 } from 'lucide-react'
@@ -65,22 +66,30 @@ const MyTasks = () => {
 	}, [])
 
 	useEffect(() => {
-		axiosInstance.get('/board/my-tasks', {
-			params: {
-				search,
-				priority,
-				board,
-			},
-		})
-			.then((tasksResponse) => setTasks(tasksResponse.data))
-			.catch((error) => {
-				if ([404, 204].includes(error.response?.status)) {
-					setTasks([])
-					return
-				}
-				toast.error(error.response?.data?.message || 'Could not load your tasks')
+		let isCurrent = true
+		const requestTimer = window.setTimeout(() => {
+			axiosInstance.get('/board/my-tasks', {
+				params: { search, priority, board },
 			})
-			.finally(() => setIsLoading(false))
+				.then((tasksResponse) => {
+					if (isCurrent) setTasks(tasksResponse.data)
+				})
+				.catch((error) => {
+					if (!isCurrent) return
+					if ([404, 204].includes(error.response?.status)) {
+						setTasks([])
+						return
+					}
+					toast.error(error.response?.data?.message || 'Could not load your tasks')
+				})
+				.finally(() => {
+					if (isCurrent) setIsLoading(false)
+				})
+		}, 220)
+		return () => {
+			isCurrent = false
+			window.clearTimeout(requestTimer)
+		}
 	}, [search, priority, board])
 
 	const handleSearchChange = (event) => {
@@ -96,6 +105,15 @@ const MyTasks = () => {
 	const handleBoardChange = (event) => {
 		setIsLoading(true)
 		setBoard(event.target.value)
+	}
+
+	const hasFilters = Boolean(search || priority !== 'all' || board !== 'all')
+
+	const clearFilters = () => {
+		setIsLoading(true)
+		setSearch('')
+		setPriority('all')
+		setBoard('all')
 	}
 
 	const stats = useMemo(() => {
@@ -179,6 +197,22 @@ const MyTasks = () => {
 					</div>
 				</WorkspaceTopbar>
 				<div className='workspace-content my-tasks-page'>
+					<header className={`my-tasks-heading ${isLoading ? 'is-loading' : ''}`}>
+						{isLoading ? (
+							<div className='my-tasks-heading-loading' aria-hidden='true'>
+								<span className='my-tasks-heading-loading-eyebrow' />
+								<span className='my-tasks-heading-loading-title' />
+								<span className='my-tasks-heading-loading-copy' />
+							</div>
+						) : (
+							<div>
+								<p className='eyebrow'>Focus view</p>
+								<h1 className='my-tasks-title'>My tasks</h1>
+								<p className='my-tasks-heading-copy'>Everything assigned to you, grouped by room and ready for the next move.</p>
+							</div>
+						)}
+					</header>
+					{!isLoading && <>
 					<div className='my-tasks-stats-grid'>
 						<div className='my-tasks-stat-card'>
 							<div className='my-tasks-stat-top'>
@@ -230,6 +264,7 @@ const MyTasks = () => {
 							</select>
 							<ChevronDown size={14} className='my-tasks-select-icon' />
 						</div>
+						{hasFilters && <button type='button' className='my-tasks-clear-button' onClick={clearFilters}><RotateCcw size={14} /> Clear</button>}
 						<div className='my-tasks-filter-wrap'>
 							<select className='my-tasks-select' value={board} onChange={handleBoardChange}>
 								<option value='all'>All boards</option>
@@ -240,10 +275,15 @@ const MyTasks = () => {
 							<ChevronDown size={14} className='my-tasks-select-icon' />
 						</div>
 					</div>
+					</>}
 					{isLoading ? (
-						<div className='my-tasks-empty my-tasks-loading'>
-							<div className='loading-orbit' aria-hidden='true'><span /><span /><span /></div>
-							<p className='loading-label'>Loading your tasks<span className='loading-dots'>...</span></p>
+						<div className='my-tasks-loading' role='status' aria-live='polite'>
+							<div className='my-tasks-loading-stats'>{[1, 2, 3, 4].map((item) => <div className='my-tasks-loading-stat-card' key={item}><div><span /><i /></div><b /></div>)}</div>
+							<div className='my-tasks-loading-toolbar'><span className='search' /><span className='filter' /><span className='filter' /></div>
+							<div className='my-tasks-loading-group'>
+								<div className='my-tasks-loading-group-heading'><span /><div><b /><i /></div><em /></div>
+								{[1, 2, 3].map((item) => <div className='my-tasks-loading-row' key={item}><i /><span /><b /><em /></div>)}
+							</div>
 						</div>
 					) : tasks.length ? (
 						<div className='my-tasks-groups'>
@@ -303,8 +343,9 @@ const MyTasks = () => {
 					) : (
 						<div className='my-tasks-empty'>
 							<CheckCircle2 size={26} />
-							<strong>No tasks assigned yet</strong>
-							<span>When someone assigns a task to you, it will appear here.</span>
+							<strong>{hasFilters ? 'No tasks match these filters' : 'No tasks assigned yet'}</strong>
+							<span>{hasFilters ? 'Try a different search or clear the filters.' : 'When someone assigns a task to you, it will appear here.'}</span>
+							{hasFilters && <button type='button' className='my-tasks-empty-action' onClick={clearFilters}>Clear filters</button>}
 						</div>
 					)}
 				</div>

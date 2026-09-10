@@ -9,13 +9,12 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
 import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
 import AuthButton from '../ui/AuthButton'
 
 const Login = () => {
-	const { authUser, login, handleGoogleSignin, isLoggingIn } = useAuthStore()
+	const { authUser, login, handleSocialSignin, isLoggingIn } = useAuthStore()
 	const currentLanguage = authUser?.language || document.documentElement.lang || 'en'
 	const t = translations[currentLanguage] || translations.en
 
@@ -45,15 +44,15 @@ const Login = () => {
 		setFormData((prev) => ({ ...prev, password: '' }))
 	}
 
-	const handleGoogleSignIn = async () => {
-		await handleGoogleSignin()
+	const handleGoogleSignIn = () => handleSocialSignin('google')
+
+	const handleMicrosoftSignIn = async () => {
+		await handleSocialSignin('microsoft')
 	}
 
-	const handleMicrosoftSignIn = () =>
-		toast.info('Microsoft sign-in not implemented yet')
-
-	const handleAppleSignIn = () =>
-		toast.info('Apple sign-in not implemented yet')
+	const handleAppleSignIn = async () => {
+		await handleSocialSignin('apple')
+	}
 
 	return (
 		<div className='auth-page'>

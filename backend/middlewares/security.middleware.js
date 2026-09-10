@@ -4,10 +4,7 @@ const rateLimitResponse = {
 	message: 'Too many requests. Please try again later. Please wait a few minutes and try again.',
 }
 
-const getRateLimitKey = (req) => {
-	const userAgent = req.headers['user-agent'] || 'unknown-agent'
-	return `${ipKeyGenerator(req)}:${userAgent}`
-}
+const getRateLimitKey = (req) => ipKeyGenerator(req.ip)
 
 export const apiLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,

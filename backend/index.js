@@ -5,6 +5,7 @@ import helmet from 'helmet'
 import http from 'node:http'
 import { Server } from 'socket.io'
 import jwt from 'jsonwebtoken'
+import mongoose from 'mongoose'
 
 import { env } from './config/env.js'
 import { connectDB } from './lib/db.js'
@@ -49,9 +50,13 @@ io.use(async (socket, next) => {
 	try {
 		const cookies = Object.fromEntries((socket.handshake.headers.cookie || '').split('; ').filter(Boolean).map((item) => item.split('=')))
 		const decoded = jwt.verify(cookies.jwt, env.jwtSecret)
-		const user = await User.findById(decoded.userId).select('_id')
+		const user = await User.findById(decoded.userId).select('_id sessionVersion')
 		if (!user) return next(new Error('Unauthorized'))
+		if (Number(decoded.sessionVersion || 0) !== Number(user.sessionVersion || 0)) {
+			return next(new Error('Session expired'))
+		}
 		socket.userId = user._id.toString()
+		socket.sessionVersion = Number(user.sessionVersion || 0)
 		next()
 	} catch {
 		next(new Error('Unauthorized'))
@@ -59,39 +64,58 @@ io.use(async (socket, next) => {
 })
 
 io.on('connection', (socket) => {
+	const leaveBoard = () => {
+		if (!socket.boardId) return
+		const previousBoardId = socket.boardId
+		const previousUsers = boardPresence.get(previousBoardId)
+		if (previousUsers) {
+			const count = previousUsers.get(socket.userId) || 0
+			if (count <= 1) previousUsers.delete(socket.userId)
+			else previousUsers.set(socket.userId, count - 1)
+			broadcastBoardPresence(previousBoardId)
+			if (previousUsers.size === 0) boardPresence.delete(previousBoardId)
+		}
+		socket.leave(`board:${previousBoardId}`)
+		socket.boardId = null
+	}
+
 	socket.join(`user:${socket.userId}`)
 	socket.on('join-board', async (boardId) => {
-		if (socket.boardId === boardId) return
-		if (socket.boardId) {
-			const previousUsers = boardPresence.get(socket.boardId)
-			if (previousUsers) {
-				const count = previousUsers.get(socket.userId) || 0
-				if (count <= 1) previousUsers.delete(socket.userId)
-				else previousUsers.set(socket.userId, count - 1)
-				broadcastBoardPresence(socket.boardId)
+		try {
+			if (!mongoose.Types.ObjectId.isValid(boardId)) return
+			const currentUser = await User.findById(socket.userId).select('_id sessionVersion')
+			if (!currentUser || Number(currentUser.sessionVersion || 0) !== socket.sessionVersion) {
+				leaveBoard()
+				socket.disconnect(true)
+				return
 			}
-			socket.leave(`board:${socket.boardId}`)
-			socket.boardId = null
-		}
-		const board = await Board.findById(boardId).select('createdBy')
-		const membership = await BoardMember.findOne({ board: boardId, user: socket.userId })
-		if (board && (board.createdBy.toString() === socket.userId || membership)) {
-			socket.join(`board:${boardId}`)
-			socket.boardId = boardId
-			const users = boardPresence.get(boardId) || new Map()
-			const presence = users.get(socket.userId) || {
-				connections: 0,
-				lastSeenAt: Date.now(),
+			if (socket.boardId === boardId) return
+			leaveBoard()
+			const board = await Board.findById(boardId).select('createdBy')
+			const membership = await BoardMember.findOne({ board: boardId, user: socket.userId })
+			if (board && (board.createdBy.toString() === socket.userId || membership)) {
+				socket.join(`board:${boardId}`)
+				socket.boardId = boardId
+				const users = boardPresence.get(boardId) || new Map()
+				const presence = users.get(socket.userId) || { connections: 0, lastSeenAt: Date.now() }
+				presence.connections += 1
+				presence.lastSeenAt = Date.now()
+				users.set(socket.userId, presence)
+				boardPresence.set(boardId, users)
+				broadcastBoardPresence(boardId)
 			}
-			presence.connections += 1
-			presence.lastSeenAt = Date.now()
-			users.set(socket.userId, presence)
-			boardPresence.set(boardId, users)
-			broadcastBoardPresence(boardId)
+		} catch (error) {
+			console.warn('Socket board join failed:', error.message)
 		}
 	})
-	socket.on('presence-heartbeat', () => {
+	socket.on('presence-heartbeat', async () => {
 		if (!socket.boardId) return
+		const currentUser = await User.findById(socket.userId).select('_id sessionVersion').catch(() => null)
+		if (!currentUser || Number(currentUser.sessionVersion || 0) !== socket.sessionVersion) {
+			leaveBoard()
+			socket.disconnect(true)
+			return
+		}
 		const users = boardPresence.get(socket.boardId)
 		const presence = users?.get(socket.userId)
 		if (!presence) return
@@ -99,14 +123,7 @@ io.on('connection', (socket) => {
 		broadcastBoardPresence(socket.boardId)
 	})
 	socket.on('disconnect', () => {
-		if (!socket.boardId) return
-		const users = boardPresence.get(socket.boardId)
-		if (!users) return
-		const presence = users.get(socket.userId)
-		if (!presence || presence.connections <= 1) users.delete(socket.userId)
-		else presence.connections -= 1
-		broadcastBoardPresence(socket.boardId)
-		if (users.size === 0) boardPresence.delete(socket.boardId)
+		leaveBoard()
 	})
 })
 

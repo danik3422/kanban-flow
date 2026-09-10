@@ -50,7 +50,7 @@ const getInitialSettings = (authUser) => {
 }
 
 const Settings = () => {
-	const { authUser, checkAuth, connectGoogleAccount } = useAuthStore()
+	const { authUser, checkAuth, connectSocialAccount } = useAuthStore()
 	const [settings, setSettings] = useState(() => getInitialSettings(authUser))
 	const [isSaving, setIsSaving] = useState(false)
 	const isLocalAccount = authUser?.provider === 'local'
@@ -132,28 +132,28 @@ const Settings = () => {
 								<button
 									type='button'
 									className='quiet-button security-provider-button'
-									onClick={connectGoogleAccount}
+									onClick={() => connectSocialAccount('google')}
 									disabled={!isLocalAccount}
 								>
 									{isLocalAccount ? 'Connect Google' : 'Google connected'}
 								</button>
 							</div>
-							<div className='security-provider-row is-disabled'>
+							<div className={`security-provider-row ${isLocalAccount ? '' : 'is-disabled'}`}>
 								<div>
 									<strong>Microsoft</strong>
-									<p>Coming soon.</p>
+									<p>Use Microsoft sign-in with the same account.</p>
 								</div>
-								<button type='button' className='quiet-button security-provider-button' disabled>
-									Connect Microsoft
+								<button type='button' className='quiet-button security-provider-button' onClick={() => connectSocialAccount('microsoft')} disabled={!isLocalAccount}>
+									{isLocalAccount ? 'Connect Microsoft' : 'Microsoft connected'}
 								</button>
 							</div>
-							<div className='security-provider-row is-disabled'>
+							<div className={`security-provider-row ${isLocalAccount ? '' : 'is-disabled'}`}>
 								<div>
 									<strong>Apple</strong>
-									<p>Coming soon.</p>
+									<p>Use Apple sign-in with the same account.</p>
 								</div>
-								<button type='button' className='quiet-button security-provider-button' disabled>
-									Connect Apple
+								<button type='button' className='quiet-button security-provider-button' onClick={() => connectSocialAccount('apple')} disabled={!isLocalAccount}>
+									{isLocalAccount ? 'Connect Apple' : 'Apple connected'}
 								</button>
 							</div>
 						</div>

@@ -32,6 +32,8 @@ export const env = {
 	corsOrigin: parseCorsOrigins(),
 	frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 	mailFrom: process.env.MAIL_FROM || '',
+	mailReplyTo: process.env.MAIL_REPLY_TO || '',
+	mailRedirectTo: process.env.MAIL_REDIRECT_TO || '',
 	passwordResetMinutes: Number(process.env.PASSWORD_RESET_MINUTES) || 30,
 	emailVerificationMinutes:
 		Number(process.env.EMAIL_VERIFICATION_MINUTES) || 60,
