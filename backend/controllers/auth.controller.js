@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
+import { getAuth } from 'firebase-admin/auth'
 import { env } from '../config/env.js'
 import cloudinary from '../lib/cloudinary.js'
 import admin from '../lib/firebaseAdmin.js'
@@ -40,23 +41,41 @@ export const assertCurrentPassword = async (user, currentPassword) => {
 export const getDuplicateAuthErrorMessage = (error) =>
 	error?.code === 11000 ? 'Email or provider identity is already registered.' : null
 
+export const verifySocialProviderToken = async (idToken, provider) => {
+	let decodedToken
+	try {
+		decodedToken = await getAuth().verifyIdToken(idToken)
+	} catch (error) {
+		if (error?.code === 'auth/id-token-expired' || error?.code === 'auth/argument-error') {
+			const tokenError = new Error('Invalid or expired provider token.')
+			tokenError.statusCode = 401
+			throw tokenError
+		}
+		throw error
+	}
+
+	assertProviderEmailVerified(decodedToken)
+	const providerByFirebaseId = {
+		'google.com': 'google',
+		'microsoft.com': 'microsoft',
+		'apple.com': 'apple',
+	}
+	if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) {
+		const error = new Error('Social provider does not match the token.')
+		error.statusCode = 401
+		throw error
+	}
+	return decodedToken
+}
+
 export const socialSignin = async (req, res) => {
 	try {
-		if (!admin.apps.length) {
+		if (!admin.getApps().length) {
 			return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		}
 
 		const { idToken, provider } = req.body
-		const decodedToken = await admin.auth().verifyIdToken(idToken)
-		assertProviderEmailVerified(decodedToken)
-		const providerByFirebaseId = {
-			'google.com': 'google',
-			'microsoft.com': 'microsoft',
-			'apple.com': 'apple',
-		}
-		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) {
-			return res.status(401).json({ message: 'Social provider does not match the token.' })
-		}
+		const decodedToken = await verifySocialProviderToken(idToken, provider)
 
 		const { email, name, picture } = decodedToken
 		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
@@ -91,12 +110,9 @@ export const socialSignin = async (req, res) => {
 
 export const socialSignup = async (req, res) => {
 	try {
-		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		if (!admin.getApps().length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider } = req.body
-		const decodedToken = await admin.auth().verifyIdToken(idToken)
-		assertProviderEmailVerified(decodedToken)
-		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
-		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
+		const decodedToken = await verifySocialProviderToken(idToken, provider)
 		const { email, name, picture } = decodedToken
 		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
 		const existingUser = await User.findOne({ email: email.toLowerCase() })
@@ -117,12 +133,9 @@ export const socialSignup = async (req, res) => {
 
 export const connectSocialAccount = async (req, res) => {
 	try {
-		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		if (!admin.getApps().length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider, currentPassword } = req.body
-		const decodedToken = await admin.auth().verifyIdToken(idToken)
-		assertProviderEmailVerified(decodedToken)
-		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
-		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
+		const decodedToken = await verifySocialProviderToken(idToken, provider)
 		await assertProviderIdentityAvailable({ provider, providerUid: decodedToken.uid, userId: req.user._id })
 		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
 		const user = await User.findById(req.user._id)
