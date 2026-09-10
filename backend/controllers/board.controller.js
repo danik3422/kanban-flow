@@ -776,7 +776,7 @@ export const updateColumn = async (req, res) => {
 	try {
 		const columnId = req.params.id
 		const userId = req.user._id
-		const { title } = req.body
+		const { title, pinned } = req.body
 
 		if (!mongoose.Types.ObjectId.isValid(columnId)) {
 			return res.status(400).json({ message: 'Invalid column ID' })
@@ -802,11 +802,20 @@ export const updateColumn = async (req, res) => {
 			})
 		}
 
-		if (!title || title.trim() === '') {
-			return res.status(400).json({ message: 'Column title is required' })
+		if (typeof title !== 'undefined') {
+			if (!title || title.trim() === '') {
+				return res.status(400).json({ message: 'Column title is required' })
+			}
+			column.title = title.trim()
 		}
 
-		column.title = title.trim()
+		if (typeof pinned !== 'undefined') {
+			if (typeof pinned !== 'boolean') {
+				return res.status(400).json({ message: 'Pinned must be a boolean' })
+			}
+			column.pinned = pinned
+		}
+
 		const updatedColumn = await column.save()
 		const columnData = updatedColumn.toObject()
 

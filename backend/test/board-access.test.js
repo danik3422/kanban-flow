@@ -293,6 +293,31 @@ describe('board access and invitation flow', () => {
 		)
 	})
 
+	it('persists a pinned column flag in the column record and shares it through board columns fetch', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const column = await Column.create({
+			title: 'Pinned list',
+			board: board._id,
+			position: 0,
+			pinned: false,
+		})
+
+		const response = await request(app)
+			.patch(`/api/board/columns/${column._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Pinned list', pinned: true })
+
+		assert.equal(response.status, 200)
+		assert.equal(response.body.pinned, true)
+
+		const columnsResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/columns`)
+			.set('Cookie', authCookie(owner._id))
+
+		assert.equal(columnsResponse.status, 200)
+		assert.equal(columnsResponse.body[0].pinned, true)
+	})
+
 	it('moves a task between columns and exposes the new order to members', async () => {
 		const { owner, board } = await createBoardWithOwner()
 		const member = await createUser('task-viewer@example.com', 'Task viewer')

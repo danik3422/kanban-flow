@@ -18,6 +18,7 @@ const InviteMemberModal = ({
 	boardOwnerId,
 	presenceByUserId = {},
 	canManageMembers = false,
+	showPresence = false,
 	isOpen,
 	onChange,
 	onClose,
@@ -32,9 +33,9 @@ const InviteMemberModal = ({
 	const [membersPage, setMembersPage] = useState(1)
 	const [invitesPage, setInvitesPage] = useState(1)
 	const pageSize = 5
-	const onlineCount = Object.values(presenceByUserId).filter(
-		(status) => status === 'online',
-	).length
+	const onlineCount = showPresence
+		? Object.values(presenceByUserId).filter((status) => status === 'online').length
+		: 0
 	const membersPageCount = Math.max(1, Math.ceil(members.length / pageSize))
 	const invitesPageCount = Math.max(1, Math.ceil(invites.length / pageSize))
 	const visibleMembers = members.slice(
@@ -103,10 +104,12 @@ const InviteMemberModal = ({
 								: 'See who is working in this room.'}
 						</p>
 					</div>
-					<span className='share-online-count'>
-						<span className='share-online-dot' />{' '}
-						{onlineCount} online
-					</span>
+					{showPresence && (
+						<span className='share-online-count'>
+							<span className='share-online-dot' />{' '}
+							{onlineCount} online
+						</span>
+					)}
 					<button
 						type='button'
 						className='icon-button'

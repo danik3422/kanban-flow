@@ -15,6 +15,7 @@ import {
 	MessageSquare,
 	MoreHorizontal,
 	PencilLine,
+	Pin,
 	Plus,
 	Play,
 	Sparkles,
@@ -80,6 +81,7 @@ const saveLocalSorts = (boardId, userId, sorts) => {
 	localStorage.setItem(getSortStorageKey(boardId, userId), JSON.stringify(sorts))
 }
 
+
 const setNativeDragImage = (event, element) => {
 	const rect = element.getBoundingClientRect()
 	const preview = element.cloneNode(true)
@@ -140,6 +142,7 @@ const Workspace = () => {
 	const [boardInvites, setBoardInvites] = useState([])
 	const [isInvitationsExpanded, setIsInvitationsExpanded] = useState(false)
 	const [presenceByUserId, setPresenceByUserId] = useState({})
+	const [realtimeStatus, setRealtimeStatus] = useState('connecting')
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
@@ -192,6 +195,28 @@ const Workspace = () => {
 	const visibleBoardInvites = boardInvites.filter(
 		(invite) => invite.status !== 'accepted',
 	)
+
+	const toggleColumnPin = async (columnId) => {
+		const column = columns.find((item) => item._id === columnId)
+		if (!column) return
+		const nextPinned = !column.pinned
+		try {
+			const { data } = await axiosInstance.patch(
+				`/board/columns/${columnId}`,
+				{ pinned: nextPinned },
+			)
+			setColumns((current) =>
+				current.map((item) =>
+					item._id === columnId
+						? { ...item, pinned: data.pinned }
+						: item,
+				),
+			)
+			toast.success(nextPinned ? 'List pinned' : 'List unpinned')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not update pinned list')
+		}
+	}
 
 	const refreshBoard = async (board) => {
 		if (!board) return
@@ -312,24 +337,70 @@ const Workspace = () => {
 				event.target instanceof Element
 					? event.target
 					: event.target.parentElement
-			const card = targetElement?.closest('.task-card')
-			const taskList = card?.closest('.task-list')
-			if (!card || !taskList) return
+			const columnElement = targetElement?.closest('.kanban-column')
+			if (!columnElement) return
+
 			document
 				.querySelectorAll('.task-card.drop-before, .task-card.drop-after')
 				.forEach((item) => item.classList.remove('drop-before', 'drop-after'))
-			const column = card.closest('.kanban-column')
+
 			const columnIndex = Array.from(
 				document.querySelectorAll('.kanban-column'),
-			).indexOf(column)
+			).indexOf(columnElement)
 			const targetColumn = columns[columnIndex]
-			const taskIndex = Array.from(taskList.querySelectorAll('.task-card')).indexOf(card)
-			const isBefore =
-				event.clientY < card.getBoundingClientRect().top + card.offsetHeight / 2
-			card.classList.add(isBefore ? 'drop-before' : 'drop-after')
+			if (!targetColumn) return
+
+			const taskList = columnElement.querySelector('.task-list')
+			if (!taskList) return
+
+			const draggedId = draggedTask?._id
+			const cards = Array.from(taskList.querySelectorAll('.task-card')).filter(
+				(card) => card.dataset?.taskId !== draggedId,
+			)
+			const currentCard = targetElement?.closest('.task-card')
+			const isSelfCard = currentCard?.dataset?.taskId === draggedId
+			if (currentCard && !isSelfCard && currentCard.closest('.task-list') === taskList) {
+				const taskIndex = cards.indexOf(currentCard)
+				const rect = currentCard.getBoundingClientRect()
+				const isBefore = event.clientY < rect.top + rect.height / 2
+				currentCard.classList.add(isBefore ? 'drop-before' : 'drop-after')
+				setDropIndicator({
+					columnId: targetColumn._id,
+					index: taskIndex + (isBefore ? 0 : 1),
+				})
+				return
+			}
+
+			if (cards.length === 0) {
+				setDropIndicator({
+					columnId: targetColumn._id,
+					index: 0,
+				})
+				return
+			}
+
+			let insertionIndex = 0
+			let beforeCard = null
+			for (const listCard of cards) {
+				const rect = listCard.getBoundingClientRect()
+				if (event.clientY < rect.top + rect.height / 2) {
+					beforeCard = listCard
+					break
+				}
+				insertionIndex += 1
+			}
+			if (beforeCard) {
+				beforeCard.classList.add('drop-before')
+				setDropIndicator({
+					columnId: targetColumn._id,
+					index: insertionIndex,
+				})
+				return
+			}
+
 			setDropIndicator({
-				columnId: targetColumn?._id,
-				index: taskIndex + (isBefore ? 0 : 1),
+				columnId: targetColumn._id,
+				index: cards.length,
 			})
 		}
 		document.addEventListener('dragover', handleDragOver)
@@ -358,12 +429,12 @@ const Workspace = () => {
 			let preview = columnDragOverlayRef.current
 			if (!preview) {
 				preview = session.element.cloneNode(true)
-					preview.classList.remove('is-dragging', 'column-drop-target')
-					preview.classList.add('drag-preview', 'drag-preview-column', 'column-drag-dom-preview')
-					preview.dataset.dragPreview = 'true'
-					preview.setAttribute('aria-hidden', 'true')
-					preview.style.pointerEvents = 'none'
-					document.body.appendChild(preview)
+				preview.classList.remove('is-dragging', 'column-drop-target')
+				preview.classList.add('drag-preview', 'drag-preview-column', 'column-drag-dom-preview')
+				preview.dataset.dragPreview = 'true'
+				preview.setAttribute('aria-hidden', 'true')
+				preview.style.pointerEvents = 'none'
+				document.body.appendChild(preview)
 				columnDragOverlayRef.current = preview
 			}
 			Object.assign(preview.style, {
@@ -373,33 +444,39 @@ const Workspace = () => {
 				top: `${event.clientY}px`,
 				transform: 'translate(-50%, -24px) rotate(1deg)',
 			})
-			const centers = Object.fromEntries(
-				columns.map((column) => {
-					const element = document.querySelector(
-						`.kanban-column[data-column-id="${column._id}"]:not([data-drag-preview="true"])`,
-					)
-					const rect = element?.getBoundingClientRect()
-					return [column._id, rect ? rect.left + rect.width / 2 : Number.POSITIVE_INFINITY]
-				}),
-			)
-			const normalizedIndex = getColumnInsertionIndex(
-				columns,
-				session.column._id,
-				centers,
-				event.clientX,
-			)
-			const remainingColumns = columns.filter((column) => column._id !== session.column._id)
-			const targetId = remainingColumns[normalizedIndex]?._id || null
-			if (session.targetIndex !== normalizedIndex) {
-				session.targetIndex = normalizedIndex
-				session.targetId = targetId
-				setColumnDropTarget(targetId)
-				setColumnDropAfterLast(!targetId)
+			if (!session.pinned) {
+				const centers = Object.fromEntries(
+					columns.map((column) => {
+						const element = document.querySelector(
+							`.kanban-column[data-column-id="${column._id}"]:not([data-drag-preview="true"])`,
+						)
+						const rect = element?.getBoundingClientRect()
+						return [column._id, rect ? rect.left + rect.width / 2 : Number.POSITIVE_INFINITY]
+					}),
+				)
+				const normalizedIndex = getColumnInsertionIndex(
+					columns,
+					session.column._id,
+					centers,
+					event.clientX,
+				)
+				const remainingColumns = columns.filter((column) => column._id !== session.column._id)
+				const targetId = remainingColumns[normalizedIndex]?._id || null
+				if (session.targetIndex !== normalizedIndex) {
+					session.targetIndex = normalizedIndex
+					session.targetId = targetId
+					setColumnDropTarget(targetId)
+					setColumnDropAfterLast(!targetId)
+				}
 			}
 		}
 		const handlePointerUp = () => {
 			const session = columnDragSessionRef.current
-			if (session?.active && Number.isInteger(session.targetIndex)) {
+			if (
+				session?.active &&
+				!session.pinned &&
+				Number.isInteger(session.targetIndex)
+			) {
 				void moveColumn(session.column, session.targetId, session.targetIndex)
 			}
 			columnDragOverlayRef.current?.remove()
@@ -433,13 +510,29 @@ const Workspace = () => {
 	}, [columns])
 
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) return
-		const socket = io(socketUrl, { withCredentials: true })
+		if (!selectedBoard || isDevAuthBypass) {
+			setRealtimeStatus(isDevAuthBypass ? 'connected' : 'offline')
+			return
+		}
+		setRealtimeStatus('connecting')
+		const socket = io(socketUrl, {
+			withCredentials: true,
+			reconnection: true,
+			reconnectionAttempts: Infinity,
+			reconnectionDelay: 500,
+			reconnectionDelayMax: 5000,
+			timeout: 8000,
+		})
 		const heartbeat = () => socket.emit('presence-heartbeat')
 		socket.on('connect', () => {
+			setRealtimeStatus('connected')
 			socket.emit('join-board', selectedBoard._id)
 			heartbeat()
 		})
+		socket.on('disconnect', () => setRealtimeStatus('reconnecting'))
+		socket.on('connect_error', () => setRealtimeStatus('reconnecting'))
+		socket.io.on('reconnect_attempt', () => setRealtimeStatus('reconnecting'))
+		socket.io.on('reconnect_failed', () => setRealtimeStatus('offline'))
 		socket.on('board:presence', (presence) => {
 			setPresenceByUserId(
 				Object.fromEntries(presence.map((item) => [item.userId, item.status])),
@@ -543,6 +636,7 @@ const Workspace = () => {
 		})
 		return () => {
 			setPresenceByUserId({})
+			setRealtimeStatus('offline')
 			window.clearInterval(heartbeatTimer)
 			socket.disconnect()
 		}
@@ -1420,6 +1514,9 @@ const Workspace = () => {
 	}
 
 	const visibleColumns = columns
+		.filter((column) => column.pinned)
+		.concat(columns.filter((column) => !column.pinned))
+
 	const isBoardOwner = selectedBoard?.createdBy === authUser?._id
 
 	return (
@@ -1440,6 +1537,7 @@ const Workspace = () => {
 					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
 					isSidebarCollapsed={isSidebarCollapsed}
 					onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}
+					realtimeStatus={selectedBoard?._id ? realtimeStatus : null}
 				>
 							<div className='workspace-context-copy'>
 								<div className='workspace-context-label'>My workspace</div>
@@ -1488,18 +1586,6 @@ const Workspace = () => {
 					/>
 				) : (
 					<div className='workspace-content'>
-						<div className='workspace-heading'>
-							<div>
-								<p className='eyebrow'>Your command center</p>
-								<h1>
-									Good morning, {authUser?.name?.split(' ')[0] || 'there'}.
-								</h1>
-								<p className='heading-copy'>
-									Keep the important work moving, one clear step at a time.
-								</p>
-							</div>
-						</div>
-
 						{isLoading ? (
 							<div className='empty-state workspace-loading-state' role='status'>
 								<div className='loading-orbit' aria-hidden='true'>
@@ -1608,9 +1694,6 @@ const Workspace = () => {
 									</section>
 								)}
 								<div className='board-toolbar'>
-									<div className='toolbar-note'>
-										<CheckCircle2 size={17} /> Small steps add up.
-									</div>
 									<div className='board-toolbar-actions'>
 										<button
 											className='quiet-button'
@@ -1760,7 +1843,7 @@ const Workspace = () => {
 														/>
 													)}
 											<section
-												className={`kanban-column ${draggedTask ? 'drop-target-ready' : ''} ${draggedColumn?._id === column._id ? 'is-dragging' : ''} ${draggedColumn && draggedColumn._id !== column._id ? 'column-drop-target' : ''}`}
+												className={`kanban-column ${column.pinned ? 'pinned-column' : ''} ${draggedTask ? 'drop-target-ready' : ''} ${draggedColumn?._id === column._id ? 'is-dragging' : ''} ${draggedColumn && draggedColumn._id !== column._id ? 'column-drop-target' : ''}`}
 												key={column._id}
 												data-column-id={column._id}
 												onDragOver={(event) => {
@@ -1793,8 +1876,9 @@ const Workspace = () => {
 														width: event.currentTarget.getBoundingClientRect().width,
 														height: event.currentTarget.closest('.kanban-column').getBoundingClientRect().height,
 														element: event.currentTarget.closest('.kanban-column'),
-														active: false,
-														targetId: null,
+																active: false,
+																targetId: null,
+																pinned: Boolean(column.pinned),
 													}
 												document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
 													setDraggedColumnHeight(
@@ -1840,18 +1924,32 @@ const Workspace = () => {
 														)}
 														<span>{column.tasks.length}</span>
 													</div>
-													<div className='column-menu-wrap' style={{ position: 'relative' }}>
+												<div className='column-menu-wrap' style={{ position: 'relative' }}>
+													{column.pinned && (
 														<button
-															className='icon-button subtle'
-															onClick={() => setOpenColumnMenuId(
-																openColumnMenuId === column._id ? null : column._id
-															)}
-															aria-label={`More options for ${column.title}`}
-															title='More options'
+															type='button'
+															className='icon-button subtle active'
+															onClick={(event) => {
+																event.stopPropagation()
+																toggleColumnPin(column._id)
+															}}
+															aria-label='Unpin list'
+															title='Unpin list'
 														>
-															<MoreHorizontal size={18} />
+															<Pin size={16} fill='currentColor' />
 														</button>
-														{openColumnMenuId === column._id && (
+													)}
+													<button
+														className='icon-button subtle'
+														onClick={() => setOpenColumnMenuId(
+															openColumnMenuId === column._id ? null : column._id
+														)}
+														aria-label={`More options for ${column.title}`}
+														title='More options'
+													>
+														<MoreHorizontal size={18} />
+													</button>
+{openColumnMenuId === column._id && (
 															<div
 																className='column-menu-list'
 																onMouseDown={(event) => event.stopPropagation()}
@@ -1904,6 +2002,16 @@ const Workspace = () => {
 																		</div>
 																	)}
 																</div>
+																<button
+																type='button'
+																onClick={() => {
+																	toggleColumnPin(column._id)
+																	setOpenColumnMenuId(null)
+																}}
+																className='column-menu-item'
+																>
+																<Pin size={14} /> {column.pinned ? 'Unpin list' : 'Pin list'}
+																</button>
 																<div className='column-menu-divider' />
 																<button
 																	type='button'
@@ -1938,6 +2046,7 @@ const Workspace = () => {
 																	)}
 															<article
 															className={`task-card ${draggedTask?._id === task._id ? 'is-dragging' : ''}`}
+													data-task-id={task._id}
 																draggable={editingTask?._id !== task._id}
 															onDragStart={(event) => {
 																event.dataTransfer.effectAllowed = 'move'
@@ -2184,6 +2293,7 @@ const Workspace = () => {
 				currentUserId={authUser?._id}
 				boardOwnerId={selectedBoard?.createdBy}
 				presenceByUserId={presenceByUserId}
+				showPresence={Boolean(selectedBoard?._id)}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}

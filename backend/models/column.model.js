@@ -20,6 +20,10 @@ const columnSchema = new mongoose.Schema(
 			enum: ['date-newest', 'date-oldest', 'name-alpha', 'custom', null],
 			default: null,
 		},
+		pinned: {
+			type: Boolean,
+			default: false,
+		},
 	},
 	{ timestamps: true }
 )

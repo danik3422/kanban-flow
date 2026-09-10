@@ -1,4 +1,12 @@
-import { LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import {
+	LayoutDashboard,
+	LoaderCircle,
+	Menu,
+	PanelLeftClose,
+	PanelLeftOpen,
+	Wifi,
+	WifiOff,
+} from 'lucide-react'
 import AccountDropdown from './AccountDropdown'
 import NotificationCenter from './NotificationCenter'
 
@@ -7,6 +15,7 @@ const WorkspaceTopbar = ({
 	onSidebarToggle,
 	isSidebarCollapsed,
 	onSidebarCollapse,
+	realtimeStatus,
 	children,
 }) => (
 	<header className='workspace-topbar'>
@@ -36,6 +45,26 @@ const WorkspaceTopbar = ({
 			</div>
 		</div>
 		<div className='topbar-actions'>
+			{realtimeStatus && (
+				<div
+					className={`realtime-status realtime-status-${realtimeStatus}`}
+					title={`Realtime: ${realtimeStatus}`}
+					aria-live='polite'
+				>
+					{realtimeStatus === 'connected' && <Wifi size={14} />}
+					{realtimeStatus === 'reconnecting' && (
+						<LoaderCircle className='realtime-status-spin' size={14} />
+					)}
+					{realtimeStatus === 'offline' && <WifiOff size={14} />}
+					<span>
+						{realtimeStatus === 'connected'
+							? 'Live'
+							: realtimeStatus === 'reconnecting'
+								? 'Reconnecting'
+								: 'Offline'}
+					</span>
+				</div>
+			)}
 			<NotificationCenter />
 			<AccountDropdown />
 		</div>

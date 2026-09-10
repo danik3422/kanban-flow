@@ -11,6 +11,7 @@ import { Toaster } from 'sonner'
 import Navbar from './components/Navbar'
 import { axiosInstance } from './lib/axios'
 import BoardInvite from './pages/BoardInvite'
+import CalendarPage from './pages/Calendar'
 import EditProfile from './pages/EditProfile'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -144,6 +145,10 @@ export const App = () => {
 						<Route
 							path='/my-tasks'
 							element={authUser ? <MyTasks /> : <Navigate to='/login' replace />}
+						/>
+						<Route
+							path='/calendar'
+							element={authUser ? <CalendarPage /> : <Navigate to='/login' replace />}
 						/>
 						<Route
 							path='/workspaces/:boardId'

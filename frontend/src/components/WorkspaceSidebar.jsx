@@ -1,4 +1,5 @@
 import {
+	CalendarDays,
 	ChevronDown,
 	ClipboardList,
 	Home,
@@ -123,8 +124,9 @@ const WorkspaceSidebar = ({
 	)
 	const sharedBoards = boards.filter((board) => board.access === 'invited')
 	const navItems = [
-		{ icon: <Home size={17} />, label: 'Workspace home', to: '/workspaces' },
+		{ icon: <Home size={17} />, label: 'Workspace', to: '/workspaces' },
 		{ icon: <ClipboardList size={17} />, label: 'My tasks', to: '/my-tasks' },
+		{ icon: <CalendarDays size={17} />, label: 'Calendar', disabled: true },
 		{ icon: <Users size={17} />, label: 'Team', disabled: true },
 	]
 
@@ -147,7 +149,7 @@ const WorkspaceSidebar = ({
 						</Link>
 					</div>
 					<div className='workspace-space-label'>
-						<span>My workspace</span>
+						<span>Workspace</span>
 						<span className='workspace-private'>Private</span>
 					</div>
 					<nav className='workspace-primary-nav'>

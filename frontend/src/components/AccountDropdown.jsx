@@ -1,5 +1,6 @@
 import { ChevronDown, LogOut, Palette, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '../store/useAuthStore'
@@ -103,10 +104,13 @@ const AccountDropdown = () => {
 
 			{isDropdownOpen && (
 				<>
-					<div
-						className={`account-backdrop ${isClosing ? 'is-closing' : ''}`}
-						onClick={closeMenu}
-					/>
+					{createPortal(
+						<div
+							className={`account-backdrop ${isClosing ? 'is-closing' : ''}`}
+							onClick={closeMenu}
+						/>,
+						document.body,
+					)}
 					<div
 						ref={dropdownRef}
 						className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''}`}

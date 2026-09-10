@@ -1,5 +1,12 @@
-import { ArrowUpRight, CalendarDays, CheckCircle2, ChevronRight, ClipboardList } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import {
+	AlertTriangle,
+	ArrowUpRight,
+	CalendarDays,
+	CheckCircle2,
+	ChevronRight,
+	ClipboardList,
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
@@ -29,6 +36,38 @@ const MyTasks = () => {
 			.finally(() => setIsLoading(false))
 	}, [])
 
+	const stats = useMemo(() => {
+		const today = new Date()
+		today.setHours(0, 0, 0, 0)
+		const endOfWeek = new Date(today)
+		endOfWeek.setDate(today.getDate() + 7)
+
+		const assignedCount = tasks.length
+		const overdueCount = tasks.filter((task) => {
+			if (!task.dueDate) return false
+			const dueDate = new Date(task.dueDate)
+			dueDate.setHours(0, 0, 0, 0)
+			return dueDate < today && !task.checklist?.every((item) => item.completed)
+		}).length
+		const dueThisWeekCount = tasks.filter((task) => {
+			if (!task.dueDate) return false
+			const dueDate = new Date(task.dueDate)
+			dueDate.setHours(0, 0, 0, 0)
+			return dueDate >= today && dueDate <= endOfWeek
+		}).length
+		const completedCount = tasks.filter((task) => {
+			if (!task.checklist || task.checklist.length === 0) return false
+			return task.checklist.every((item) => item.completed)
+		}).length
+
+		return {
+			assignedCount,
+			overdueCount,
+			dueThisWeekCount,
+			completedCount,
+		}
+	}, [tasks])
+
 	return (
 		<div className='workspace-shell flex h-screen'>
 			<WorkspaceSidebar
@@ -57,13 +96,35 @@ const MyTasks = () => {
 					</div>
 				</WorkspaceTopbar>
 				<div className='workspace-content my-tasks-page'>
-					<div className='workspace-heading my-tasks-heading'>
-						<div>
-							<p className='eyebrow'>Your focus</p>
-							<h1>My tasks</h1>
-							<p className='heading-copy'>Everything assigned to you, across your rooms.</p>
+					<div className='my-tasks-stats-grid'>
+						<div className='my-tasks-stat-card'>
+							<div className='my-tasks-stat-top'>
+								<span className='my-tasks-stat-title'>Assigned to you</span>
+								<span className='my-tasks-stat-icon my-tasks-stat-icon-assigned'><ClipboardList size={22} /></span>
+							</div>
+							<span className='my-tasks-stat-value'>{stats.assignedCount}</span>
 						</div>
-						<span className='my-tasks-count'>{tasks.length}</span>
+						<div className='my-tasks-stat-card'>
+							<div className='my-tasks-stat-top'>
+								<span className='my-tasks-stat-title'>Overdue</span>
+								<span className='my-tasks-stat-icon my-tasks-stat-icon-overdue'><AlertTriangle size={22} /></span>
+							</div>
+							<span className='my-tasks-stat-value'>{stats.overdueCount}</span>
+						</div>
+						<div className='my-tasks-stat-card'>
+							<div className='my-tasks-stat-top'>
+								<span className='my-tasks-stat-title'>Due this week</span>
+								<span className='my-tasks-stat-icon my-tasks-stat-icon-thisweek'><CalendarDays size={22} /></span>
+							</div>
+							<span className='my-tasks-stat-value'>{stats.dueThisWeekCount}</span>
+						</div>
+						<div className='my-tasks-stat-card'>
+							<div className='my-tasks-stat-top'>
+								<span className='my-tasks-stat-title'>Completed</span>
+								<span className='my-tasks-stat-icon my-tasks-stat-icon-completed'><CheckCircle2 size={22} /></span>
+							</div>
+							<span className='my-tasks-stat-value'>{stats.completedCount}</span>
+						</div>
 					</div>
 					{isLoading ? (
 						<div className='my-tasks-empty my-tasks-loading'>

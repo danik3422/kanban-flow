@@ -15,7 +15,8 @@ if (isProduction && configuredJwtSecret.length < 32) {
 }
 
 const parseCorsOrigins = () => {
-	const raw = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5179'
+	const raw =
+		process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5179'
 	return raw
 		.split(',')
 		.map((origin) => origin.trim())
