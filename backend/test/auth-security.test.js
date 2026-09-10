@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 
-import { assertProviderEmailVerified } from '../controllers/auth.controller.js'
+import { assertProviderEmailVerified, assertProviderIdentityAvailable } from '../controllers/auth.controller.js'
 import User from '../models/user.model.js'
 
 let mongoServer
@@ -37,5 +37,14 @@ describe('social auth security helpers', () => {
 			User.create({ email: 'provider-two@example.com', provider: 'google', providerUid: 'google-uid' }),
 			(error) => error.code === 11000,
 		)
+	})
+
+	it('rejects a provider identity owned by another user', async () => {
+		const owner = await User.create({ email: 'linked@example.com', provider: 'google', providerUid: 'owned-uid' })
+		await assert.rejects(
+			assertProviderIdentityAvailable({ provider: 'google', providerUid: 'owned-uid', userId: new mongoose.Types.ObjectId() }),
+			(error) => error.statusCode === 409 && error.message === 'This provider is already linked to another account.',
+		)
+		assert.ok(owner._id)
 	})
 })

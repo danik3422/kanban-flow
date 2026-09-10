@@ -20,6 +20,15 @@ export const assertProviderEmailVerified = (decodedToken) => {
 	}
 }
 
+export const assertProviderIdentityAvailable = async ({ provider, providerUid, userId }) => {
+	const existingProviderUser = await User.findOne({ provider, providerUid }).select('_id')
+	if (existingProviderUser && String(existingProviderUser._id) !== String(userId)) {
+		const error = new Error('This provider is already linked to another account.')
+		error.statusCode = 409
+		throw error
+	}
+}
+
 export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.apps.length) {
@@ -84,7 +93,7 @@ export const socialSignup = async (req, res) => {
 			if (existingUser.provider === 'local') return res.status(409).json({ message: `This email belongs to a local account. Connect ${provider} in Settings first.` })
 			return res.status(409).json({ message: 'An account already exists with this provider. Please sign in.' })
 		}
-		const user = await User.create({ email: email.toLowerCase(), name: name || '', avatar: picture || '', provider, password: null, emailVerified: true, profileSetup: false })
+		const user = await User.create({ email: email.toLowerCase(), name: name || '', avatar: picture || '', provider, providerUid: decodedToken.uid, password: null, emailVerified: true, profileSetup: false })
 		generateToken(user._id, res, user.sessionVersion)
 		return res.status(201).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
 	} catch (error) {
@@ -101,10 +110,12 @@ export const connectSocialAccount = async (req, res) => {
 		assertProviderEmailVerified(decodedToken)
 		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
 		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
+		await assertProviderIdentityAvailable({ provider, providerUid: decodedToken.uid, userId: req.user._id })
 		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
 		const user = await User.findById(req.user._id)
 		if (!user || user.provider !== 'local') return res.status(409).json({ message: 'Only local accounts can connect a provider.' })
 		user.provider = provider
+		user.providerUid = decodedToken.uid
 		user.emailVerified = true
 		user.emailVerificationTokenHash = ''
 		user.emailVerificationTokenExpiresAt = null
