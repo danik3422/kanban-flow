@@ -37,6 +37,9 @@ export const assertCurrentPassword = async (user, currentPassword) => {
 	}
 }
 
+export const getDuplicateAuthErrorMessage = (error) =>
+	error?.code === 11000 ? 'Email or provider identity is already registered.' : null
+
 export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.apps.length) {
@@ -106,6 +109,8 @@ export const socialSignup = async (req, res) => {
 		return res.status(201).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
 	} catch (error) {
 		console.error('Social Signup Error:', error)
+		const duplicateMessage = getDuplicateAuthErrorMessage(error)
+		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
 		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Social signup failed' })
 	}
 }
@@ -132,6 +137,8 @@ export const connectSocialAccount = async (req, res) => {
 		return res.status(200).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
 	} catch (error) {
 		console.error('Connect Social Error:', error)
+		const duplicateMessage = getDuplicateAuthErrorMessage(error)
+		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
 		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Could not connect social account' })
 	}
 }
@@ -226,6 +233,8 @@ export const signup = async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Error in signup controller:', error)
+		const duplicateMessage = getDuplicateAuthErrorMessage(error)
+		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
 		res.status(500).json({ message: 'Server error during signup' })
 	}
 }

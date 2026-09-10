@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 
-import { assertCurrentPassword, assertProviderEmailVerified, assertProviderIdentityAvailable } from '../controllers/auth.controller.js'
+import { assertCurrentPassword, assertProviderEmailVerified, assertProviderIdentityAvailable, getDuplicateAuthErrorMessage } from '../controllers/auth.controller.js'
 import User from '../models/user.model.js'
 
 let mongoServer
@@ -56,5 +56,10 @@ describe('social auth security helpers', () => {
 			(error) => error.statusCode === 401 && error.message === 'Re-authentication required.',
 		)
 		await assertCurrentPassword(user, 'CorrectPassword123!')
+	})
+
+	it('maps Mongo duplicate keys to an auth conflict', () => {
+		assert.equal(getDuplicateAuthErrorMessage({ code: 11000 }), 'Email or provider identity is already registered.')
+		assert.equal(getDuplicateAuthErrorMessage({ code: 500 }), null)
 	})
 })
