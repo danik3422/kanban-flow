@@ -1,0 +1,18 @@
+export const publicUserFields = [
+	'_id',
+	'email',
+	'name',
+	'jobTitle',
+	'timezone',
+	'emailNotifications',
+	'taskNotifications',
+	'weeklyDigest',
+	'language',
+	'avatar',
+	'provider',
+	'hasPassword',
+	'emailVerified',
+	'profileSetup',
+	'createdAt',
+	'updatedAt',
+].join(' ')

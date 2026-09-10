@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
 const email = z.string().trim().email().transform((value) => value.toLowerCase())
-const password = z.string().min(8).max(128)
+export const passwordSchema = z.string().min(8).max(128)
 
 export const signupSchema = z.object({
 	email,
-	password,
+	password: passwordSchema,
 	provider: z.literal('local').default('local'),
 })
 
@@ -27,7 +27,7 @@ export const passwordResetRequestSchema = z.object({ email })
 
 export const passwordResetConfirmSchema = z.object({
 	token: z.string().length(64),
-	password,
+	password: passwordSchema,
 })
 
 export const settingsSchema = z.object({
@@ -46,5 +46,12 @@ export const setupProfileSchema = z.object({
 
 export const changePasswordSchema = z.object({
 	currentPassword: z.string().min(1).max(128),
-	newPassword: password,
+	newPassword: passwordSchema,
+})
+
+export const setSocialPasswordSchema = z.object({
+	idToken: z.string().min(1).max(10000),
+	provider: z.enum(['google', 'microsoft', 'apple']),
+	password: z.string().max(128),
+	currentPassword: z.string().max(128).optional(),
 })

@@ -1,52 +1,92 @@
 import bcrypt from 'bcrypt'
-import crypto from 'node:crypto'
 import { getAuth } from 'firebase-admin/auth'
+import crypto from 'node:crypto'
 import { env } from '../config/env.js'
 import cloudinary from '../lib/cloudinary.js'
 import admin from '../lib/firebaseAdmin.js'
 import {
 	sendAccountVerificationEmail,
+	sendPasswordAddedEmail,
 	sendPasswordResetEmail,
 } from '../lib/mailer.js'
-import { generateToken } from '../lib/utils.js'
+import { hashPassword } from '../lib/password.js'
 import { publicUserFields } from '../lib/userProjection.js'
+import { generateToken } from '../lib/utils.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
 
 export const assertProviderEmailVerified = (decodedToken) => {
 	if (decodedToken.email_verified !== true) {
-		const error = new Error('Provider email must be verified before continuing.')
+		const error = new Error(
+			'Provider email must be verified before continuing.',
+		)
 		error.statusCode = 403
 		throw error
 	}
 }
 
-export const assertProviderIdentityAvailable = async ({ provider, providerUid, userId }) => {
-	const existingProviderUser = await User.findOne({ provider, providerUid }).select('_id')
-	if (existingProviderUser && String(existingProviderUser._id) !== String(userId)) {
-		const error = new Error('This provider is already linked to another account.')
+export const assertProviderIdentityAvailable = async ({
+	provider,
+	providerUid,
+	userId,
+}) => {
+	const existingProviderUser = await User.findOne({
+		provider,
+		providerUid,
+	}).select('_id')
+	if (
+		existingProviderUser &&
+		String(existingProviderUser._id) !== String(userId)
+	) {
+		const error = new Error(
+			'This provider is already linked to another account.',
+		)
 		error.statusCode = 409
 		throw error
 	}
 }
 
 export const assertCurrentPassword = async (user, currentPassword) => {
-	if (!user.password || !(await bcrypt.compare(currentPassword, user.password))) {
+	if (
+		!currentPassword ||
+		!user.password ||
+		!(await bcrypt.compare(currentPassword, user.password))
+	) {
 		const error = new Error('Re-authentication required.')
 		error.statusCode = 401
 		throw error
 	}
 }
 
+export const assertFreshProviderToken = (decodedToken) => {
+	const now = Math.floor(Date.now() / 1000)
+	const tokenAge = now - Number(decodedToken.iat)
+	if (
+		!Number.isFinite(Number(decodedToken.iat)) ||
+		tokenAge < -60 ||
+		tokenAge > 5 * 60
+	) {
+		const error = new Error('A fresh provider token is required.')
+		error.statusCode = 401
+		throw error
+	}
+}
+
 export const getDuplicateAuthErrorMessage = (error) =>
-	error?.code === 11000 ? 'Email or provider identity is already registered.' : null
+	error?.code === 11000
+		? 'Email or provider identity is already registered.'
+		: null
 
 export const verifySocialProviderToken = async (idToken, provider) => {
 	let decodedToken
 	try {
-		decodedToken = await getAuth().verifyIdToken(idToken)
+		decodedToken = await getAuth().verifyIdToken(idToken, true)
 	} catch (error) {
-		if (error?.code === 'auth/id-token-expired' || error?.code === 'auth/argument-error') {
+		if (
+			error?.code === 'auth/id-token-expired' ||
+			error?.code === 'auth/id-token-revoked' ||
+			error?.code === 'auth/argument-error'
+		) {
 			const tokenError = new Error('Invalid or expired provider token.')
 			tokenError.statusCode = 401
 			throw tokenError
@@ -60,7 +100,9 @@ export const verifySocialProviderToken = async (idToken, provider) => {
 		'microsoft.com': 'microsoft',
 		'apple.com': 'apple',
 	}
-	if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) {
+	if (
+		providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider
+	) {
 		const error = new Error('Social provider does not match the token.')
 		error.statusCode = 401
 		throw error
@@ -71,26 +113,42 @@ export const verifySocialProviderToken = async (idToken, provider) => {
 export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.getApps().length) {
-			return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+			return res
+				.status(500)
+				.json({ message: 'Social auth is not configured on the server.' })
 		}
 
 		const { idToken, provider } = req.body
 		const decodedToken = await verifySocialProviderToken(idToken, provider)
 
 		const { email, name, picture } = decodedToken
-		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
+		if (!email)
+			return res.status(400).json({ message: 'Invalid token: missing email' })
 
 		const user = await User.findOne({ email: email.toLowerCase() })
-		if (!user) return res.status(404).json({ message: 'User not found. Please sign up first.' })
+		if (!user)
+			return res
+				.status(404)
+				.json({ message: 'User not found. Please sign up first.' })
 		if (user.provider !== 'local' && user.provider !== provider) {
-			return res.status(400).json({ message: `This account is registered with ${user.provider}.` })
+			return res
+				.status(400)
+				.json({ message: `This account is registered with ${user.provider}.` })
 		}
 
 		if (user.provider === 'local') {
-			return res.status(409).json({ message: `This email belongs to a local account. Connect ${provider} in Settings first.` })
+			return res
+				.status(409)
+				.json({
+					message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
+				})
 		}
 		if (user.provider !== provider) {
-			return res.status(409).json({ message: `This email is already registered with ${user.provider}.` })
+			return res
+				.status(409)
+				.json({
+					message: `This email is already registered with ${user.provider}.`,
+				})
 		}
 		generateToken(user._id, res, user.sessionVersion)
 
@@ -104,55 +162,212 @@ export const socialSignin = async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Social Signin Error:', error)
-		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Social login failed' })
+		return res
+			.status(error.statusCode || 500)
+			.json({
+				message: error.statusCode ? error.message : 'Social login failed',
+			})
 	}
 }
 
 export const socialSignup = async (req, res) => {
 	try {
-		if (!admin.getApps().length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		if (!admin.getApps().length)
+			return res
+				.status(500)
+				.json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider } = req.body
 		const decodedToken = await verifySocialProviderToken(idToken, provider)
 		const { email, name, picture } = decodedToken
-		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
+		if (!email)
+			return res.status(400).json({ message: 'Invalid token: missing email' })
 		const existingUser = await User.findOne({ email: email.toLowerCase() })
 		if (existingUser) {
-			if (existingUser.provider === 'local') return res.status(409).json({ message: `This email belongs to a local account. Connect ${provider} in Settings first.` })
-			return res.status(409).json({ message: 'An account already exists with this provider. Please sign in.' })
+			if (existingUser.provider === 'local')
+				return res
+					.status(409)
+					.json({
+						message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
+					})
+			return res
+				.status(409)
+				.json({
+					message:
+						'An account already exists with this provider. Please sign in.',
+				})
 		}
-		const user = await User.create({ email: email.toLowerCase(), name: name || '', avatar: picture || '', provider, providerUid: decodedToken.uid, password: null, emailVerified: true, profileSetup: false })
+		const user = await User.create({
+			email: email.toLowerCase(),
+			name: name || '',
+			avatar: picture || '',
+			provider,
+			providerUid: decodedToken.uid,
+			password: null,
+			emailVerified: true,
+			profileSetup: false,
+		})
 		generateToken(user._id, res, user.sessionVersion)
-		return res.status(201).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
+		return res
+			.status(201)
+			.json({
+				_id: user._id,
+				email: user.email,
+				name: user.name,
+				avatar: user.avatar,
+				profileSetup: user.profileSetup,
+				provider: user.provider,
+			})
 	} catch (error) {
 		console.error('Social Signup Error:', error)
 		const duplicateMessage = getDuplicateAuthErrorMessage(error)
-		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
-		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Social signup failed' })
+		if (duplicateMessage)
+			return res.status(409).json({ message: duplicateMessage })
+		return res
+			.status(error.statusCode || 500)
+			.json({
+				message: error.statusCode ? error.message : 'Social signup failed',
+			})
 	}
 }
 
 export const connectSocialAccount = async (req, res) => {
 	try {
-		if (!admin.getApps().length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		if (!admin.getApps().length)
+			return res
+				.status(500)
+				.json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider, currentPassword } = req.body
 		const decodedToken = await verifySocialProviderToken(idToken, provider)
-		await assertProviderIdentityAvailable({ provider, providerUid: decodedToken.uid, userId: req.user._id })
-		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
+
 		const user = await User.findById(req.user._id)
-		if (!user || user.provider !== 'local') return res.status(409).json({ message: 'Only local accounts can connect a provider.' })
+		if (!user || user.provider !== 'local')
+			return res
+				.status(409)
+				.json({ message: 'Only local accounts can connect a provider.' })
+
+		// re-auth BEFORE any information-revealing checks
 		await assertCurrentPassword(user, currentPassword)
+
+		if (
+			!decodedToken.email ||
+			decodedToken.email.toLowerCase() !== user.email.toLowerCase()
+		)
+			return res
+				.status(409)
+				.json({
+					message:
+						'Use the same email as your current account to connect this provider.',
+				})
+
+		// ownership check LAST, right before mutating state
+		await assertProviderIdentityAvailable({
+			provider,
+			providerUid: decodedToken.uid,
+			userId: req.user._id,
+		})
+
 		user.provider = provider
 		user.providerUid = decodedToken.uid
 		user.emailVerified = true
 		user.emailVerificationTokenHash = ''
 		user.emailVerificationTokenExpiresAt = null
 		await user.save()
-		return res.status(200).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
+
+		return res
+			.status(200)
+			.json({
+				_id: user._id,
+				email: user.email,
+				name: user.name,
+				avatar: user.avatar,
+				profileSetup: user.profileSetup,
+				provider: user.provider,
+			})
 	} catch (error) {
 		console.error('Connect Social Error:', error)
 		const duplicateMessage = getDuplicateAuthErrorMessage(error)
-		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
-		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Could not connect social account' })
+		if (duplicateMessage)
+			return res.status(409).json({ message: duplicateMessage })
+		return res
+			.status(error.statusCode || 500)
+			.json({
+				message: error.statusCode
+					? error.message
+					: 'Could not connect social account',
+			})
+	}
+}
+
+export const setSocialPassword = async (req, res) => {
+	try {
+		if (!admin.getApps().length)
+			return res
+				.status(500)
+				.json({ message: 'Social auth is not configured on the server.' })
+
+		const { idToken, provider, password, currentPassword } = req.body
+		const decodedToken = await verifySocialProviderToken(idToken, provider)
+		assertFreshProviderToken(decodedToken)
+
+		const user = await User.findById(req.user._id)
+		if (!user || user.provider === 'local')
+			return res
+				.status(409)
+				.json({ message: 'Only social accounts can add a provider password.' })
+
+		if (
+			user.provider !== provider ||
+			!user.providerUid ||
+			String(decodedToken.uid) !== String(user.providerUid)
+		) {
+			const error = new Error('Provider identity does not match this account.')
+			error.statusCode = 401
+			throw error
+		}
+
+		if (
+			!decodedToken.email ||
+			decodedToken.email.toLowerCase() !== user.email.toLowerCase()
+		)
+			return res.status(409).json({
+				message: 'Provider email does not match this account.',
+			})
+
+		if (user.hasPassword) {
+			await assertCurrentPassword(user, currentPassword)
+		}
+
+		user.password = await hashPassword(password)
+		user.hasPassword = true
+		await user.save()
+
+		try {
+			await sendPasswordAddedEmail({
+				email: user.email,
+				settingsUrl: `${env.frontendUrl}/settings`,
+			})
+		} catch (mailError) {
+			console.error('Password notification email failed:', mailError.message)
+		}
+
+		return res.status(200).json({
+			_id: user._id,
+			email: user.email,
+			name: user.name,
+			avatar: user.avatar,
+			profileSetup: user.profileSetup,
+			provider: user.provider,
+			hasPassword: user.hasPassword,
+		})
+	} catch (error) {
+		console.error('Set Social Password Error:', error)
+		return res
+			.status(error.statusCode || 500)
+			.json({
+				message: error.statusCode
+					? error.message
+					: 'Could not set account password',
+			})
 	}
 }
 
@@ -187,9 +402,16 @@ export const signup = async (req, res) => {
 		const normalizedEmail = email.trim().toLowerCase()
 		const existingUser = await User.findOne({ email: normalizedEmail })
 		if (existingUser?.provider && existingUser.provider !== 'local') {
-			return res.status(409).json({ message: `This email is registered with ${existingUser.provider}. Please use ${existingUser.provider} sign-in.` })
+			return res
+				.status(409)
+				.json({
+					message: `This email is registered with ${existingUser.provider}. Please use ${existingUser.provider} sign-in.`,
+				})
 		}
-		if (existingUser) return res.status(409).json({ message: 'A local account already exists. Please sign in.' })
+		if (existingUser)
+			return res
+				.status(409)
+				.json({ message: 'A local account already exists. Please sign in.' })
 
 		let hashedPassword = null
 		if (provider === 'local') {
@@ -211,9 +433,10 @@ export const signup = async (req, res) => {
 			password: hashedPassword,
 			provider,
 			emailVerified: provider !== 'local',
-			emailVerificationTokenHash: provider === 'local' ? verificationTokenHash : '',
+			emailVerificationTokenHash:
+				provider === 'local' ? verificationTokenHash : '',
 			emailVerificationTokenExpiresAt:
-			provider === 'local' ? emailVerificationExpiresAt : null,
+				provider === 'local' ? emailVerificationExpiresAt : null,
 			profileSetup: false,
 		})
 
@@ -230,8 +453,7 @@ export const signup = async (req, res) => {
 				console.error('Verification email failed:', mailError.message)
 			}
 			return res.status(201).json({
-				message:
-					'Account created. Please verify your email before continuing.',
+				message: 'Account created. Please verify your email before continuing.',
 				requiresVerification: true,
 				email: newUser.email,
 			})
@@ -247,7 +469,8 @@ export const signup = async (req, res) => {
 	} catch (error) {
 		console.error('Error in signup controller:', error)
 		const duplicateMessage = getDuplicateAuthErrorMessage(error)
-		if (duplicateMessage) return res.status(409).json({ message: duplicateMessage })
+		if (duplicateMessage)
+			return res.status(409).json({ message: duplicateMessage })
 		res.status(500).json({ message: 'Server error during signup' })
 	}
 }
@@ -339,9 +562,7 @@ export const validatePasswordResetToken = async (req, res) => {
 		return res.status(200).json({ valid: true, email: user.email })
 	} catch (error) {
 		console.error('Password reset token validation failed:', error)
-		return res
-			.status(500)
-			.json({ message: 'Could not validate reset link' })
+		return res.status(500).json({ message: 'Could not validate reset link' })
 	}
 }
 
@@ -400,11 +621,11 @@ export const resetPassword = async (req, res) => {
 		}
 
 		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
-				const resetToken = await PasswordResetToken.findOne({
-					tokenHash,
-					usedAt: null,
-					expiresAt: { $gt: new Date() },
-				})
+		const resetToken = await PasswordResetToken.findOne({
+			tokenHash,
+			usedAt: null,
+			expiresAt: { $gt: new Date() },
+		})
 		if (!resetToken) {
 			return res.status(400).json({
 				message: 'This reset link has expired or is no longer valid.',
@@ -414,35 +635,41 @@ export const resetPassword = async (req, res) => {
 		const user = await User.findById(resetToken.user)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
-		const isSameAsCurrentPassword = await bcrypt.compare(password, user.password)
+		const isSameAsCurrentPassword = await bcrypt.compare(
+			password,
+			user.password,
+		)
 		if (isSameAsCurrentPassword) {
 			return res.status(400).json({
 				message: 'New password must be different from your current password',
 			})
 		}
 
-				const claimedToken = await PasswordResetToken.findOneAndUpdate(
-					{
-						_id: resetToken._id,
-						usedAt: null,
-						expiresAt: { $gt: new Date() },
-					},
-					{ $set: { usedAt: new Date() } },
-					{ returnDocument: 'after' },
-				)
-				if (!claimedToken) {
-					return res.status(410).json({
-						message: 'This reset link has expired or is no longer valid.',
-						code: 'expired',
-					})
-				}
+		const claimedToken = await PasswordResetToken.findOneAndUpdate(
+			{
+				_id: resetToken._id,
+				usedAt: null,
+				expiresAt: { $gt: new Date() },
+			},
+			{ $set: { usedAt: new Date() } },
+			{ returnDocument: 'after' },
+		)
+		if (!claimedToken) {
+			return res.status(410).json({
+				message: 'This reset link has expired or is no longer valid.',
+				code: 'expired',
+			})
+		}
 
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(password, salt)
 		user.provider = 'local'
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
-				await PasswordResetToken.deleteMany({ user: user._id, _id: { $ne: claimedToken._id } })
+		await PasswordResetToken.deleteMany({
+			user: user._id,
+			_id: { $ne: claimedToken._id },
+		})
 
 		return res.status(200).json({ message: 'Password updated successfully' })
 	} catch (error) {
@@ -529,22 +756,18 @@ export const changePassword = async (req, res) => {
 	try {
 		const { currentPassword, newPassword } = req.body
 		if (!currentPassword || !newPassword || newPassword.length < 8) {
-			return res
-				.status(400)
-				.json({
-					message:
-						'Current password and a new password of at least 8 characters are required',
-				})
+			return res.status(400).json({
+				message:
+					'Current password and a new password of at least 8 characters are required',
+			})
 		}
 
 		const user = await User.findById(req.user._id)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 		if (!user.password)
-			return res
-				.status(400)
-				.json({
-					message: 'Set a local password from profile before changing it',
-				})
+			return res.status(400).json({
+				message: 'Set a local password from profile before changing it',
+			})
 		if (!(await bcrypt.compare(currentPassword, user.password)))
 			return res.status(400).json({ message: 'Current password is incorrect' })
 		if (await bcrypt.compare(newPassword, user.password)) {
