@@ -68,7 +68,7 @@ router.post('/social/signup', authLimiter, validateBody(socialAuthSchema), socia
 
 // Protected routes
 router.post('/logout', logout)
-router.post('/social/connect', authMiddleware, validateBody(connectSocialSchema), connectSocialAccount)
+router.post('/social/connect', authMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
 router.get('/get-user', authMiddleware, getAuthUser)
 router.patch(
 	'/setup-profile',
