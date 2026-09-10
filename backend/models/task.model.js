@@ -39,6 +39,11 @@ const taskSchema = new mongoose.Schema(
 				completed: { type: Boolean, default: false },
 			},
 		],
+		priority: {
+			type: String,
+			enum: ['none', 'low', 'medium', 'high', 'urgent'],
+			default: 'none',
+		},
 		trackedSeconds: { type: Number, default: 0 },
 		timerStartedAt: { type: Date, default: null },
 	},

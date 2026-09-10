@@ -6,7 +6,7 @@ const password = z.string().min(8).max(128)
 export const signupSchema = z.object({
 	email,
 	password,
-	provider: z.enum(['local', 'google', 'microsoft', 'apple']).default('local'),
+	provider: z.literal('local').default('local'),
 })
 
 export const loginSchema = z.object({

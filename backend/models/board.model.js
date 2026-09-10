@@ -11,6 +11,18 @@ const boardModel = new mongoose.Schema(
 			ref: 'User',
 			required: true,
 		},
+		visibility: {
+			type: String,
+			enum: ['private', 'workspace', 'public'],
+			default: 'private',
+			index: true,
+		},
+		publicTokenHash: {
+			type: String,
+			default: '',
+			select: false,
+			index: true,
+		},
 	},
 	{ timestamps: true }
 )

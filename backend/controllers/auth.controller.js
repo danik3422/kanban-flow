@@ -148,6 +148,11 @@ export const signup = async (req, res) => {
 				.status(400)
 				.json({ message: 'Email and provider are required.' })
 		}
+		if (provider !== 'local') {
+			return res.status(400).json({
+				message: 'Social accounts must use their provider sign-in flow.',
+			})
+		}
 
 		if (provider === 'local') {
 			if (!password) {
@@ -375,26 +380,17 @@ export const resetPassword = async (req, res) => {
 		}
 
 		const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
-		const resetToken = await PasswordResetToken.findOne({ tokenHash })
+				const resetToken = await PasswordResetToken.findOne({
+					tokenHash,
+					usedAt: null,
+					expiresAt: { $gt: new Date() },
+				})
 		if (!resetToken) {
 			return res.status(400).json({
 				message: 'This reset link has expired or is no longer valid.',
 				code: 'expired',
 			})
 		}
-		if (resetToken.usedAt) {
-			return res.status(410).json({
-				message: 'This reset link has expired or is no longer valid.',
-				code: 'expired',
-			})
-		}
-		if (new Date(resetToken.expiresAt) <= new Date()) {
-			return res.status(410).json({
-				message: 'This reset link has expired or is no longer valid.',
-				code: 'expired',
-			})
-		}
-
 		const user = await User.findById(resetToken.user)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
@@ -405,13 +401,27 @@ export const resetPassword = async (req, res) => {
 			})
 		}
 
+				const claimedToken = await PasswordResetToken.findOneAndUpdate(
+					{
+						_id: resetToken._id,
+						usedAt: null,
+						expiresAt: { $gt: new Date() },
+					},
+					{ $set: { usedAt: new Date() } },
+					{ returnDocument: 'after' },
+				)
+				if (!claimedToken) {
+					return res.status(410).json({
+						message: 'This reset link has expired or is no longer valid.',
+						code: 'expired',
+					})
+				}
+
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(password, salt)
 		user.provider = 'local'
 		await user.save()
-		resetToken.usedAt = new Date()
-		await resetToken.save()
-		await PasswordResetToken.deleteMany({ user: user._id, _id: { $ne: resetToken._id } })
+				await PasswordResetToken.deleteMany({ user: user._id, _id: { $ne: claimedToken._id } })
 
 		return res.status(200).json({ message: 'Password updated successfully' })
 	} catch (error) {

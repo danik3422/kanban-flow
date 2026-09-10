@@ -8,7 +8,7 @@ import {
 	ShieldCheck,
 	Smartphone,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import ChangePasswordPanel from '../components/ChangePasswordPanel'

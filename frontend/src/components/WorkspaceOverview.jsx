@@ -1,9 +1,15 @@
 import { ArrowRight, FolderKanban, Plus, UsersRound } from 'lucide-react'
 
+const visibilityLabel = {
+	private: 'Private',
+	workspace: 'Workspace',
+	public: 'Public',
+}
+
 const BoardGroup = ({ title, description, boards, onOpenBoard }) => (
 	<section className='rooms-overview-group'>
 		<div className='rooms-overview-group-heading'><div><p className='eyebrow'>{title}</p><p>{description}</p></div><span>{boards.length}</span></div>
-		{boards.length ? <div className='rooms-overview-grid'>{boards.map((board) => <button className='room-overview-card' key={board._id} onClick={() => onOpenBoard(board)}><span className='room-overview-icon'><FolderKanban size={19} /></span><span className='room-overview-copy'><strong>{board.name}</strong><small>{board.access === 'owned' ? 'Owned by you' : `Shared with you · ${board.role || 'member'}`}</small></span><ArrowRight size={17} /></button>)}</div> : <div className='rooms-overview-empty'>No rooms here yet.</div>}
+		{boards.length ? <div className='rooms-overview-grid'>{boards.map((board) => <button className='room-overview-card' key={board._id} onClick={() => onOpenBoard(board)}><span className='room-overview-icon'><FolderKanban size={19} /></span><span className='room-overview-copy'><strong>{board.name}</strong><small>{board.access === 'owned' ? 'Owned by you' : `Shared with you · ${board.role || 'member'}`}</small></span><span className={`room-overview-visibility visibility-${board.visibility || 'private'}`}>{visibilityLabel[board.visibility] || 'Private'}</span><ArrowRight size={17} /></button>)}</div> : <div className='rooms-overview-empty'>No rooms here yet.</div>}
 	</section>
 )
 

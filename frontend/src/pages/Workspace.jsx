@@ -22,10 +22,9 @@ import {
 	Square,
 	Trash2,
 	UserRound,
-	UsersRound,
 	X,
 } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
@@ -34,6 +33,7 @@ import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import RichTextEditor from '../components/RichTextEditor'
+import Popover from '../components/Popover'
 import { sanitizeDescription } from '../lib/richText'
 import { axiosInstance } from '../lib/axios'
 import { socketUrl } from '../lib/runtimeConfig'
@@ -133,6 +133,11 @@ const Workspace = () => {
 	const [isCreatingColumn, setIsCreatingColumn] = useState(false)
 	const [activeTaskColumn, setActiveTaskColumn] = useState(null)
 	const [newBoardName, setNewBoardName] = useState('')
+	const [newBoardVisibility, setNewBoardVisibility] = useState('private')
+	const [isPublicBoardConfirmOpen, setIsPublicBoardConfirmOpen] = useState(false)
+	const [isVisibilityOpen, setIsVisibilityOpen] = useState(false)
+	const [visibilityDraft, setVisibilityDraft] = useState('private')
+	const [isPublicVisibilityConfirmOpen, setIsPublicVisibilityConfirmOpen] = useState(false)
 	const [boardNameDraft, setBoardNameDraft] = useState('')
 	const [isEditingBoardName, setIsEditingBoardName] = useState(false)
 	const [newColumnTitle, setNewColumnTitle] = useState('')
@@ -140,9 +145,14 @@ const Workspace = () => {
 	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
+	const [publicBoardLink, setPublicBoardLink] = useState('')
+	const [boardActivities, setBoardActivities] = useState([])
+	const [isActivityLoading, setIsActivityLoading] = useState(false)
 	const [isInvitationsExpanded, setIsInvitationsExpanded] = useState(false)
 	const [presenceByUserId, setPresenceByUserId] = useState({})
-	const [realtimeStatus, setRealtimeStatus] = useState('connecting')
+	const [realtimeStatus, setRealtimeStatus] = useState(
+		isDevAuthBypass ? 'connected' : 'connecting',
+	)
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
@@ -154,14 +164,12 @@ const Workspace = () => {
 	const [draggedColumnHeight, setDraggedColumnHeight] = useState(null)
 	const columnDragSessionRef = useRef(null)
 	const columnDragOverlayRef = useRef(null)
-	const columnDragTargetRef = useRef(null)
 	const [dropIndicator, setDropIndicator] = useState(null)
 	const [taskDetails, setTaskDetails] = useState(null)
 	const [taskActivities, setTaskActivities] = useState([])
 	const [taskComment, setTaskComment] = useState('')
 	const [isTimerRunning, setIsTimerRunning] = useState(false)
 	const [trackedSeconds, setTrackedSeconds] = useState(0)
-	const [isActivityLoading, setIsActivityLoading] = useState(false)
 	const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false)
 	const [newChecklistItem, setNewChecklistItem] = useState('')
 	const [taskDetailsForm, setTaskDetailsForm] = useState({
@@ -243,6 +251,40 @@ const Workspace = () => {
 		}
 	}
 
+	const moveColumn = useCallback(async (column, targetColumnOrId, requestedIndex = null) => {
+		if (!column) {
+			setDraggedColumn(null)
+			setColumnDropTarget(null)
+			setColumnDropAfterLast(false)
+			return
+		}
+		const previousColumns = columns
+		const sourceIndex = columns.findIndex((item) => item._id === column._id)
+		if (sourceIndex < 0) return
+		const remainingColumns = columns.filter((item) => item._id !== column._id)
+		const targetId = typeof targetColumnOrId === 'string'
+			? targetColumnOrId
+			: targetColumnOrId?._id
+		const targetIndex = remainingColumns.findIndex((item) => item._id === targetId)
+		const insertionIndex = requestedIndex === null
+			? Math.max(0, Math.min(targetIndex < 0 ? remainingColumns.length : targetIndex, remainingColumns.length))
+			: Math.max(0, Math.min(requestedIndex, remainingColumns.length))
+		const reorderedColumns = reorderColumns(columns, column._id, insertionIndex)
+		setColumns(reorderedColumns.map((item, index) => ({ ...item, position: index })))
+		setDraggedColumn(null)
+		setColumnDropTarget(null)
+		setColumnDropAfterLast(false)
+		if (isDevAuthBypass) return
+		try {
+			await axiosInstance.patch(`/board/columns/${column._id}/position`, {
+				position: insertionIndex,
+			})
+		} catch (error) {
+			setColumns(previousColumns)
+			toast.error(error.response?.data?.message || 'Could not reorder column')
+		}
+	}, [columns])
+
 	useEffect(() => {
 		const loadBoards = async () => {
 			if (isDevAuthBypass) {
@@ -259,6 +301,9 @@ const Workspace = () => {
 					availableBoards.find((board) => board._id === boardId) || null
 				setBoards(availableBoards)
 				setSelectedBoard(activeBoard)
+				setIsActivityLoading(Boolean(activeBoard))
+				setBoardNameDraft(activeBoard?.name || '')
+				setIsEditingBoardName(false)
 				setBoardMembers(devBoardMembers)
 				setBoardMemberRecords(devBoardMembers)
 				setBoardInvites(devBoardInvites)
@@ -273,6 +318,9 @@ const Workspace = () => {
 					? data.find((board) => board._id === boardId)
 					: null
 				setSelectedBoard(nextBoard)
+				setIsActivityLoading(Boolean(nextBoard))
+				setBoardNameDraft(nextBoard?.name || '')
+				setIsEditingBoardName(false)
 				if (boardId && !nextBoard) navigate('/workspaces', { replace: true })
 			} catch (error) {
 				if (error.response?.status !== 404) {
@@ -284,11 +332,6 @@ const Workspace = () => {
 		}
 		loadBoards()
 	}, [boardId, navigate])
-
-	useEffect(() => {
-		setBoardNameDraft(selectedBoard?.name || '')
-		setIsEditingBoardName(false)
-	}, [selectedBoard])
 
 	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return
@@ -507,14 +550,10 @@ const Workspace = () => {
 			columnDragOverlayRef.current = null
 			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
 		}
-	}, [columns])
+	}, [columns, moveColumn])
 
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) {
-			setRealtimeStatus(isDevAuthBypass ? 'connected' : 'offline')
-			return
-		}
-		setRealtimeStatus('connecting')
+		if (!selectedBoard || isDevAuthBypass) return
 		const socket = io(socketUrl, {
 			withCredentials: true,
 			reconnection: true,
@@ -537,6 +576,19 @@ const Workspace = () => {
 			setPresenceByUserId(
 				Object.fromEntries(presence.map((item) => [item.userId, item.status])),
 			)
+		})
+		socket.on('board:access-revoked', ({ boardId: revokedBoardId }) => {
+			if (revokedBoardId !== selectedBoard._id) return
+			socket.io.opts.reconnection = false
+			setRealtimeStatus('offline')
+			setPresenceByUserId({})
+			socket.disconnect()
+		})
+		socket.on('activity:new', (activity) => {
+			setBoardActivities((current) => [
+				activity,
+				...current.filter((item) => item._id !== activity._id),
+			].slice(0, 200))
 		})
 		const heartbeatTimer = window.setInterval(heartbeat, 20_000)
 		socket.on('task:created', (task) => {
@@ -643,12 +695,14 @@ const Workspace = () => {
 	}, [selectedBoard, authUser?._id])
 
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) return
+		if (!selectedBoard) return
+		if (isDevAuthBypass) return
 		Promise.allSettled([
 			axiosInstance.get(`/board/boards/${selectedBoard._id}/members`),
 			axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`),
+			axiosInstance.get(`/board/boards/${selectedBoard._id}/activity`),
 		])
-			.then(([membersResult, invitesResult]) => {
+			.then(([membersResult, invitesResult, activitiesResult]) => {
 				if (membersResult.status === 'fulfilled') {
 					setBoardMembers(membersResult.value.data.map((member) => member.user))
 					setBoardMemberRecords(membersResult.value.data)
@@ -656,7 +710,11 @@ const Workspace = () => {
 				if (invitesResult.status === 'fulfilled') {
 					setBoardInvites(invitesResult.value.data)
 				}
+				if (activitiesResult.status === 'fulfilled') {
+					setBoardActivities(activitiesResult.value.data)
+				}
 			})
+			.finally(() => setIsActivityLoading(false))
 	}, [selectedBoard])
 
 	const renameBoard = async () => {
@@ -706,6 +764,7 @@ const Workspace = () => {
 				...devBoard,
 				_id: `dev-board-${Date.now()}`,
 				name: newBoardName.trim(),
+				visibility: newBoardVisibility,
 			}
 			setBoards((current) => {
 				const nextBoards = [...current, board]
@@ -718,9 +777,12 @@ const Workspace = () => {
 				return nextBoards
 			})
 			setSelectedBoard(board)
+			setBoardNameDraft(board.name)
+			setIsEditingBoardName(false)
 			navigate(`/workspaces/${board._id}`)
 			setColumns([])
 			setNewBoardName('')
+			setNewBoardVisibility('private')
 			setIsCreatingBoard(false)
 			toast.success('Demo board created locally')
 			return
@@ -728,11 +790,16 @@ const Workspace = () => {
 		try {
 			const { data } = await axiosInstance.post('/board/boards', {
 				name: newBoardName.trim(),
+				visibility: newBoardVisibility,
 			})
 			setBoards((current) => [data, ...current])
 			setSelectedBoard(data)
+			setIsActivityLoading(true)
+			setBoardNameDraft(data.name)
+			setIsEditingBoardName(false)
 			navigate(`/workspaces/${data._id}`)
 			setNewBoardName('')
+			setNewBoardVisibility('private')
 			setIsCreatingBoard(false)
 			toast.success('Board created')
 		} catch (error) {
@@ -740,8 +807,60 @@ const Workspace = () => {
 		}
 	}
 
+	const handleBoardVisibilityChange = (event) => {
+		if (event.target.value === 'public') {
+			setIsPublicBoardConfirmOpen(true)
+			return
+		}
+		setNewBoardVisibility(event.target.value)
+	}
+
+	const closePublicBoardConfirmation = () => {
+		setIsPublicBoardConfirmOpen(false)
+	}
+
+	const confirmPublicBoard = () => {
+		setNewBoardVisibility('public')
+		setIsPublicBoardConfirmOpen(false)
+	}
+
+	const saveBoardVisibility = async (visibility) => {
+		if (!selectedBoard) return
+		if (isDevAuthBypass) {
+			setSelectedBoard((current) => current ? { ...current, visibility } : current)
+			setBoards((current) => current.map((board) => board._id === selectedBoard._id ? { ...board, visibility } : board))
+			setVisibilityDraft(visibility)
+			setIsVisibilityOpen(false)
+			toast.success('Room visibility updated')
+			return
+		}
+		try {
+			const { data } = await axiosInstance.patch(`/board/boards/${selectedBoard._id}`, { visibility })
+			setSelectedBoard((current) => current ? { ...current, ...data } : current)
+			setBoards((current) => current.map((board) => board._id === selectedBoard._id ? { ...board, ...data } : board))
+			setVisibilityDraft(visibility)
+			setIsVisibilityOpen(false)
+			toast.success('Room visibility updated')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not update room visibility')
+		}
+	}
+
+	const requestVisibilityChange = (visibility) => {
+		if (visibility === visibilityDraft) return
+		if (visibility === 'public') {
+			setIsPublicVisibilityConfirmOpen(true)
+			return
+		}
+		void saveBoardVisibility(visibility)
+	}
+
 	const selectBoard = (board) => {
 		setSelectedBoard(board)
+		setIsActivityLoading(true)
+		setBoardActivities([])
+		setBoardNameDraft(board.name || '')
+		setIsEditingBoardName(false)
 		setIsSidebarOpen(false)
 		navigate(`/workspaces/${board._id}`)
 	}
@@ -774,7 +893,7 @@ const Workspace = () => {
 		}
 	}
 
-	const inviteMember = async (event, mode = 'email') => {
+	const inviteMember = async (event, mode = 'email', role = 'member') => {
 		event.preventDefault()
 		if (!selectedBoard) return
 		if (isDevAuthBypass) {
@@ -799,7 +918,7 @@ const Workspace = () => {
 		try {
 			const { data } = await axiosInstance.post(
 				`/board/boards/${selectedBoard._id}/invites`,
-				{ email: mode === 'email' ? inviteEmail.trim() : '' },
+				{ email: mode === 'email' ? inviteEmail.trim() : '', role },
 			)
 			setInviteEmail('')
 			setIsInviteOpen(false)
@@ -815,6 +934,18 @@ const Workspace = () => {
 			)
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not invite member')
+		}
+	}
+
+	const createPublicBoardLink = async () => {
+		if (!selectedBoard) return
+		try {
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/public-link`)
+			setPublicBoardLink(data.publicUrl)
+			await copyInviteUrl(data.publicUrl)
+			toast.success('Public view link copied')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not create public view link')
 		}
 	}
 
@@ -1479,40 +1610,6 @@ const Workspace = () => {
 		}
 	}
 
-	const moveColumn = async (column, targetColumnOrId, requestedIndex = null) => {
-		if (!column) {
-			setDraggedColumn(null)
-			setColumnDropTarget(null)
-			setColumnDropAfterLast(false)
-			return
-		}
-		const previousColumns = columns
-		const sourceIndex = columns.findIndex((item) => item._id === column._id)
-		if (sourceIndex < 0) return
-		const remainingColumns = columns.filter((item) => item._id !== column._id)
-		const targetId = typeof targetColumnOrId === 'string'
-			? targetColumnOrId
-			: targetColumnOrId?._id
-		const targetIndex = remainingColumns.findIndex((item) => item._id === targetId)
-		const insertionIndex = requestedIndex === null
-			? Math.max(0, Math.min(targetIndex < 0 ? remainingColumns.length : targetIndex, remainingColumns.length))
-			: Math.max(0, Math.min(requestedIndex, remainingColumns.length))
-		const reorderedColumns = reorderColumns(columns, column._id, insertionIndex)
-		setColumns(reorderedColumns.map((item, index) => ({ ...item, position: index })))
-		setDraggedColumn(null)
-		setColumnDropTarget(null)
-		setColumnDropAfterLast(false)
-		if (isDevAuthBypass) return
-		try {
-			await axiosInstance.patch(`/board/columns/${column._id}/position`, {
-				position: insertionIndex,
-			})
-		} catch (error) {
-			setColumns(previousColumns)
-			toast.error(error.response?.data?.message || 'Could not reorder column')
-		}
-	}
-
 	const visibleColumns = columns
 		.filter((column) => column.pinned)
 		.concat(columns.filter((column) => !column.pinned))
@@ -1538,9 +1635,21 @@ const Workspace = () => {
 					isSidebarCollapsed={isSidebarCollapsed}
 					onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}
 					realtimeStatus={selectedBoard?._id ? realtimeStatus : null}
+					onInvite={selectedBoard ? () => setIsInviteOpen(true) : null}
+					onVisibilityChange={
+						selectedBoard && (isBoardOwner || selectedBoard.role === 'admin')
+							? () => {
+									setVisibilityDraft(selectedBoard.visibility || 'private')
+									setIsVisibilityOpen(true)
+							  }
+							: null
+					}
+					boardVisibility={selectedBoard?.visibility}
+					activities={boardActivities}
+					activityLoading={isActivityLoading}
 				>
 							<div className='workspace-context-copy'>
-								<div className='workspace-context-label'>My workspace</div>
+										<div className='workspace-context-label'>Workspace</div>
 								<div className='workspace-board-title-row'>
 									<span className='workspace-board-name'>
 										<ChevronRight size={13} />
@@ -1695,20 +1804,6 @@ const Workspace = () => {
 								)}
 								<div className='board-toolbar'>
 									<div className='board-toolbar-actions'>
-										<button
-											className='quiet-button'
-											onClick={() => setIsInviteOpen(true)}
-										>
-											{isBoardOwner || selectedBoard.role === 'admin' ? (
-												<>
-													<Mail size={16} /> Invite
-												</>
-											) : (
-												<>
-													<UsersRound size={16} /> People
-												</>
-											)}
-										</button>
 										<button
 											className='quiet-button'
 											onClick={() => refreshBoard(selectedBoard)}
@@ -2294,6 +2389,9 @@ const Workspace = () => {
 				boardOwnerId={selectedBoard?.createdBy}
 				presenceByUserId={presenceByUserId}
 				showPresence={Boolean(selectedBoard?._id)}
+				roomVisibility={selectedBoard?.visibility}
+				publicLink={publicBoardLink}
+				onCreatePublicLink={createPublicBoardLink}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}
@@ -2577,7 +2675,7 @@ const Workspace = () => {
 						<div className='modal-title'>
 							<div>
 								<div className='task-breadcrumb' aria-label='Task location'>
-									<span>My workspace</span>
+										<span>Workspace</span>
 									<ChevronRight size={16} />
 									<span>{selectedBoard?.name || 'Room'}</span>
 									<ChevronRight size={16} />
@@ -2796,8 +2894,8 @@ const Workspace = () => {
 					>
 						<div className='modal-title'>
 							<div>
-								<p className='eyebrow'>New workspace</p>
-								<h2>Create a board</h2>
+													<p className='eyebrow'>New room</p>
+													<h2>Create a room</h2>
 							</div>
 							<button
 								type='button'
@@ -2823,10 +2921,101 @@ const Workspace = () => {
 							onChange={(event) => setNewBoardName(event.target.value)}
 							placeholder='e.g. Product launch'
 						/>
+						<fieldset className='board-visibility-options'>
+							<legend>Who can access this room?</legend>
+							<label className={`board-visibility-option ${newBoardVisibility === 'private' ? 'is-selected' : ''}`}>
+								<input
+									type='radio'
+									name='board-visibility'
+									value='private'
+									checked={newBoardVisibility === 'private'}
+									onChange={handleBoardVisibilityChange}
+								/>
+								<span><strong>Private</strong><small>Only invited members can view and edit this room.</small></span>
+							</label>
+							<label className={`board-visibility-option ${newBoardVisibility === 'workspace' ? 'is-selected' : ''}`}>
+								<input
+									type='radio'
+									name='board-visibility'
+									value='workspace'
+									checked={newBoardVisibility === 'workspace'}
+									onChange={handleBoardVisibilityChange}
+								/>
+								<span><strong>Workspace</strong><small>Workspace members can view and edit this room.</small></span>
+							</label>
+							<label className={`board-visibility-option ${newBoardVisibility === 'public' ? 'is-selected' : ''}`}>
+								<input
+									type='radio'
+									name='board-visibility'
+									value='public'
+									checked={newBoardVisibility === 'public'}
+									onChange={handleBoardVisibilityChange}
+								/>
+								<span><strong>Public</strong><small>Anyone with access to the room can view it.</small></span>
+							</label>
+						</fieldset>
 						<button className='primary-button full-button' type='submit'>
 							<Plus size={18} /> Create board
 						</button>
 					</form>
+				</div>
+			)}
+			{isPublicBoardConfirmOpen && (
+				<div className='modal-backdrop public-board-confirm-backdrop' onMouseDown={closePublicBoardConfirmation}>
+					<div className='modal-panel public-board-confirmation' onMouseDown={(event) => event.stopPropagation()}>
+						<div className='modal-title'>
+							<div>
+								<p className='eyebrow'>Visibility</p>
+														<h2>Make this room public?</h2>
+							</div>
+							<button type='button' className='icon-button' onClick={closePublicBoardConfirmation} aria-label='Close' title='Close'>
+								<X size={18} />
+							</button>
+						</div>
+						<p>Public rooms are available to everyone on the internet.</p>
+						<div className='public-board-confirm-actions'>
+							<button type='button' className='quiet-button' onClick={closePublicBoardConfirmation}>Cancel</button>
+							<button type='button' className='primary-button' onClick={confirmPublicBoard}>Make public</button>
+						</div>
+					</div>
+				</div>
+			)}
+			{isVisibilityOpen && selectedBoard && (
+				<Popover isOpen={isVisibilityOpen} onClose={() => setIsVisibilityOpen(false)} className='popover-shell room-visibility-dropdown' role='dialog' aria-label='Room visibility settings'>
+						<div className='popover-header room-visibility-dropdown-header'>
+							<div>
+								<p className='eyebrow'>Room settings</p>
+								<h2>Change visibility</h2>
+							</div>
+							<button type='button' className='icon-button' onClick={() => setIsVisibilityOpen(false)} aria-label='Close visibility settings' title='Close'><X size={16} /></button>
+						</div>
+						<div className='room-visibility-list'>
+							{[
+								['private', 'Private', 'Only invited members can view and edit this room.'],
+								['workspace', 'Workspace', 'Workspace members can view this room; members can collaborate.'],
+								['public', 'Public', 'Anyone with the public link can view this room.'],
+							].map(([value, title, description]) => (
+																								<button type='button' className={`room-visibility-choice ${visibilityDraft === value ? 'is-selected' : ''}`} key={value} onClick={() => requestVisibilityChange(value)} disabled={visibilityDraft === value} aria-pressed={visibilityDraft === value}>
+									<span><strong>{title}</strong><small>{description}</small></span>
+									{visibilityDraft === value && <span className='room-visibility-check'>✓</span>}
+								</button>
+							))}
+						</div>
+				</Popover>
+			)}
+			{isPublicVisibilityConfirmOpen && (
+				<div className='modal-backdrop public-board-confirm-backdrop' onMouseDown={() => setIsPublicVisibilityConfirmOpen(false)}>
+					<div className='modal-panel public-board-confirmation' onMouseDown={(event) => event.stopPropagation()}>
+						<div className='modal-title'>
+							<div><p className='eyebrow'>Visibility</p><h2>Make this room public?</h2></div>
+							<button type='button' className='icon-button' onClick={() => setIsPublicVisibilityConfirmOpen(false)} aria-label='Close' title='Close'><X size={18} /></button>
+						</div>
+						<p>Anyone with the public link will be able to view this room without joining it.</p>
+						<div className='public-board-confirm-actions'>
+							<button type='button' className='quiet-button' onClick={() => setIsPublicVisibilityConfirmOpen(false)}>Cancel</button>
+							<button type='button' className='primary-button' onClick={() => { setIsPublicVisibilityConfirmOpen(false); void saveBoardVisibility('public') }}>Make public</button>
+						</div>
+					</div>
 				</div>
 			)}
 		</div>

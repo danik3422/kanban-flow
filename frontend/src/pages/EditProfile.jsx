@@ -11,7 +11,6 @@ const EditProfile = () => {
 	const [name, setName] = useState(authUser?.name || '')
 	const [jobTitle, setJobTitle] = useState(authUser?.jobTitle || '')
 	const [timezone, setTimezone] = useState(authUser?.timezone || 'UTC')
-	const [password, setPassword] = useState('')
 	const [avatarFile, setAvatarFile] = useState(null)
 	const [avatarPreview, setAvatarPreview] = useState(authUser?.avatar || '/avatar.png')
 	const [isSaving, setIsSaving] = useState(false)
@@ -33,7 +32,7 @@ const EditProfile = () => {
 		setIsSaving(true)
 		try {
 			const avatar = avatarFile ? await convertFileToBase64(avatarFile) : null
-			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone, password, avatar })
+			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone, avatar })
 			await checkAuth()
 			toast.success('Profile updated successfully')
 			navigate('/profile')

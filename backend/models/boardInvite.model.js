@@ -8,6 +8,7 @@ const boardInviteSchema = new mongoose.Schema(
 			required: true,
 		},
 		email: { type: String, lowercase: true, trim: true, default: '' },
+		role: { type: String, enum: ['admin', 'member'], default: 'member' },
 		tokenHash: { type: String, required: true, unique: true },
 		expiresAt: { type: Date, required: true, index: { expires: 0 } },
 		usedAt: { type: Date, default: null },

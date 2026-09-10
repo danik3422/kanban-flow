@@ -32,17 +32,20 @@ const ResetPassword = () => {
 
   useEffect(() => {
     if (!token) {
-      setIsTokenValid(false)
-      setTokenError('')
-      setTokenStatus('')
-      setIsValidatingToken(false)
-      setEmail('')
       return
     }
 
     if (validationStartedRef.current) return
 
     validationStartedRef.current = true
+
+    const cleanUrl = new URL(window.location.href)
+    cleanUrl.searchParams.delete('token')
+    window.history.replaceState(
+      window.history.state,
+      document.title,
+      `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+    )
 
     let ignore = false
 

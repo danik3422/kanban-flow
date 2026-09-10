@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
@@ -9,10 +10,12 @@ import { after, before, beforeEach, describe, it } from 'node:test'
 import { env } from '../config/env.js'
 import { app } from '../index.js'
 import Board from '../models/board.model.js'
+import BoardActivity from '../models/boardActivity.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
 import Notification from '../models/notification.model.js'
+import PasswordResetToken from '../models/passwordResetToken.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import User from '../models/user.model.js'
@@ -32,12 +35,13 @@ const authCookie = (userId) => {
 	return [`jwt=${token}`]
 }
 
-const createInvite = async ({ boardId, email = '' }) => {
+const createInvite = async ({ boardId, email = '', role = 'member' }) => {
 	const rawToken = `invite-${crypto.randomBytes(16).toString('hex')}`
 	const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 	const invite = await BoardInvite.create({
 		board: boardId,
 		email,
+		role,
 		tokenHash,
 		createdBy: (await Board.findById(boardId)).createdBy,
 		expiresAt: new Date(Date.now() + 60_000),
@@ -60,8 +64,10 @@ before(async () => {
 beforeEach(async () => {
 	await Promise.all([
 		BoardInvite.deleteMany({}),
+		BoardActivity.deleteMany({}),
 		BoardMember.deleteMany({}),
 		Board.deleteMany({}),
+		PasswordResetToken.deleteMany({}),
 		User.deleteMany({}),
 	])
 })
@@ -72,10 +78,174 @@ after(async () => {
 })
 
 describe('board access and invitation flow', () => {
+	it('blocks state-changing requests from an untrusted origin', async () => {
+		const response = await request(app)
+			.post('/api/auth/signup')
+			.set('Origin', 'https://attacker.example')
+			.send({ email: 'blocked@example.com', password: 'Password123!' })
+
+		assert.equal(response.status, 403)
+		assert.equal(await User.findOne({ email: 'blocked@example.com' }), null)
+	})
+
+	it('allows state-changing requests from a configured origin', async () => {
+		const response = await request(app)
+			.post('/api/auth/signup')
+			.set('Origin', env.corsOrigin[0])
+			.send({ email: 'allowed@example.com', password: 'Password123!' })
+
+		assert.notEqual(response.status, 403)
+	})
+
+	it('allows a reset token to be claimed only once under concurrency', async () => {
+		const password = await bcrypt.hash('OldPassword123!', 10)
+		const user = await User.create({
+			email: 'reset@example.com',
+			password,
+			emailVerified: true,
+			profileSetup: true,
+		})
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		await PasswordResetToken.create({
+			user: user._id,
+			tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+			expiresAt: new Date(Date.now() + 60_000),
+		})
+
+		const responses = await Promise.all([
+			request(app).post('/api/auth/password-reset/confirm').send({ token: rawToken, password: 'NewPassword123!' }),
+			request(app).post('/api/auth/password-reset/confirm').send({ token: rawToken, password: 'NewPassword123!' }),
+		])
+
+		assert.deepEqual(responses.map((response) => response.status).sort(), [200, 410])
+		assert.ok((await PasswordResetToken.findOne({ user: user._id })).usedAt)
+	})
+
 	it('rejects protected requests without a session', async () => {
 		const response = await request(app).get('/api/board/boards')
 
 		assert.equal(response.status, 401)
+	})
+
+	it('rejects social provider claims on public signup', async () => {
+		const response = await request(app)
+			.post('/api/auth/signup')
+			.send({
+				email: 'claimed-google@example.com',
+				password: 'Password123!',
+				provider: 'google',
+			})
+
+		assert.equal(response.status, 400)
+		assert.equal(await User.findOne({ email: 'claimed-google@example.com' }), null)
+	})
+
+	it('stores the selected board visibility and rejects invalid values', async () => {
+		const { owner } = await createBoardWithOwner()
+		const workspaceResponse = await request(app)
+			.post('/api/board/boards')
+			.set('Cookie', authCookie(owner._id))
+			.send({ name: 'Workspace room', visibility: 'workspace' })
+		assert.equal(workspaceResponse.status, 201)
+		assert.equal(workspaceResponse.body.visibility, 'workspace')
+
+		const publicResponse = await request(app)
+			.post('/api/board/boards')
+			.set('Cookie', authCookie(owner._id))
+			.send({ name: 'Public room', visibility: 'public' })
+		assert.equal(publicResponse.status, 201)
+		assert.equal(publicResponse.body.visibility, 'public')
+
+		const invalidResponse = await request(app)
+			.post('/api/board/boards')
+			.set('Cookie', authCookie(owner._id))
+			.send({ name: 'Invalid room', visibility: 'everyone' })
+		assert.equal(invalidResponse.status, 400)
+	})
+
+	it('keeps workspace rooms private from non-members', async () => {
+		const { owner } = await createBoardWithOwner()
+		const viewer = await createUser('discoverable-viewer@example.com', 'Viewer')
+		const board = await Board.create({ name: 'Workspace visible', createdBy: owner._id, visibility: 'workspace' })
+		const column = await Column.create({ board: board._id, title: 'Visible column' })
+
+		const boardsResponse = await request(app)
+			.get('/api/board/boards')
+			.set('Cookie', authCookie(viewer._id))
+		assert.equal(boardsResponse.status, 404)
+
+		const columnsResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/columns`)
+			.set('Cookie', authCookie(viewer._id))
+		assert.equal(columnsResponse.status, 403)
+
+		const activityResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/activity`)
+			.set('Cookie', authCookie(viewer._id))
+		assert.equal(activityResponse.status, 403)
+
+		const membersResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/members`)
+			.set('Cookie', authCookie(viewer._id))
+		assert.equal(membersResponse.status, 403)
+
+		const createTaskResponse = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(viewer._id))
+			.send({ title: 'Should be blocked' })
+		assert.equal(createTaskResponse.status, 403)
+	})
+
+	it('creates a read-only public link without creating membership', async () => {
+		const { owner } = await createBoardWithOwner()
+		const viewer = await createUser('public-viewer@example.com', 'Public viewer')
+		const board = await Board.create({ name: 'Public link room', createdBy: owner._id, visibility: 'public' })
+		const column = await Column.create({ board: board._id, title: 'Public column' })
+		await Task.create({ column: column._id, title: 'Visible card' })
+
+		const linkResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(linkResponse.status, 200)
+		const token = linkResponse.body.publicUrl.split('/').pop()
+
+		const publicResponse = await request(app).get(`/api/board/public/${token}`)
+		assert.equal(publicResponse.status, 200)
+		assert.equal(publicResponse.body.board.name, board.name)
+		assert.equal(publicResponse.body.columns[0].tasks[0].title, 'Visible card')
+		assert.equal(await BoardMember.exists({ board: board._id, user: viewer._id }), null)
+	})
+
+	it('applies the selected admin role from an invite', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const invited = await createUser('invited-admin@example.com', 'Invited admin')
+		const { rawToken } = await createInvite({ boardId: board._id, email: invited.email, role: 'admin' })
+
+		const response = await request(app)
+			.post(`/api/board/invites/${rawToken}/accept`)
+			.set('Cookie', authCookie(invited._id))
+
+		assert.equal(response.status, 200)
+		assert.equal((await BoardMember.findOne({ board: board._id, user: invited._id })).role, 'admin')
+		assert.equal(owner.email, 'owner@example.com')
+	})
+
+	it('invalidates a public link when visibility becomes private', async () => {
+		const { owner } = await createBoardWithOwner()
+		const board = await Board.create({ name: 'Rotating public room', createdBy: owner._id, visibility: 'public' })
+		const linkResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/public-link`)
+			.set('Cookie', authCookie(owner._id))
+		const token = linkResponse.body.publicUrl.split('/').pop()
+
+		const updateResponse = await request(app)
+			.patch(`/api/board/boards/${board._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ visibility: 'private' })
+		assert.equal(updateResponse.status, 200)
+
+		const publicResponse = await request(app).get(`/api/board/public/${token}`)
+		assert.equal(publicResponse.status, 404)
 	})
 
 	it('rejects an expired session with 401', async () => {
@@ -110,6 +280,33 @@ describe('board access and invitation flow', () => {
 		assert.ok((await BoardInvite.findById(invite._id)).usedAt)
 		assert.equal(owner.email, 'owner@example.com')
 	})
+
+	    it('allows an invite to be accepted only once under concurrency', async () => {
+		    const { board } = await createBoardWithOwner()
+		    const member = await createUser('concurrent@example.com', 'Concurrent')
+		    const { rawToken } = await createInvite({
+			    boardId: board._id,
+			    email: member.email,
+		    })
+
+		    const responses = await Promise.all([
+			    request(app)
+				    .post(`/api/board/invites/${rawToken}/accept`)
+				    .set('Cookie', authCookie(member._id)),
+			    request(app)
+				    .post(`/api/board/invites/${rawToken}/accept`)
+				    .set('Cookie', authCookie(member._id)),
+		    ])
+
+		    assert.deepEqual(
+			    responses.map((response) => response.status).sort(),
+			    [200, 400],
+		    )
+		    assert.equal(
+			    await BoardMember.countDocuments({ board: board._id, user: member._id }),
+			    1,
+		    )
+	    })
 
 	it('rejects a self-invite', async () => {
 		const { owner, board } = await createBoardWithOwner()
@@ -170,6 +367,125 @@ describe('board access and invitation flow', () => {
 			.set('Cookie', authCookie(outsider._id))
 
 		assert.equal(response.status, 403)
+	})
+
+	it('protects board activity from outsiders', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('member-activity@example.com', 'Activity member')
+		const outsider = await createUser('outsider-activity@example.com', 'Activity outsider')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		await BoardActivity.create({
+			board: board._id,
+			user: owner._id,
+			action: 'created',
+			entityType: 'board',
+			entityName: board.name,
+			details: 'created this board',
+		})
+
+		const ownerResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/activity`)
+			.set('Cookie', authCookie(owner._id))
+		const memberResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/activity`)
+			.set('Cookie', authCookie(member._id))
+		const outsiderResponse = await request(app)
+			.get(`/api/board/boards/${board._id}/activity`)
+			.set('Cookie', authCookie(outsider._id))
+
+		assert.equal(ownerResponse.status, 200)
+		assert.equal(memberResponse.status, 200)
+		assert.equal(outsiderResponse.status, 403)
+		assert.equal(ownerResponse.body.length, 1)
+	})
+
+	it('deletes board activity when the board is deleted', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const column = await Column.create({ board: board._id, title: 'History' })
+		const task = await Task.create({ column: column._id, title: 'Sensitive task' })
+		await TaskActivity.create({
+			task: task._id,
+			board: board._id,
+			user: owner._id,
+			type: 'comment',
+			message: 'Sensitive comment',
+		})
+		await Notification.create({
+			user: owner._id,
+			board: board._id,
+			task: task._id,
+			type: 'task_assigned',
+			title: 'Sensitive notification',
+			message: 'Sensitive task was assigned',
+		})
+		await BoardActivity.create({
+			board: board._id,
+			user: owner._id,
+			action: 'created',
+			entityType: 'board',
+			entityName: board.name,
+		})
+
+		const response = await request(app)
+			.delete(`/api/board/boards/${board._id}`)
+			.set('Cookie', authCookie(owner._id))
+
+		assert.equal(response.status, 200)
+		assert.equal(await BoardActivity.countDocuments({ board: board._id }), 0)
+		assert.equal(await TaskActivity.countDocuments({ board: board._id }), 0)
+		assert.equal(await Notification.countDocuments({ board: board._id }), 0)
+		assert.equal(await Notification.countDocuments({ task: task._id }), 0)
+	})
+
+	it('hides assigned tasks after leaving a board', async () => {
+		const { board } = await createBoardWithOwner()
+		const member = await createUser('leaving-member@example.com', 'Leaving member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const column = await Column.create({ board: board._id, title: 'Assigned' })
+		await Task.create({
+			column: column._id,
+			title: 'Private assigned task',
+			assignees: [member._id],
+		})
+
+		const beforeLeave = await request(app)
+			.get('/api/board/my-tasks')
+			.set('Cookie', authCookie(member._id))
+		assert.equal(beforeLeave.status, 200)
+		assert.equal(beforeLeave.body.length, 1)
+
+		const leaveResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/leave`)
+			.set('Cookie', authCookie(member._id))
+		assert.equal(leaveResponse.status, 200)
+
+		const afterLeave = await request(app)
+			.get('/api/board/my-tasks')
+			.set('Cookie', authCookie(member._id))
+		assert.equal(afterLeave.status, 200)
+		assert.equal(afterLeave.body.length, 0)
+	})
+
+	it('rejects assignees who are not board members', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const outsider = await createUser('unassigned-outsider@example.com', 'Outsider')
+		const column = await Column.create({ board: board._id, title: 'Tasks' })
+
+		const createResponse = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Blocked task', assignees: [outsider._id] })
+		assert.equal(createResponse.status, 400)
+		assert.equal(await Task.countDocuments({ column: column._id }), 0)
+
+		const task = await Task.create({ column: column._id, title: 'Existing task' })
+		const updateResponse = await request(app)
+			.patch(`/api/board/tasks/${task._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ assignees: [outsider._id] })
+		assert.equal(updateResponse.status, 400)
+		assert.deepEqual((await Task.findById(task._id)).assignees, [])
+		assert.equal(await Notification.countDocuments({ task: task._id }), 0)
 	})
 
 	it('transfers ownership and demotes the previous owner to admin', async () => {

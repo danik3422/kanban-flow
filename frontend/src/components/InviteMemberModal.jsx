@@ -8,7 +8,8 @@ import {
 	UsersRound,
 	X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import Popover from './Popover'
 
 const InviteMemberModal = ({
 	email,
@@ -19,6 +20,9 @@ const InviteMemberModal = ({
 	presenceByUserId = {},
 	canManageMembers = false,
 	showPresence = false,
+	roomVisibility = 'private',
+	publicLink = '',
+	onCreatePublicLink,
 	isOpen,
 	onChange,
 	onClose,
@@ -28,6 +32,7 @@ const InviteMemberModal = ({
 	onRoleChange,
 }) => {
 	const [mode, setMode] = useState('email')
+	const [role, setRole] = useState('member')
 	const [tab, setTab] = useState('members')
 	const [openRoleMemberId, setOpenRoleMemberId] = useState(null)
 	const [membersPage, setMembersPage] = useState(1)
@@ -38,22 +43,21 @@ const InviteMemberModal = ({
 		: 0
 	const membersPageCount = Math.max(1, Math.ceil(members.length / pageSize))
 	const invitesPageCount = Math.max(1, Math.ceil(invites.length / pageSize))
+	const safeMembersPage = Math.min(membersPage, membersPageCount)
+	const safeInvitesPage = Math.min(invitesPage, invitesPageCount)
 	const visibleMembers = members.slice(
-		(membersPage - 1) * pageSize,
-		membersPage * pageSize,
+		(safeMembersPage - 1) * pageSize,
+		safeMembersPage * pageSize,
 	)
 	const visibleInvites = invites.slice(
-		(invitesPage - 1) * pageSize,
-		invitesPage * pageSize,
+		(safeInvitesPage - 1) * pageSize,
+		safeInvitesPage * pageSize,
 	)
-
-	useEffect(() => {
-		setMembersPage((page) => Math.min(page, membersPageCount))
-	}, [membersPageCount])
-
-	useEffect(() => {
-		setInvitesPage((page) => Math.min(page, invitesPageCount))
-	}, [invitesPageCount])
+	const roomDescription = roomVisibility === 'public'
+		? 'Anyone can discover this room. Members can collaborate here.'
+		: roomVisibility === 'workspace'
+			? 'Workspace members can view this room. Members can collaborate here.'
+			: 'Only invited members can view and edit this room.'
 
 	const renderPagination = (page, pageCount, setPage) => {
 		if (pageCount <= 1) return null
@@ -85,10 +89,10 @@ const InviteMemberModal = ({
 	if (!isOpen) return null
 
 	return (
-		<div className='modal-backdrop' onMouseDown={onClose}>
+		<Popover isOpen={isOpen} onClose={onClose} className='modal-backdrop' onMouseDown={onClose}>
 			<form
 				className='modal-panel share-board-modal'
-				onSubmit={(event) => onSubmit(event, mode)}
+				onSubmit={(event) => onSubmit(event, mode, role)}
 				onMouseDown={(event) => event.stopPropagation()}
 			>
 				<div className='modal-title share-header'>
@@ -98,11 +102,7 @@ const InviteMemberModal = ({
 					<div className='share-header-copy'>
 						<span className='share-kicker'>Collaborate</span>
 						<h2>{canManageMembers ? 'Invite people' : 'People in this room'}</h2>
-						<p>
-							{canManageMembers
-								? 'Bring the right people into this board.'
-								: 'See who is working in this room.'}
-						</p>
+						<p>{canManageMembers ? 'Bring the right people into this room.' : roomDescription}</p>
 					</div>
 					{showPresence && (
 						<span className='share-online-count'>
@@ -143,7 +143,8 @@ const InviteMemberModal = ({
 							<select
 								className='share-role'
 								aria-label='Member role'
-								defaultValue='member'
+								value={role}
+								onChange={(event) => setRole(event.target.value)}
 							>
 								<option value='member'>Member</option>
 								<option value='admin'>Admin</option>
@@ -173,6 +174,12 @@ const InviteMemberModal = ({
 							</button>
 						</div>
 					</>
+				)}
+				{roomVisibility === 'public' && canManageMembers && (
+					<div className='public-link-panel'>
+						<div><strong>Public view link</strong><small>Share this link to let people view without joining.</small></div>
+						<button type='button' className='quiet-button' onClick={onCreatePublicLink}>{publicLink ? 'Copy link again' : 'Create link'}</button>
+					</div>
 				)}
 				{canManageMembers && (
 					<div className='share-tabs' role='tablist'>
@@ -328,7 +335,7 @@ const InviteMemberModal = ({
 					</div>
 				)}
 			</form>
-		</div>
+		</Popover>
 	)
 }
 

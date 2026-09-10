@@ -10,6 +10,9 @@ import {
 	deleteColumn,
 	deleteTask,
 	getBoardById,
+	createPublicBoardLink,
+	getPublicBoard,
+	getBoardActivities,
 	getBoardInviteDetails,
 	getBoardColumns,
 	getBoardInvites,
@@ -44,8 +47,11 @@ const router = express.Router()
 // Boards
 router.get('/boards', authMiddleware, getUserBoards)
 router.get('/my-tasks', authMiddleware, getMyTasks)
+router.get('/public/:token', getPublicBoard)
 router.post('/boards', authMiddleware, createBoard)
 router.get('/boards/:id', authMiddleware, boardMiddleware, getBoardById)
+router.post('/boards/:id/public-link', authMiddleware, boardMiddleware, createPublicBoardLink)
+router.get('/boards/:id/activity', authMiddleware, boardMiddleware, getBoardActivities)
 router.patch('/boards/:id', authMiddleware, boardMiddleware, updateBoard)
 router.delete('/boards/:id', authMiddleware, boardMiddleware, removeBoard)
 router.post('/boards/:id/leave', authMiddleware, boardMiddleware, leaveBoard)

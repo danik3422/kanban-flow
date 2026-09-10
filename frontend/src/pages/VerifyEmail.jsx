@@ -7,16 +7,23 @@ import { axiosInstance } from '../lib/axios'
 const VerifyEmail = () => {
 	const navigate = useNavigate()
 	const [searchParams] = useSearchParams()
-	const [status, setStatus] = useState('pending')
-	const [message, setMessage] = useState('')
 	const email = searchParams.get('email') || ''
 	const token = searchParams.get('token')
+	const [status, setStatus] = useState(token ? 'pending' : 'idle')
+	const [message, setMessage] = useState('')
 
 	useEffect(() => {
 		if (!token) {
-			setStatus('idle')
 			return
 		}
+
+		const cleanUrl = new URL(window.location.href)
+		cleanUrl.searchParams.delete('token')
+		window.history.replaceState(
+			window.history.state,
+			document.title,
+			`${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+		)
 
 		const verify = async () => {
 			try {

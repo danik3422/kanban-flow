@@ -1,11 +1,10 @@
 import { ArrowLeft, ArrowRight, Compass, SearchX } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import SiteFooter from '../components/SiteFooter'
 
 const NotFound = () => {
 	const authUser = useAuthStore((state) => state.authUser)
-	const navigate = useNavigate()
 	const destination = authUser ? '/workspaces' : '/'
 
 	return (

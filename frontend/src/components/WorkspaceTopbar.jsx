@@ -1,13 +1,16 @@
 import {
 	LayoutDashboard,
 	LoaderCircle,
+	LockKeyhole,
 	Menu,
 	PanelLeftClose,
 	PanelLeftOpen,
+	UsersRound,
 	Wifi,
 	WifiOff,
 } from 'lucide-react'
 import AccountDropdown from './AccountDropdown'
+import ActivityFeed from './ActivityFeed'
 import NotificationCenter from './NotificationCenter'
 
 const WorkspaceTopbar = ({
@@ -16,6 +19,11 @@ const WorkspaceTopbar = ({
 	isSidebarCollapsed,
 	onSidebarCollapse,
 	realtimeStatus,
+	onInvite,
+	onVisibilityChange,
+	boardVisibility,
+	activities,
+	activityLoading,
 	children,
 }) => (
 	<header className='workspace-topbar'>
@@ -65,7 +73,30 @@ const WorkspaceTopbar = ({
 					</span>
 				</div>
 			)}
+			{onInvite && <ActivityFeed activities={activities} isLoading={activityLoading} />}
+			{onInvite && (
+				<button
+					type='button'
+					className='workspace-topbar-invite'
+					onClick={onInvite}
+					aria-label='Open people in this room'
+					title='People'
+				>
+					<UsersRound size={17} />
+				</button>
+			)}
 			<NotificationCenter />
+			{onVisibilityChange && (
+				<button
+					type='button'
+					className='workspace-topbar-visibility'
+					onClick={onVisibilityChange}
+					aria-label='Change room visibility'
+					title={`Room visibility: ${boardVisibility || 'private'}`}
+				>
+					<LockKeyhole size={17} />
+				</button>
+			)}
 			<AccountDropdown />
 		</div>
 	</header>

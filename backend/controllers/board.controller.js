@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 import crypto from 'node:crypto'
 
 import { sendBoardInviteEmail } from '../lib/mailer.js'
-import { emitBoardEvent, emitUserEvent } from '../lib/realtime.js'
+import { emitBoardEvent, revokeUserBoardAccess } from '../lib/realtime.js'
 import Board from '../models/board.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
@@ -11,6 +11,8 @@ import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
 import Notification from '../models/notification.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
+import BoardActivity from '../models/boardActivity.model.js'
+import { recordBoardActivity } from '../lib/boardActivity.js'
 
 const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0 }) =>
 	TaskActivity.create({
@@ -39,10 +41,15 @@ const ensureBoardAccess = async (userId, boardId) => {
 		user: userId,
 	})
 
-	return {
-		board,
-		allowed: Boolean(membership),
-	}
+	return { board, allowed: Boolean(membership) }
+}
+
+const ensureBoardEditAccess = async (userId, boardId) => {
+	const board = await Board.findById(boardId)
+	if (!board) return { board: null, allowed: false }
+	if (board.createdBy.toString() === userId.toString()) return { board, allowed: true }
+	const membership = await BoardMember.exists({ board: boardId, user: userId })
+	return { board, allowed: Boolean(membership) }
 }
 
 const canManageBoard = async (board, userId) => {
@@ -73,16 +80,37 @@ const notifyTaskAssignees = async ({ userIds, task, board }) => {
 	)
 }
 
+const validateBoardAssignees = async (board, assignees) => {
+	if (!Array.isArray(assignees)) return false
+	if (assignees.some((userId) => !userId || !mongoose.Types.ObjectId.isValid(userId))) {
+		return false
+	}
+	const uniqueAssigneeIds = [...new Set(assignees.map((userId) => userId.toString()))]
+	const memberIds = await BoardMember.find({
+		board: board._id,
+		user: { $in: uniqueAssigneeIds },
+	}).distinct('user')
+	const allowedIds = new Set([
+		board.createdBy.toString(),
+		...memberIds.map((userId) => userId.toString()),
+	])
+	return uniqueAssigneeIds.every((userId) => allowedIds.has(userId))
+}
+
 export const createBoard = async (req, res) => {
 	try {
-		const { name } = req.body
+		const { name, visibility = 'private' } = req.body
 		if (!name) {
 			return res.status(400).json({ message: 'Board name is required' })
+		}
+		if (!['private', 'workspace', 'public'].includes(visibility)) {
+			return res.status(400).json({ message: 'Invalid board visibility' })
 		}
 
 		const newBoard = new Board({
 			name,
 			createdBy: req.user._id,
+			visibility,
 		})
 
 		await newBoard.save()
@@ -91,6 +119,15 @@ export const createBoard = async (req, res) => {
 			board: newBoard._id,
 			user: req.user._id,
 			role: 'admin',
+		})
+		await recordBoardActivity({
+			boardId: newBoard._id,
+			userId: req.user._id,
+			action: 'created',
+			entityType: 'board',
+			entityId: newBoard._id,
+			entityName: newBoard.name,
+			details: 'created this board',
 		})
 
 		res.status(201).json(newBoard)
@@ -119,6 +156,63 @@ export const getBoardById = async (req, res) => {
 	} catch (error) {
 		console.error('Error fetching board by id:', error)
 		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const createPublicBoardLink = async (req, res) => {
+	try {
+		const board = req.board
+		if (board.visibility !== 'public') {
+			return res.status(400).json({ message: 'Only public rooms can have a public link' })
+		}
+		if (!(await canManageBoard(board, req.user._id))) {
+			return res.status(403).json({ message: 'Only the board owner or an admin can create a public link' })
+		}
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		board.publicTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		await board.save()
+		return res.status(200).json({ publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/public/${rawToken}` })
+	} catch (error) {
+		console.error('Public board link creation failed:', error)
+		return res.status(500).json({ message: 'Could not create public board link' })
+	}
+}
+
+export const getPublicBoard = async (req, res) => {
+	try {
+		const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex')
+		const board = await Board.findOne({ visibility: 'public', publicTokenHash: tokenHash }).select('name visibility createdAt').lean()
+		if (!board) return res.status(404).json({ message: 'Public room link is invalid or expired' })
+		const columns = await Column.find({ board: board._id }).sort({ position: 1, createdAt: 1 }).lean()
+		const tasks = await Task.find({ column: { $in: columns.map((column) => column._id) } })
+			.select('title description dueDate column position labels checklist priority trackedSeconds')
+			.sort({ position: 1, createdAt: 1 })
+			.lean()
+		return res.status(200).json({ board, columns: columns.map((column) => ({
+			...column,
+			tasks: tasks.filter((task) => task.column.toString() === column._id.toString()),
+		})) })
+	} catch (error) {
+		console.error('Public board fetch failed:', error)
+		return res.status(500).json({ message: 'Could not load public room' })
+	}
+}
+
+export const getBoardActivities = async (req, res) => {
+	try {
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board._id)
+		if (!board) return res.status(404).json({ message: 'Board not found' })
+		if (!allowed) return res.status(403).json({ message: 'Access denied' })
+
+		const activities = await BoardActivity.find({ board: req.board._id })
+			.populate('user', 'name email avatar')
+			.sort({ createdAt: -1 })
+			.limit(200)
+			.lean()
+		return res.status(200).json(activities)
+	} catch (error) {
+		console.error('Board activity fetch failed:', error)
+		return res.status(500).json({ message: 'Could not load board activity' })
 	}
 }
 
@@ -189,6 +283,15 @@ export const updateBoardMemberRole = async (req, res) => {
 				{ board: board._id, user: previousOwnerId },
 				{ $set: { role: 'admin' } },
 			)
+			await recordBoardActivity({
+				boardId: board._id,
+				userId: req.user._id,
+				action: 'transferred ownership',
+				entityType: 'member',
+				entityId: membership.user._id,
+				entityName: membership.user.name || membership.user.email,
+				details: 'transferred board ownership',
+			})
 			return res.status(200).json({
 				...membership.toObject(),
 				ownershipTransferred: true,
@@ -197,6 +300,15 @@ export const updateBoardMemberRole = async (req, res) => {
 		}
 		membership.role = role
 		await membership.save()
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'changed role',
+			entityType: 'member',
+			entityId: membership.user._id,
+			entityName: membership.user.name || membership.user.email,
+			details: `changed member role to ${role}`,
+		})
 		return res.status(200).json(membership)
 	} catch (error) {
 		console.error('Board member role update failed:', error)
@@ -248,6 +360,15 @@ export const revokeBoardInvite = async (req, res) => {
 		if (!invite)
 			return res.status(404).json({ message: 'Pending invite not found' })
 		await invite.deleteOne()
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'revoked invite',
+			entityType: 'invite',
+			entityId: invite._id,
+			entityName: invite.email || 'Anyone with the link',
+			details: 'revoked a board invite',
+		})
 		return res.status(200).json({ message: 'Invite revoked' })
 	} catch (error) {
 		console.error('Board invite revoke failed:', error)
@@ -279,6 +400,15 @@ export const copyBoardInviteLink = async (req, res) => {
 		invite.tokenHash = tokenHash
 		invite.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 		await invite.save()
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'copied invite link',
+			entityType: 'invite',
+			entityId: invite._id,
+			entityName: invite.email || 'Anyone with the link',
+			details: 'copied a board invite link',
+		})
 
 		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
 		return res.status(200).json({ inviteUrl, expiresInDays: 7 })
@@ -353,15 +483,18 @@ export const updateBoard = async (req, res) => {
 	try {
 		const board = req.board
 		const userId = req.user._id
-		const { name } = req.body
+		const { name, visibility } = req.body
 
-		if (!name || !name.trim()) {
+		if (name !== undefined && (!name || !name.trim())) {
 			return res.status(400).json({ message: 'Board name is required' })
 		}
 
-		const trimmedName = name.trim()
+		const trimmedName = name === undefined ? board.name : name.trim()
 		if (trimmedName.length > 100) {
 			return res.status(400).json({ message: 'Board name is too long' })
+		}
+		if (visibility !== undefined && !['private', 'workspace', 'public'].includes(visibility)) {
+			return res.status(400).json({ message: 'Invalid board visibility' })
 		}
 
 		const isOwner = board.createdBy.toString() === userId.toString()
@@ -379,8 +512,38 @@ export const updateBoard = async (req, res) => {
 			})
 		}
 
+		const previousName = board.name
+		const previousVisibility = board.visibility
 		board.name = trimmedName
+		if (visibility !== undefined) {
+			board.visibility = visibility
+			if (previousVisibility === 'public' && visibility !== 'public') {
+				board.publicTokenHash = ''
+			}
+		}
 		await board.save()
+		if (previousName !== trimmedName) {
+			await recordBoardActivity({
+				boardId: board._id,
+				userId,
+				action: 'renamed',
+				entityType: 'board',
+				entityId: board._id,
+				entityName: trimmedName,
+				details: `renamed this board from ${previousName} to ${trimmedName}`,
+			})
+		}
+		if (visibility !== undefined && previousVisibility !== visibility) {
+			await recordBoardActivity({
+				boardId: board._id,
+				userId,
+				action: 'changed visibility',
+				entityType: 'board',
+				entityId: board._id,
+				entityName: trimmedName,
+				details: `changed room visibility from ${previousVisibility} to ${visibility}`,
+			})
+		}
 
 		return res.status(200).json(board)
 	} catch (error) {
@@ -412,14 +575,20 @@ export const removeBoard = async (req, res) => {
 		// Get all columns linked to this board
 		const columns = await Column.find({ board: boardId })
 		const columnIds = columns.map((col) => col._id)
+		const taskIds = await Task.find({ column: { $in: columnIds } }).distinct('_id')
 
-		// Delete all tasks in these columns
+		// Delete all board-scoped records before deleting their referenced entities.
+		await TaskActivity.deleteMany({ board: boardId })
+		await Notification.deleteMany({
+			$or: [{ board: boardId }, { task: { $in: taskIds } }],
+		})
 		await Task.deleteMany({ column: { $in: columnIds } })
 
 		// Delete columns, board members, and board
 		await Column.deleteMany({ board: boardId })
 		await BoardMember.deleteMany({ board: boardId })
 		await BoardInvite.deleteMany({ board: boardId })
+		await BoardActivity.deleteMany({ board: boardId })
 		await Board.deleteOne({ _id: boardId })
 
 		return res
@@ -450,6 +619,18 @@ export const leaveBoard = async (req, res) => {
 		if (!membership) {
 			return res.status(404).json({ message: 'You are not a member of this board.' })
 		}
+		await recordBoardActivity({
+			boardId: board._id,
+			userId,
+			action: 'left',
+			entityType: 'member',
+			entityId: userId,
+			entityName: req.user.name || req.user.email,
+			details: 'left this board',
+		})
+		revokeUserBoardAccess(userId, board._id, {
+			reason: 'left-board',
+		})
 
 		return res.status(200).json({ message: 'You left the board successfully' })
 	} catch (error) {
@@ -471,7 +652,7 @@ export const getUserBoards = async (req, res) => {
 
 		const boardIds = membership.map((member) => member.board)
 
-		const boards = await Board.find({ _id: { $in: boardIds } }).lean()
+			const boards = await Board.find({ _id: { $in: boardIds } }).lean()
 
 		if (!boards || boards.length === 0) {
 			return res.status(404).json({ message: 'No boards found for this user.' })
@@ -499,7 +680,25 @@ export const getUserBoards = async (req, res) => {
 
 export const getMyTasks = async (req, res) => {
 	try {
-		const tasks = await Task.find({ assignees: req.user._id })
+		const search = (req.query.search || req.query.q || '').trim().toLowerCase()
+		const priority = (req.query.priority || 'all').toString()
+		const board = (req.query.board || 'all').toString()
+		const [ownedBoardIds, memberships] = await Promise.all([
+			Board.find({ createdBy: req.user._id }).distinct('_id'),
+			BoardMember.find({ user: req.user._id }).select('board').lean(),
+		])
+		const accessibleBoardIds = [
+			...new Set([
+				...ownedBoardIds.map((boardId) => boardId.toString()),
+				...memberships.map((membership) => membership.board.toString()),
+			]),
+		]
+		const accessibleColumnIds = await Column.find({ board: { $in: accessibleBoardIds } }).distinct('_id')
+
+		let tasks = await Task.find({
+			assignees: req.user._id,
+			column: { $in: accessibleColumnIds },
+		})
 			.populate({
 				path: 'column',
 				select: 'title board',
@@ -508,6 +707,28 @@ export const getMyTasks = async (req, res) => {
 			.populate('assignees', 'name email avatar')
 			.sort({ dueDate: 1, updatedAt: -1 })
 			.lean()
+
+		if (priority !== 'all') {
+			tasks = tasks.filter((task) => (task.priority || 'none') === priority)
+		}
+
+		if (board !== 'all') {
+			tasks = tasks.filter((task) => {
+				const boardId = task.column?.board?._id?.toString?.() || task.column?.board?.toString?.()
+				return boardId === board
+			})
+		}
+
+		if (search) {
+			tasks = tasks.filter((task) => {
+				const title = (task.title || '').toLowerCase()
+				const description = (task.description || '').toLowerCase()
+				const boardName = (task.column?.board?.name || '').toLowerCase()
+				const columnName = (task.column?.title || '').toLowerCase()
+				const labels = (task.labels || []).map((label) => String(label).toLowerCase())
+				return [title, description, boardName, columnName, ...labels].some((value) => value.includes(search))
+			})
+		}
 
 		return res.status(200).json(tasks)
 	} catch (error) {
@@ -564,6 +785,15 @@ export const addMemberToBoard = async (req, res) => {
 		})
 
 		await newMember.save()
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: requesterId,
+			action: 'added member',
+			entityType: 'member',
+			entityId: userToAdd._id,
+			entityName: userToAdd.name || userToAdd.email,
+			details: `added ${userToAdd.email} to this board`,
+		})
 		let emailSent = true
 		try {
 			await sendBoardInviteEmail({
@@ -599,6 +829,10 @@ export const createBoardInvite = async (req, res) => {
 				.status(403)
 				.json({ message: 'Only the board owner or an admin can create invites' })
 		const email = (req.body.email || '').trim().toLowerCase()
+		const role = req.body.role || 'member'
+		if (!['admin', 'member'].includes(role)) {
+			return res.status(400).json({ message: 'Invalid invite role' })
+		}
 		if (email && email === req.user.email.toLowerCase())
 			return res.status(400).json({ message: 'You cannot invite yourself' })
 		if (email) {
@@ -626,12 +860,22 @@ export const createBoardInvite = async (req, res) => {
 		}
 		const rawToken = crypto.randomBytes(32).toString('hex')
 		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
-		await BoardInvite.create({
+		const invite = await BoardInvite.create({
 			board: board._id,
 			email,
+			role,
 			tokenHash,
 			createdBy: req.user._id,
 			expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+		})
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'created invite',
+			entityType: 'invite',
+			entityId: invite._id,
+			entityName: email || 'Anyone with the link',
+			details: email ? `invited ${email}` : 'created a share link invite',
 		})
 		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
 		let emailSent = false
@@ -719,13 +963,32 @@ export const acceptBoardInvite = async (req, res) => {
 			})
 		}
 
-		invite.usedAt = new Date()
-		await invite.save()
+				const claimedInvite = await BoardInvite.findOneAndUpdate(
+					{
+						_id: invite._id,
+						usedAt: null,
+						expiresAt: { $gt: new Date() },
+					},
+					{ $set: { usedAt: new Date() } },
+					{ returnDocument: 'after' },
+				)
+				if (!claimedInvite) {
+					return res.status(400).json({ message: 'Invite expired or invalid' })
+				}
 		await BoardMember.updateOne(
 			{ board: invite.board, user: req.user._id },
-			{ $setOnInsert: { role: 'member' } },
+			{ $setOnInsert: { role: invite.role || 'member' } },
 			{ upsert: true },
 		)
+		await recordBoardActivity({
+			boardId: invite.board,
+			userId: req.user._id,
+			action: 'joined',
+			entityType: 'member',
+			entityId: req.user._id,
+			entityName: req.user.name || req.user.email,
+			details: 'joined this board from an invite',
+		})
 		return res
 			.status(200)
 			.json({ boardId: invite.board.toString(), message: 'Invite accepted' })
@@ -765,6 +1028,15 @@ export const createColumn = async (req, res) => {
 		})
 
 		const savedColumn = await newColumn.save()
+		await recordBoardActivity({
+			boardId: board._id,
+			userId,
+			action: 'created',
+			entityType: 'column',
+			entityId: savedColumn._id,
+			entityName: savedColumn.title,
+			details: `created the ${savedColumn.title} column`,
+		})
 		res.status(201).json(savedColumn)
 	} catch (error) {
 		console.error('Error creating column:', error)
@@ -802,6 +1074,7 @@ export const updateColumn = async (req, res) => {
 			})
 		}
 
+		const previousTitle = column.title
 		if (typeof title !== 'undefined') {
 			if (!title || title.trim() === '') {
 				return res.status(400).json({ message: 'Column title is required' })
@@ -818,6 +1091,19 @@ export const updateColumn = async (req, res) => {
 
 		const updatedColumn = await column.save()
 		const columnData = updatedColumn.toObject()
+		if (typeof title !== 'undefined' || typeof pinned !== 'undefined') {
+			await recordBoardActivity({
+				boardId: column.board,
+				userId,
+				action: 'updated',
+				entityType: 'column',
+				entityId: column._id,
+				entityName: column.title,
+				details: typeof title !== 'undefined'
+					? `renamed column from ${previousTitle} to ${column.title}`
+					: `${column.pinned ? 'pinned' : 'unpinned'} the ${column.title} column`,
+			})
+		}
 
 		emitBoardEvent(column.board.toString(), 'column:updated', columnData)
 
@@ -871,6 +1157,17 @@ export const reorderColumn = async (req, res) => {
 		}
 		column.position = nextPosition
 		await column.save()
+		if (nextPosition !== originalPosition) {
+			await recordBoardActivity({
+				boardId: board._id,
+				userId,
+				action: 'reordered',
+				entityType: 'column',
+				entityId: column._id,
+				entityName: column.title,
+				details: `moved ${column.title} from position ${originalPosition + 1} to ${nextPosition + 1}`,
+			})
+		}
 
 		const columns = await Column.find({ board: board._id })
 			.sort({ position: 1, createdAt: 1 })
@@ -904,8 +1201,8 @@ export const updateColumnSort = async (req, res) => {
 		}
 
 		// Check if user has access to this board
-		const hasAccess = await ensureBoardAccess(board._id, userId)
-		if (!hasAccess) {
+		const { allowed } = await ensureBoardEditAccess(userId, board._id)
+		if (!allowed) {
 			return res.status(403).json({ message: 'Access denied' })
 		}
 
@@ -924,6 +1221,15 @@ export const updateColumnSort = async (req, res) => {
 		column.sortBy = sortBy
 		const updatedColumn = await column.save()
 		const columnData = updatedColumn.toObject()
+		await recordBoardActivity({
+			boardId: column.board,
+			userId,
+			action: 'changed sort',
+			entityType: 'column',
+			entityId: column._id,
+			entityName: column.title,
+			details: `changed ${column.title} sorting to ${sortBy || 'custom'}`,
+		})
 
 		emitBoardEvent(column.board.toString(), 'column:sort-updated', columnData)
 
@@ -944,6 +1250,7 @@ export const createTask = async (req, res) => {
 			labels = [],
 			checklist = [],
 			position = 0,
+			priority = 'none',
 		} = req.body
 
 		const column = await Column.findById(columnId)
@@ -951,7 +1258,7 @@ export const createTask = async (req, res) => {
 			return res.status(404).json({ message: 'Column not found' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(
+		const { board, allowed } = await ensureBoardEditAccess(
 			req.user._id,
 			column.board,
 		)
@@ -960,6 +1267,9 @@ export const createTask = async (req, res) => {
 		}
 		if (!allowed) {
 			return res.status(403).json({ message: 'Access denied' })
+		}
+		if (!await validateBoardAssignees(board, assignees)) {
+			return res.status(400).json({ message: 'All assignees must be active board members' })
 		}
 
 		if (!title || title.trim() === '') {
@@ -974,12 +1284,22 @@ export const createTask = async (req, res) => {
 			assignees,
 			labels,
 			checklist,
+			priority: ['none', 'low', 'medium', 'high', 'urgent'].includes(priority) ? priority : 'none',
 		})
 
 		await newTask.save()
 		const savedTask = await Task.findById(newTask._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
+		await recordBoardActivity({
+			boardId: column.board,
+			userId: req.user._id,
+			action: 'created',
+			entityType: 'task',
+			entityId: savedTask._id,
+			entityName: savedTask.title,
+			details: `created the task in ${column.title}`,
+		})
 		await recordTaskActivity({
 			taskId: savedTask._id,
 			boardId: column.board,
@@ -1005,7 +1325,7 @@ export const updateTask = async (req, res) => {
 		const task = await Task.findById(req.params.id).populate('column', 'board')
 		if (!task) return res.status(404).json({ message: 'Task not found' })
 		const boardId = task.column.board.toString()
-		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
+		const { board, allowed } = await ensureBoardEditAccess(req.user._id, boardId)
 		if (!board || !allowed)
 			return res.status(403).json({ message: 'Access denied' })
 
@@ -1018,7 +1338,11 @@ export const updateTask = async (req, res) => {
 			checklist,
 			position,
 			column: targetColumnId,
+			priority,
 		} = req.body
+		if (assignees !== undefined && !await validateBoardAssignees(board, assignees)) {
+			return res.status(400).json({ message: 'All assignees must be active board members' })
+		}
 		const originalColumnId = task.column._id
 		const originalColumn = await Column.findById(originalColumnId).select('title')
 		const originalPosition = task.position
@@ -1044,6 +1368,11 @@ export const updateTask = async (req, res) => {
 		if (labels !== undefined) task.labels = labels
 		if (checklist !== undefined) task.checklist = checklist
 		if (position !== undefined) task.position = position
+		if (priority !== undefined) {
+			task.priority = ['none', 'low', 'medium', 'high', 'urgent'].includes(priority)
+				? priority
+				: 'none'
+		}
 
 		if (position !== undefined) {
 			const nextPosition = Math.max(0, position)
@@ -1104,6 +1433,17 @@ export const updateTask = async (req, res) => {
 			}
 		}
 		const moved = originalColumnId.toString() !== targetColumn._id.toString()
+		await recordBoardActivity({
+			boardId,
+			userId: req.user._id,
+			action: moved ? 'moved' : 'updated',
+			entityType: 'task',
+			entityId: task._id,
+			entityName: updatedTask.title,
+			details: moved
+				? `moved ${updatedTask.title} from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}`
+				: `updated ${updatedTask.title}`,
+		})
 		await recordTaskActivity({
 			taskId: task._id,
 			boardId,
@@ -1161,6 +1501,15 @@ export const deleteColumn = async (req, res) => {
 				message: 'Access denied: Only board admins can delete columns.',
 			})
 		}
+		await recordBoardActivity({
+			boardId: board._id,
+			userId,
+			action: 'deleted',
+			entityType: 'column',
+			entityId: column._id,
+			entityName: column.title,
+			details: `deleted the ${column.title} column and its tasks`,
+		})
 
 		// Delete all tasks in this column
 		const taskIds = await Task.find({ column: columnId }).distinct('_id')
@@ -1200,7 +1549,7 @@ export const deleteTask = async (req, res) => {
 			return res.status(404).json({ message: 'Task not found' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(userId, task.column.board)
+		const { board, allowed } = await ensureBoardEditAccess(userId, task.column.board)
 		if (!board || !allowed) {
 			return res.status(403).json({ message: 'Access denied' })
 		}
@@ -1208,6 +1557,15 @@ export const deleteTask = async (req, res) => {
 		const columnId = task.column._id
 		const position = task.position
 		const columnTitle = task.column.title
+		await recordBoardActivity({
+			boardId: board._id,
+			userId,
+			action: 'deleted',
+			entityType: 'task',
+			entityId: task._id,
+			entityName: task.title,
+			details: `deleted ${task.title} from ${columnTitle}`,
+		})
 
 		// Delete all activities related to this task
 		await TaskActivity.deleteMany({ task: taskId })

@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import { env } from './config/env.js'
 import { connectDB } from './lib/db.js'
 import { apiLimiter } from './middlewares/security.middleware.js'
+import { csrfProtection } from './middlewares/csrf.middleware.js'
 import Board from './models/board.model.js'
 import BoardMember from './models/boardMember.model.js'
 import User from './models/user.model.js'
@@ -120,6 +121,7 @@ app.use(
 		credentials: true,
 	})
 )
+	app.use('/api', csrfProtection)
 app.use('/api', apiLimiter)
 
 // Routes

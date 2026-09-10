@@ -127,7 +127,7 @@ const WorkspaceSidebar = ({
 		{ icon: <Home size={17} />, label: 'Workspace', to: '/workspaces' },
 		{ icon: <ClipboardList size={17} />, label: 'My tasks', to: '/my-tasks' },
 		{ icon: <CalendarDays size={17} />, label: 'Calendar', disabled: true },
-		{ icon: <Users size={17} />, label: 'Team', disabled: true },
+		{ icon: <Users size={17} />, label: 'Team', to: '/team' },
 	]
 
 	return (

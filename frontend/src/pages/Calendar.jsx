@@ -17,7 +17,6 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 const CalendarPage = () => {
   const navigate = useNavigate()
   const [boards, setBoards] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
   const {
     isSidebarOpen,
     setIsSidebarOpen,
@@ -32,7 +31,6 @@ const CalendarPage = () => {
       .catch((error) => {
         toast.error(error.response?.data?.message || 'Could not load rooms')
       })
-      .finally(() => setIsLoading(false))
   }, [])
 
   const today = new Date(2026, 6, 26)
@@ -86,7 +84,7 @@ const CalendarPage = () => {
           onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}
         >
           <div className='workspace-context-copy'>
-            <div className='workspace-context-label'>My workspace</div>
+            <div className='workspace-context-label'>Workspace</div>
             <div className='workspace-board-title-row'>
               <span className='workspace-board-name'>
                 <ChevronRight size={13} /> Calendar

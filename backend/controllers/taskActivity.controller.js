@@ -3,6 +3,7 @@ import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
+import { recordBoardActivity } from '../lib/boardActivity.js'
 
 const getAccessibleTask = async (taskId, userId) => {
 	if (!mongoose.Types.ObjectId.isValid(taskId)) return null
@@ -46,6 +47,15 @@ export const addTaskComment = async (req, res) => {
 			type: 'comment',
 			message,
 		})
+		await recordBoardActivity({
+			boardId: access.board._id,
+			userId: req.user._id,
+			action: 'commented',
+			entityType: 'task',
+			entityId: access.task._id,
+			entityName: access.task.title,
+			details: `commented on ${access.task.title}`,
+		})
 		return res.status(201).json(await activity.populate('user', 'name email avatar'))
 	} catch (error) {
 		console.error('Task comment creation failed:', error)
@@ -60,6 +70,15 @@ export const startTaskTimer = async (req, res) => {
 		if (access.task.timerStartedAt) return res.status(400).json({ message: 'Timer is already running' })
 		access.task.timerStartedAt = new Date()
 		await access.task.save()
+		await recordBoardActivity({
+			boardId: access.board._id,
+			userId: req.user._id,
+			action: 'started timer',
+			entityType: 'task',
+			entityId: access.task._id,
+			entityName: access.task.title,
+			details: `started a timer on ${access.task.title}`,
+		})
 		return res.status(200).json({ timerStartedAt: access.task.timerStartedAt, trackedSeconds: access.task.trackedSeconds })
 	} catch (error) {
 		console.error('Task timer start failed:', error)
@@ -83,6 +102,15 @@ export const stopTaskTimer = async (req, res) => {
 			type: 'time_logged',
 			durationMinutes: Math.max(1, Math.round(durationSeconds / 60)),
 			message: 'logged time on this card',
+		})
+		await recordBoardActivity({
+			boardId: access.board._id,
+			userId: req.user._id,
+			action: 'logged time',
+			entityType: 'task',
+			entityId: access.task._id,
+			entityName: access.task.title,
+			details: `logged ${Math.max(1, Math.round(durationSeconds / 60))} minutes on ${access.task.title}`,
 		})
 		return res.status(200).json({ trackedSeconds: access.task.trackedSeconds, activity })
 	} catch (error) {

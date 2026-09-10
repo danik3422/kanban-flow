@@ -1,15 +1,15 @@
 import { Bell, CheckCheck, ClipboardList, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { socketUrl } from '../lib/runtimeConfig'
+import Popover from './Popover'
 
 const NotificationCenter = () => {
 	const [notifications, setNotifications] = useState([])
 	const [isOpen, setIsOpen] = useState(false)
 	const [isLoading, setIsLoading] = useState(true)
-	const centerRef = useRef(null)
 
 	useEffect(() => {
 		const loadNotifications = async () => {
@@ -17,7 +17,9 @@ const NotificationCenter = () => {
 				const { data } = await axiosInstance.get('/notifications')
 				setNotifications(data)
 			} catch (error) {
-				if (error.response?.status !== 401) {
+				if ([404, 204].includes(error.response?.status)) {
+					setNotifications([])
+				} else if (error.response?.status !== 401) {
 					toast.error('Could not load notifications')
 				}
 			} finally {
@@ -32,14 +34,6 @@ const NotificationCenter = () => {
 			toast.info(notification.title)
 		})
 		return () => socket.disconnect()
-	}, [])
-
-	useEffect(() => {
-		const handleClickOutside = (event) => {
-			if (!centerRef.current?.contains(event.target)) setIsOpen(false)
-		}
-		document.addEventListener('mousedown', handleClickOutside)
-		return () => document.removeEventListener('mousedown', handleClickOutside)
 	}, [])
 
 	const unreadCount = notifications.filter((notification) => !notification.readAt).length
@@ -76,7 +70,7 @@ const NotificationCenter = () => {
 	}
 
 	return (
-		<div className='notification-center' ref={centerRef}>
+		<Popover isOpen={isOpen} onClose={() => setIsOpen(false)} className='notification-center'>
 			<button
 				type='button'
 				className='notification-trigger'
@@ -88,13 +82,13 @@ const NotificationCenter = () => {
 				{unreadCount > 0 && <span className='notification-badge'>{unreadCount > 9 ? '9+' : unreadCount}</span>}
 			</button>
 			{isOpen && (
-				<div className='notification-popover'>
-					<div className='notification-popover-header'>
+				<div className='popover-shell notification-popover'>
+					<div className='popover-header notification-popover-header'>
 						<div>
 							<strong>Notifications</strong>
 							<small>{unreadCount ? `${unreadCount} unread` : 'All caught up'}</small>
 						</div>
-						<button type='button' onClick={() => setIsOpen(false)} aria-label='Close notifications'>
+						<button type='button' className='icon-button' onClick={() => setIsOpen(false)} aria-label='Close notifications' title='Close'>
 							<X size={16} />
 						</button>
 					</div>
@@ -128,7 +122,7 @@ const NotificationCenter = () => {
 					)}
 				</div>
 			)}
-		</div>
+		</Popover>
 	)
 }
 

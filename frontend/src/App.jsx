@@ -18,10 +18,12 @@ import Login from './pages/Login'
 import MyTasks from './pages/MyTasks'
 import NotFound from './pages/NotFound'
 import Profile from './pages/Profile'
+import PublicBoard from './pages/PublicBoard'
 import ResetPassword from './pages/ResetPassword'
 import Settings from './pages/Settings'
 import SetupProfile from './pages/SetupProfile'
 import Signup from './pages/Signup'
+import Team from './pages/Team'
 import VerifyEmail from './pages/VerifyEmail'
 import Workspace from './pages/Workspace'
 import { useAuthStore } from './store/useAuthStore'
@@ -31,7 +33,9 @@ export const App = () => {
 	const navigate = useNavigate()
 	const handledInviteRef = useRef(null)
 	const isWorkspace =
-		location.pathname.startsWith('/workspaces') || location.pathname === '/my-tasks'
+		location.pathname.startsWith('/workspaces') ||
+		location.pathname === '/my-tasks' ||
+		location.pathname === '/team'
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 
 	useEffect(() => {
@@ -128,6 +132,7 @@ export const App = () => {
 							}
 						/>
 						<Route path='/invite/:token' element={<BoardInvite />} />
+						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}
@@ -149,6 +154,10 @@ export const App = () => {
 						<Route
 							path='/calendar'
 							element={authUser ? <CalendarPage /> : <Navigate to='/login' replace />}
+						/>
+						<Route
+							path='/team'
+							element={authUser ? <Team /> : <Navigate to='/login' replace />}
 						/>
 						<Route
 							path='/workspaces/:boardId'
