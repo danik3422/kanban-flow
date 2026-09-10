@@ -6,6 +6,7 @@
 		"dev": "nodemon index.js",
 		"start": "node index.js",
 		"seed:demo": "node scripts/seed-test-room-demo.js",
+		"migrate:provider-uids": "node scripts/migrate-provider-uids.js",
 		"test": "NODE_ENV=test node --test"
 	},
 	"keywords": [],

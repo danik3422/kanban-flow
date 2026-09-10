@@ -17,12 +17,24 @@ const userSchema = new mongoose.Schema(
 			enum: ['local', 'google', 'microsoft', 'apple'],
 			default: 'local',
 		},
+		providerUid: { type: String, sparse: true, index: true },
 		emailVerified: { type: Boolean, default: false },
 		emailVerificationTokenHash: { type: String, default: '' },
 		emailVerificationTokenExpiresAt: { type: Date, default: null },
 		profileSetup: { type: Boolean, default: false },
+		sessionVersion: { type: Number, default: 0 },
 	},
 	{ timestamps: true }
+)
+
+userSchema.index(
+	{ provider: 1, providerUid: 1 },
+	{
+		unique: true,
+		partialFilterExpression: {
+			providerUid: { $exists: true, $type: 'string' },
+		},
+	},
 )
 
 const User = mongoose.model('User', userSchema)
