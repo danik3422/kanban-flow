@@ -12,6 +12,14 @@ import { publicUserFields } from '../lib/userProjection.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
 
+export const assertProviderEmailVerified = (decodedToken) => {
+	if (decodedToken.email_verified !== true) {
+		const error = new Error('Provider email must be verified before continuing.')
+		error.statusCode = 403
+		throw error
+	}
+}
+
 export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.apps.length) {
@@ -20,6 +28,7 @@ export const socialSignin = async (req, res) => {
 
 		const { idToken, provider } = req.body
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		assertProviderEmailVerified(decodedToken)
 		const providerByFirebaseId = {
 			'google.com': 'google',
 			'microsoft.com': 'microsoft',
@@ -56,7 +65,7 @@ export const socialSignin = async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Social Signin Error:', error)
-		return res.status(500).json({ message: 'Social login failed' })
+		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Social login failed' })
 	}
 }
 
@@ -65,6 +74,7 @@ export const socialSignup = async (req, res) => {
 		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider } = req.body
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		assertProviderEmailVerified(decodedToken)
 		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
 		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
 		const { email, name, picture } = decodedToken
@@ -79,7 +89,7 @@ export const socialSignup = async (req, res) => {
 		return res.status(201).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
 	} catch (error) {
 		console.error('Social Signup Error:', error)
-		return res.status(500).json({ message: 'Social signup failed' })
+		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Social signup failed' })
 	}
 }
 
@@ -88,6 +98,7 @@ export const connectSocialAccount = async (req, res) => {
 		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		const { idToken, provider } = req.body
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		assertProviderEmailVerified(decodedToken)
 		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
 		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
 		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
@@ -101,7 +112,7 @@ export const connectSocialAccount = async (req, res) => {
 		return res.status(200).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
 	} catch (error) {
 		console.error('Connect Social Error:', error)
-		return res.status(500).json({ message: 'Could not connect social account' })
+		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Could not connect social account' })
 	}
 }
 
