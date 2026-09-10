@@ -7,7 +7,7 @@
 		"start": "node index.js",
 		"seed:demo": "node scripts/seed-test-room-demo.js",
 		"migrate:provider-uids": "node scripts/migrate-provider-uids.js",
-		"migrate:password-flags": "node scripts/migrate-password-flags.js",
+        "migrate:password-flags": "node scripts/migrate-password-flags.js",
 		"test": "NODE_ENV=test node --test"
 	},
 	"keywords": [],
