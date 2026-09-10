@@ -19,6 +19,10 @@ export const socialAuthSchema = z.object({
 	provider: z.enum(['google', 'microsoft', 'apple']),
 })
 
+export const connectSocialSchema = socialAuthSchema.extend({
+	currentPassword: z.string().min(1).max(128),
+})
+
 export const passwordResetRequestSchema = z.object({ email })
 
 export const passwordResetConfirmSchema = z.object({

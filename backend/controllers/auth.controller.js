@@ -29,6 +29,14 @@ export const assertProviderIdentityAvailable = async ({ provider, providerUid, u
 	}
 }
 
+export const assertCurrentPassword = async (user, currentPassword) => {
+	if (!user.password || !(await bcrypt.compare(currentPassword, user.password))) {
+		const error = new Error('Re-authentication required.')
+		error.statusCode = 401
+		throw error
+	}
+}
+
 export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.apps.length) {
@@ -105,7 +113,7 @@ export const socialSignup = async (req, res) => {
 export const connectSocialAccount = async (req, res) => {
 	try {
 		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
-		const { idToken, provider } = req.body
+		const { idToken, provider, currentPassword } = req.body
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
 		assertProviderEmailVerified(decodedToken)
 		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
@@ -114,6 +122,7 @@ export const connectSocialAccount = async (req, res) => {
 		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
 		const user = await User.findById(req.user._id)
 		if (!user || user.provider !== 'local') return res.status(409).json({ message: 'Only local accounts can connect a provider.' })
+		await assertCurrentPassword(user, currentPassword)
 		user.provider = provider
 		user.providerUid = decodedToken.uid
 		user.emailVerified = true

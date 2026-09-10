@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
+import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 
-import { assertProviderEmailVerified, assertProviderIdentityAvailable } from '../controllers/auth.controller.js'
+import { assertCurrentPassword, assertProviderEmailVerified, assertProviderIdentityAvailable } from '../controllers/auth.controller.js'
 import User from '../models/user.model.js'
 
 let mongoServer
@@ -46,5 +47,14 @@ describe('social auth security helpers', () => {
 			(error) => error.statusCode === 409 && error.message === 'This provider is already linked to another account.',
 		)
 		assert.ok(owner._id)
+	})
+
+	it('requires the current password for provider linking', async () => {
+		const user = { password: await bcrypt.hash('CorrectPassword123!', 10) }
+		await assert.rejects(
+			assertCurrentPassword(user, 'WrongPassword123!'),
+			(error) => error.statusCode === 401 && error.message === 'Re-authentication required.',
+		)
+		await assertCurrentPassword(user, 'CorrectPassword123!')
 	})
 })
