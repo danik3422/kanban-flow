@@ -4,6 +4,7 @@ const userSchema = new mongoose.Schema(
 	{
 		email: { type: String, required: true, unique: true },
 		password: { type: String },
+		hasPassword: { type: Boolean, default: false },
 		name: { type: String, default: '' },
 		jobTitle: { type: String, default: '' },
 		timezone: { type: String, default: 'UTC' },
