@@ -310,10 +310,11 @@ export const setSocialPassword = async (req, res) => {
 		assertFreshProviderToken(decodedToken)
 
 		const user = await User.findById(req.user._id)
-		if (!user || user.provider === 'local')
-			return res
-				.status(409)
-				.json({ message: 'Only social accounts can add a provider password.' })
+		if (!user) {
+			const error = new Error('Provider identity could not be verified.')
+			error.statusCode = 401
+			throw error
+		}
 
 		if (
 			user.provider !== provider ||
@@ -332,6 +333,11 @@ export const setSocialPassword = async (req, res) => {
 			return res.status(409).json({
 				message: 'Provider email does not match this account.',
 			})
+
+		if (user.provider === 'local')
+			return res
+				.status(409)
+				.json({ message: 'Only social accounts can add a provider password.' })
 
 		if (user.hasPassword) {
 			await assertCurrentPassword(user, currentPassword)
