@@ -8,122 +8,43 @@ import {
 	sendPasswordResetEmail,
 } from '../lib/mailer.js'
 import { generateToken } from '../lib/utils.js'
+import { publicUserFields } from '../lib/userProjection.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
 
-export const googleSignup = async (req, res) => {
+export const socialSignin = async (req, res) => {
 	try {
 		if (!admin.apps.length) {
-			return res.status(500).json({
-				message: 'Google auth is not configured on the server.',
-			})
+			return res.status(500).json({ message: 'Social auth is not configured on the server.' })
 		}
 
-		const { idToken } = req.body
-
-		if (!idToken) {
-			return res.status(400).json({ message: 'Missing ID token' })
-		}
-
+		const { idToken, provider } = req.body
 		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		const providerByFirebaseId = {
+			'google.com': 'google',
+			'microsoft.com': 'microsoft',
+			'apple.com': 'apple',
+		}
+		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) {
+			return res.status(401).json({ message: 'Social provider does not match the token.' })
+		}
+
 		const { email, name, picture } = decodedToken
+		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
 
-		if (!email) {
-			return res.status(400).json({ message: 'Invalid token: missing email' })
-		}
-
-		let user = await User.findOne({ email })
-		if (user && user.provider !== 'local') {
-			return res
-				.status(400)
-				.json({ message: 'User already exists. Please sign in.' })
-		}
-
-		if (user && user.provider === 'local') {
-			user.provider = 'google'
-			user.emailVerified = true
-			user.emailVerificationTokenHash = ''
-			user.emailVerificationTokenExpiresAt = null
-			if (!user.name) user.name = name || ''
-			if (!user.avatar) user.avatar = picture || ''
-			await user.save()
-
-			generateToken(user._id, res)
-			return res.status(200).json({
-				_id: user._id,
-				email: user.email,
-				name: user.name,
-				avatar: user.avatar,
-				profileSetup: user.profileSetup,
-				provider: user.provider,
-			})
-		}
-
-		user = new User({
-			email,
-			name: name || '',
-			avatar: picture || '',
-			provider: 'google',
-			password: null,
-			emailVerified: true,
-			profileSetup: false,
-		})
-		await user.save()
-
-		generateToken(user._id, res)
-
-		return res.status(201).json({
-			_id: user._id,
-			email: user.email,
-			name: user.name,
-			avatar: user.avatar,
-			profileSetup: user.profileSetup,
-			provider: user.provider,
-		})
-	} catch (error) {
-		console.error('Google Signup Error:', error)
-		return res.status(500).json({ message: 'Google signup failed' })
-	}
-}
-
-export const googleSignin = async (req, res) => {
-	try {
-		if (!admin.apps.length) {
-			return res.status(500).json({
-				message: 'Google auth is not configured on the server.',
-			})
-		}
-
-		const { idToken } = req.body
-
-		if (!idToken) {
-			return res.status(400).json({ message: 'Missing ID token' })
-		}
-
-		const decodedToken = await admin.auth().verifyIdToken(idToken)
-		const { email } = decodedToken
-
-		if (!email) {
-			return res.status(400).json({ message: 'Invalid token: missing email' })
-		}
-
-		const user = await User.findOne({ email })
-
-		if (!user) {
-			return res
-				.status(404)
-				.json({ message: 'User not found. Please sign up first.' })
+		const user = await User.findOne({ email: email.toLowerCase() })
+		if (!user) return res.status(404).json({ message: 'User not found. Please sign up first.' })
+		if (user.provider !== 'local' && user.provider !== provider) {
+			return res.status(400).json({ message: `This account is registered with ${user.provider}.` })
 		}
 
 		if (user.provider === 'local') {
-			user.provider = 'google'
-			user.emailVerified = true
-			user.emailVerificationTokenHash = ''
-			user.emailVerificationTokenExpiresAt = null
-			await user.save()
+			return res.status(409).json({ message: `This email belongs to a local account. Connect ${provider} in Settings first.` })
 		}
-
-		generateToken(user._id, res)
+		if (user.provider !== provider) {
+			return res.status(409).json({ message: `This email is already registered with ${user.provider}.` })
+		}
+		generateToken(user._id, res, user.sessionVersion)
 
 		return res.status(200).json({
 			_id: user._id,
@@ -134,8 +55,53 @@ export const googleSignin = async (req, res) => {
 			provider: user.provider,
 		})
 	} catch (error) {
-		console.error('Google Signin Error:', error)
-		return res.status(500).json({ message: 'Google login failed' })
+		console.error('Social Signin Error:', error)
+		return res.status(500).json({ message: 'Social login failed' })
+	}
+}
+
+export const socialSignup = async (req, res) => {
+	try {
+		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		const { idToken, provider } = req.body
+		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
+		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
+		const { email, name, picture } = decodedToken
+		if (!email) return res.status(400).json({ message: 'Invalid token: missing email' })
+		const existingUser = await User.findOne({ email: email.toLowerCase() })
+		if (existingUser) {
+			if (existingUser.provider === 'local') return res.status(409).json({ message: `This email belongs to a local account. Connect ${provider} in Settings first.` })
+			return res.status(409).json({ message: 'An account already exists with this provider. Please sign in.' })
+		}
+		const user = await User.create({ email: email.toLowerCase(), name: name || '', avatar: picture || '', provider, password: null, emailVerified: true, profileSetup: false })
+		generateToken(user._id, res, user.sessionVersion)
+		return res.status(201).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
+	} catch (error) {
+		console.error('Social Signup Error:', error)
+		return res.status(500).json({ message: 'Social signup failed' })
+	}
+}
+
+export const connectSocialAccount = async (req, res) => {
+	try {
+		if (!admin.apps.length) return res.status(500).json({ message: 'Social auth is not configured on the server.' })
+		const { idToken, provider } = req.body
+		const decodedToken = await admin.auth().verifyIdToken(idToken)
+		const providerByFirebaseId = { 'google.com': 'google', 'microsoft.com': 'microsoft', 'apple.com': 'apple' }
+		if (providerByFirebaseId[decodedToken.firebase?.sign_in_provider] !== provider) return res.status(401).json({ message: 'Social provider does not match the token.' })
+		if (!decodedToken.email || decodedToken.email.toLowerCase() !== req.user.email.toLowerCase()) return res.status(409).json({ message: 'Use the same email as your current account to connect this provider.' })
+		const user = await User.findById(req.user._id)
+		if (!user || user.provider !== 'local') return res.status(409).json({ message: 'Only local accounts can connect a provider.' })
+		user.provider = provider
+		user.emailVerified = true
+		user.emailVerificationTokenHash = ''
+		user.emailVerificationTokenExpiresAt = null
+		await user.save()
+		return res.status(200).json({ _id: user._id, email: user.email, name: user.name, avatar: user.avatar, profileSetup: user.profileSetup, provider: user.provider })
+	} catch (error) {
+		console.error('Connect Social Error:', error)
+		return res.status(500).json({ message: 'Could not connect social account' })
 	}
 }
 
@@ -169,9 +135,10 @@ export const signup = async (req, res) => {
 
 		const normalizedEmail = email.trim().toLowerCase()
 		const existingUser = await User.findOne({ email: normalizedEmail })
-		if (existingUser) {
-			return res.status(400).json({ message: 'User already exists.' })
+		if (existingUser?.provider && existingUser.provider !== 'local') {
+			return res.status(409).json({ message: `This email is registered with ${existingUser.provider}. Please use ${existingUser.provider} sign-in.` })
 		}
+		if (existingUser) return res.status(409).json({ message: 'A local account already exists. Please sign in.' })
 
 		let hashedPassword = null
 		if (provider === 'local') {
@@ -219,7 +186,7 @@ export const signup = async (req, res) => {
 			})
 		}
 
-		generateToken(newUser._id, res)
+		generateToken(newUser._id, res, newUser.sessionVersion)
 		return res.status(201).json({
 			_id: newUser._id,
 			email: newUser.email,
@@ -264,7 +231,7 @@ export const login = async (req, res) => {
 			return res.status(400).json({ message: 'Credentials are not valid' })
 		}
 
-		generateToken(user._id, res)
+		generateToken(user._id, res, user.sessionVersion)
 
 		// Return user data
 		res.status(200).json({
@@ -420,6 +387,7 @@ export const resetPassword = async (req, res) => {
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(password, salt)
 		user.provider = 'local'
+		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
 				await PasswordResetToken.deleteMany({ user: user._id, _id: { $ne: claimedToken._id } })
 
@@ -494,7 +462,7 @@ export const updateSettings = async (req, res) => {
 			req.user._id,
 			{ $set: req.body },
 			{ new: true, runValidators: true },
-		).select('-password')
+		).select(publicUserFields)
 
 		if (!user) return res.status(404).json({ message: 'User not found' })
 		return res.status(200).json(user)
@@ -534,6 +502,7 @@ export const changePassword = async (req, res) => {
 
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(newPassword, salt)
+		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
 		return res.status(200).json({ message: 'Password changed successfully' })
 	} catch (error) {
@@ -544,7 +513,7 @@ export const changePassword = async (req, res) => {
 
 export const setupProfile = async (req, res) => {
 	try {
-		const { name, jobTitle, timezone, password, avatar } = req.body
+		const { name, jobTitle, timezone, avatar } = req.body
 		const userId = req.user._id
 
 		const user = await User.findById(userId)
@@ -553,11 +522,6 @@ export const setupProfile = async (req, res) => {
 		if (name) user.name = name.trim()
 		if (jobTitle !== undefined) user.jobTitle = jobTitle.trim()
 		if (timezone) user.timezone = timezone
-
-		if (password && password.length >= 6) {
-			const salt = await bcrypt.genSalt(10)
-			user.password = await bcrypt.hash(password, salt)
-		}
 
 		// Upload base64 or data URL to Cloudinary
 		if (avatar && avatar.startsWith('data:image')) {

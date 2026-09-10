@@ -3,7 +3,12 @@ import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance } from '../lib/axios'
 import { devUser, isDevAuthBypass } from '../lib/devMode'
-import { auth, googleProvider } from '../lib/firebase'
+import {
+	appleProvider,
+	auth,
+	microsoftProvider,
+	googleProvider,
+} from '../lib/firebase'
 
 export const useAuthStore = create((set) => ({
 	authUser: null,
@@ -82,67 +87,66 @@ export const useAuthStore = create((set) => ({
 		}
 	},
 
-	handleGoogleSignup: async () => {
-		try {
-			const result = await signInWithPopup(auth, googleProvider)
-			const idToken = await result.user.getIdToken()
+	handleSocialSignin: async (provider) => {
+		const providers = {
+			google: googleProvider,
+			microsoft: microsoftProvider,
+			apple: appleProvider,
+		}
+		const firebaseProvider = providers[provider]
+		if (!firebaseProvider) return { success: false }
 
+		try {
+			const result = await signInWithPopup(auth, firebaseProvider)
+			const idToken = await result.user.getIdToken()
 			const response = await axiosInstance.post(
-				'/auth/google/signup',
-				{ idToken },
-				{ withCredentials: true }
+				'/auth/social/login',
+				{ idToken, provider },
+				{ withCredentials: true },
 			)
 
 			set({ authUser: response.data })
-			toast.success(
-				response.data?.provider === 'google'
-					? 'Google account connected successfully'
-					: 'Google account created successfully'
-			)
+			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} sign-in successful`)
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error('Google Signup Error:', error)
-			toast.error(error.response?.data?.message || 'Google signup failed')
+			console.error(`${provider} Sign-in Error:`, error)
+			toast.error(error.response?.data?.message || `${provider} sign-in failed`)
 			return { success: false, error }
 		}
 	},
 
-	connectGoogleAccount: async () => {
+	handleSocialSignup: async (provider) => {
+		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
+		const firebaseProvider = providers[provider]
+		if (!firebaseProvider) return { success: false }
 		try {
-			const result = await signInWithPopup(auth, googleProvider)
+			const result = await signInWithPopup(auth, firebaseProvider)
 			const idToken = await result.user.getIdToken()
-			const response = await axiosInstance.post(
-				'/auth/google/signup',
-				{ idToken },
-				{ withCredentials: true }
-			)
+			const response = await axiosInstance.post('/auth/social/signup', { idToken, provider }, { withCredentials: true })
 			set({ authUser: response.data })
-			toast.success('Google account connected to your profile')
+			toast.success('Account created successfully')
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error('Connect Google Error:', error)
-			toast.error(error.response?.data?.message || 'Could not connect Google')
+			console.error(`${provider} Signup Error:`, error)
+			toast.error(error.response?.data?.message || `${provider} signup failed`)
 			return { success: false, error }
 		}
 	},
 
-	handleGoogleSignin: async () => {
+	connectSocialAccount: async (provider) => {
+		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
+		const firebaseProvider = providers[provider]
+		if (!firebaseProvider) return { success: false }
 		try {
-			const result = await signInWithPopup(auth, googleProvider)
+			const result = await signInWithPopup(auth, firebaseProvider)
 			const idToken = await result.user.getIdToken()
-
-			const response = await axiosInstance.post(
-				'/auth/google/login',
-				{ idToken },
-				{ withCredentials: true }
-			)
-
+			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
 			set({ authUser: response.data })
-			toast.success('Google Sign-in successful')
+			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error('Google Sign-in Error:', error)
-			toast.error(error.response?.data?.message || 'Google sign-in failed')
+			console.error(`${provider} Connect Error:`, error)
+			toast.error(error.response?.data?.message || `Could not connect ${provider}`)
 			return { success: false, error }
 		}
 	},

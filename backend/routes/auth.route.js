@@ -1,9 +1,10 @@
 import express from 'express'
 import {
 	changePassword,
+	connectSocialAccount,
 	getAuthUser,
-	googleSignin,
-	googleSignup,
+	socialSignup,
+	socialSignin,
 	login,
 	logout,
 	requestPasswordReset,
@@ -14,10 +15,12 @@ import {
 	verifyEmail,
 } from '../controllers/auth.controller.js'
 import {
-	googleAuthSchema,
+	socialAuthSchema,
 	loginSchema,
 	passwordResetConfirmSchema,
 	passwordResetRequestSchema,
+	changePasswordSchema,
+	setupProfileSchema,
 	settingsSchema,
 	signupSchema,
 } from '../lib/validation.js'
@@ -54,30 +57,35 @@ router.post(
 	validateBody(passwordResetConfirmSchema),
 	resetPassword,
 )
-//Google
 router.post(
-	'/google/signup',
+	'/social/login',
 	authLimiter,
-	validateBody(googleAuthSchema),
-	googleSignup,
+	validateBody(socialAuthSchema),
+	socialSignin,
 )
-router.post(
-	'/google/login',
-	authLimiter,
-	validateBody(googleAuthSchema),
-	googleSignin,
-)
+router.post('/social/signup', authLimiter, validateBody(socialAuthSchema), socialSignup)
 
 // Protected routes
 router.post('/logout', logout)
+router.post('/social/connect', authMiddleware, validateBody(socialAuthSchema), connectSocialAccount)
 router.get('/get-user', authMiddleware, getAuthUser)
-router.patch('/setup-profile', authMiddleware, setupProfile)
+router.patch(
+	'/setup-profile',
+	authMiddleware,
+	validateBody(setupProfileSchema),
+	setupProfile,
+)
 router.patch(
 	'/settings',
 	authMiddleware,
 	validateBody(settingsSchema),
 	updateSettings,
 )
-router.patch('/change-password', authMiddleware, changePassword)
+router.patch(
+	'/change-password',
+	authMiddleware,
+	validateBody(changePasswordSchema),
+	changePassword,
+)
 
 export default router
