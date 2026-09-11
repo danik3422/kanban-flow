@@ -5,12 +5,14 @@ import {
 	Copy,
 	Link2,
 	Mail,
+	Crown,
 	ShieldCheck,
 	UserRound,
+	UserMinus,
 	UsersRound,
 	X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Popover from './Popover'
 
 const InviteMemberModal = ({
@@ -33,6 +35,7 @@ const InviteMemberModal = ({
 	onClose,
 	onSubmit,
 	onRoleChange,
+	onRemoveMember,
 }) => {
 	const [mode, setMode] = useState('email')
 	const [role, setRole] = useState('member')
@@ -44,6 +47,25 @@ const InviteMemberModal = ({
 	const [isRevokeConfirmOpen, setIsRevokeConfirmOpen] = useState(false)
 	const [isInviteRevokeConfirmOpen, setIsInviteRevokeConfirmOpen] = useState(false)
 	const pageSize = 5
+	useEffect(() => {
+		if (!openRoleMemberId) return undefined
+
+		const closeOnOutsideInteraction = (event) => {
+			if (!event.target.closest('.share-role-menu')) {
+				setOpenRoleMemberId(null)
+			}
+		}
+		const closeOnEscape = (event) => {
+			if (event.key === 'Escape') setOpenRoleMemberId(null)
+		}
+
+		document.addEventListener('mousedown', closeOnOutsideInteraction)
+		document.addEventListener('keydown', closeOnEscape)
+		return () => {
+			document.removeEventListener('mousedown', closeOnOutsideInteraction)
+			document.removeEventListener('keydown', closeOnEscape)
+		}
+	}, [openRoleMemberId])
 	const onlineCount = showPresence
 		? Object.values(presenceByUserId).filter((status) => status === 'online').length
 		: 0
@@ -342,19 +364,35 @@ const InviteMemberModal = ({
 										</button>
 										{openRoleMemberId === member._id && canEditRole && (
 											<div className='share-role-menu-list' role='menu'>
+												<div className='share-role-menu-heading'>Access level</div>
 												{['member', 'admin', ...(canTransferOwnership ? ['owner'] : [])].map((role) => (
 													<button
 														type='button'
 														role='menuitem'
-														className={role === currentRole ? 'active' : ''}
+														className={`share-role-option ${role === currentRole ? 'active' : ''}`}
 														onClick={() => {
 															setOpenRoleMemberId(null)
 															onRoleChange(member._id, role)
 														}}
 													>
-														{role.replace(/^./, (letter) => letter.toUpperCase())}
+														{role === 'owner' ? <Crown size={14} /> : role === 'admin' ? <ShieldCheck size={14} /> : <UserRound size={14} />}
+														<span>{role.replace(/^./, (letter) => letter.toUpperCase())}</span>
 													</button>
 												))}
+														{canTransferOwnership && (
+															<button
+																type='button'
+																role='menuitem'
+																className='share-role-option is-danger'
+																onClick={() => {
+																	setOpenRoleMemberId(null)
+																	onRemoveMember(member._id)
+																}}
+															>
+																<UserMinus size={14} />
+																<span>Remove from room</span>
+															</button>
+														)}
 											</div>
 										)}
 									</div>

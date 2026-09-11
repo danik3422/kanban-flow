@@ -1,11 +1,11 @@
 import mongoose from 'mongoose'
-import { MongoMemoryServer } from 'mongodb-memory-server'
 
 import { env } from '../config/env.js'
 
 let memoryServer = null
 
 const connectToMemoryDatabase = async () => {
+	const { MongoMemoryServer } = await import('mongodb-memory-server')
 	memoryServer = await MongoMemoryServer.create()
 	const mongoUri = memoryServer.getUri()
 	const connect = await mongoose.connect(mongoUri, {

@@ -24,6 +24,7 @@ import {
 	getUserBoards,
 	leaveBoard,
 	removeBoard,
+	removeBoardMember,
 	revokeBoardInvite,
 	revokePublicBoardLink,
 	updateBoard,
@@ -73,6 +74,12 @@ router.patch(
 	authMiddleware,
 	boardMiddleware,
 	updateBoardMemberRole,
+)
+router.delete(
+	'/boards/:id/members/:memberId',
+	authMiddleware,
+	boardMiddleware,
+	removeBoardMember,
 )
 router.get(
 	'/boards/:id/invites',

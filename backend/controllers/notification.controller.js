@@ -1,8 +1,28 @@
 import Notification from '../models/notification.model.js'
+import Board from '../models/board.model.js'
+import BoardMember from '../models/boardMember.model.js'
+
+const getAccessibleBoardIds = async (userId) => {
+	const [ownedBoardIds, memberBoardIds] = await Promise.all([
+		Board.find({ createdBy: userId }).distinct('_id'),
+		BoardMember.find({ user: userId }).distinct('board'),
+	])
+	return [...new Set([
+		...ownedBoardIds.map((id) => id.toString()),
+		...memberBoardIds.map((id) => id.toString()),
+	])]
+}
 
 export const getNotifications = async (req, res) => {
 	try {
-		const notifications = await Notification.find({ user: req.user._id })
+		const accessibleBoardIds = await getAccessibleBoardIds(req.user._id)
+		const notifications = await Notification.find({
+			user: req.user._id,
+			$or: [
+				{ board: { $in: accessibleBoardIds } },
+				{ board: { $exists: false } },
+			],
+		})
 			.sort({ createdAt: -1 })
 			.limit(50)
 			.lean()
@@ -15,8 +35,16 @@ export const getNotifications = async (req, res) => {
 
 export const markNotificationRead = async (req, res) => {
 	try {
+		const accessibleBoardIds = await getAccessibleBoardIds(req.user._id)
 		const notification = await Notification.findOneAndUpdate(
-			{ _id: req.params.id, user: req.user._id },
+			{
+				_id: req.params.id,
+				user: req.user._id,
+				$or: [
+					{ board: { $in: accessibleBoardIds } },
+					{ board: { $exists: false } },
+				],
+			},
 			{ readAt: new Date() },
 			{ new: true },
 		).lean()

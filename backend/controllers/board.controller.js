@@ -389,6 +389,71 @@ export const updateBoardMemberRole = async (req, res) => {
 	}
 }
 
+export const removeBoardMember = async (req, res) => {
+	try {
+		const board = req.board
+		const ownerId = req.user._id.toString()
+		if (board.createdBy.toString() !== ownerId) {
+			return res.status(403).json({ message: 'Only the board owner can remove members' })
+		}
+		if (!mongoose.Types.ObjectId.isValid(req.params.memberId)) {
+			return res.status(400).json({ message: 'Invalid member ID' })
+		}
+
+		const membership = await BoardMember.findOne({
+			_id: req.params.memberId,
+			board: board._id,
+		}).populate('user', 'name email')
+		if (!membership) {
+			return res.status(404).json({ message: 'Board member not found' })
+		}
+		if (membership.user._id.toString() === ownerId) {
+			return res.status(400).json({ message: 'The board owner cannot be removed' })
+		}
+
+		const removedUserId = membership.user._id
+		const session = await mongoose.startSession()
+		let activity
+		try {
+			await session.withTransaction(async () => {
+				const columnIds = await Column.find({ board: board._id }).distinct('_id').session(session)
+				await BoardMember.deleteOne({ _id: membership._id, board: board._id }, { session })
+				await Notification.deleteMany({ user: removedUserId, board: board._id }, { session })
+				await Task.updateMany(
+					{ column: { $in: columnIds } },
+					{ $pull: { assignees: removedUserId } },
+					{ session },
+				)
+				await BoardInvite.deleteMany({ board: board._id, email: '', usedAt: null }, { session })
+				activity = await recordBoardActivity({
+					boardId: board._id,
+					userId: req.user._id,
+					action: 'removed member',
+					entityType: 'member',
+					entityId: removedUserId,
+					entityName: membership.user.name || membership.user.email,
+					details: `removed ${membership.user.email} from this room`,
+					session,
+					emit: false,
+				})
+			})
+		} finally {
+			await session.endSession()
+		}
+		emitBoardEvent(board._id.toString(), 'activity:new', activity)
+		revokeUserBoardAccess(removedUserId, board._id, { reason: 'removed-from-board' })
+
+		return res.status(200).json({
+			message: 'Member removed from the board',
+			memberId: membership._id,
+			userId: removedUserId,
+		})
+	} catch (error) {
+		console.error('Board member removal failed:', error)
+		return res.status(500).json({ message: 'Could not remove board member' })
+	}
+}
+
 export const getBoardInvites = async (req, res) => {
 	try {
 		const board = req.board

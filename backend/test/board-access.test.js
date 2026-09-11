@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
-import { MongoMemoryServer } from 'mongodb-memory-server'
+import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
 import { after, before, beforeEach, describe, it } from 'node:test'
 
@@ -57,7 +57,7 @@ const createBoardWithOwner = async () => {
 }
 
 before(async () => {
-	mongoServer = await MongoMemoryServer.create()
+	mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })
 	await mongoose.connect(mongoServer.getUri())
 })
 
@@ -65,6 +65,7 @@ beforeEach(async () => {
 	await Promise.all([
 		BoardInvite.deleteMany({}),
 		BoardActivity.deleteMany({}),
+		Notification.deleteMany({}),
 		BoardMember.deleteMany({}),
 		Board.deleteMany({}),
 		PasswordResetToken.deleteMany({}),
@@ -750,6 +751,66 @@ describe('board access and invitation flow', () => {
 			.set('Cookie', authCookie(member._id))
 		assert.equal(afterLeave.status, 200)
 		assert.equal(afterLeave.body.length, 0)
+	})
+
+	it('removes a member and revokes every board access path', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const admin = await createUser('remove-admin@example.com', 'Remove admin')
+		const member = await createUser('remove-member@example.com', 'Remove member')
+		await BoardMember.create([
+			{ board: board._id, user: admin._id, role: 'admin' },
+			{ board: board._id, user: member._id, role: 'member' },
+		])
+		const column = await Column.create({ board: board._id, title: 'Sensitive' })
+		const task = await Task.create({ column: column._id, title: 'Assigned card', assignees: [member._id] })
+		await Notification.create({
+			user: member._id,
+			board: board._id,
+			task: task._id,
+			type: 'task_assigned',
+			title: 'Sensitive notification',
+			message: 'Sensitive board data',
+		})
+		const inviteResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: '', role: 'member' })
+		assert.equal(inviteResponse.status, 201)
+		const inviteToken = inviteResponse.body.inviteUrl.split('/').pop()
+
+		const memberRemoveAttempt = await request(app)
+			.delete(`/api/board/boards/${board._id}/members/${(await BoardMember.findOne({ board: board._id, user: member._id }))._id}`)
+			.set('Cookie', authCookie(member._id))
+		assert.equal(memberRemoveAttempt.status, 403)
+
+		const membership = await BoardMember.findOne({ board: board._id, user: member._id })
+		const removeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/members/${membership._id}`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(removeResponse.status, 200)
+		assert.equal(await BoardMember.exists({ _id: membership._id }), null)
+		assert.equal(await Notification.exists({ user: member._id, board: board._id }), null)
+		assert.deepEqual((await Task.findById(task._id)).assignees, [])
+
+		assert.equal((await request(app)
+			.get(`/api/board/boards/${board._id}`)
+			.set('Cookie', authCookie(member._id))).status, 403)
+		assert.equal((await request(app)
+			.get('/api/notifications')
+			.set('Cookie', authCookie(member._id))).body.some((item) => item.board?.toString() === board._id.toString()), false)
+		const staleNotification = await Notification.create({
+			user: member._id,
+			board: board._id,
+			type: 'task_assigned',
+			title: 'Stale notification',
+			message: 'Should remain inaccessible',
+		})
+		assert.equal((await request(app)
+			.patch(`/api/notifications/${staleNotification._id}/read`)
+			.set('Cookie', authCookie(member._id))).status, 404)
+		assert.equal((await request(app)
+			.post(`/api/board/invites/${inviteToken}/accept`)
+			.set('Cookie', authCookie(member._id))).status, 400)
 	})
 
 	it('rejects assignees who are not board members', async () => {

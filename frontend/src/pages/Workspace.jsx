@@ -18,6 +18,7 @@ import {
 	Sparkles,
 	Square,
 	Trash2,
+	UserMinus,
 	UserRound,
 	X,
 } from 'lucide-react'
@@ -190,6 +191,7 @@ const Workspace = () => {
 	const [isRoomActionsOpen, setIsRoomActionsOpen] = useState(false)
 	const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
 	const [ownershipConfirmation, setOwnershipConfirmation] = useState('')
+	const [removeMemberTarget, setRemoveMemberTarget] = useState(null)
 	const [deleteColumnTarget, setDeleteColumnTarget] = useState(null)
 	const [deleteTaskTarget, setDeleteTaskTarget] = useState(null)
 	const [openColumnMenuId, setOpenColumnMenuId] = useState(null)
@@ -367,7 +369,7 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [selectedBoard, authUser?._id])
+	}, [selectedBoard, authUser?._id, navigate])
 
 	useEffect(() => {
 		if (!draggedTask) return undefined
@@ -579,6 +581,15 @@ const Workspace = () => {
 			socket.io.opts.reconnection = false
 			setRealtimeStatus('offline')
 			setPresenceByUserId({})
+			setColumns([])
+			setBoardMembers([])
+			setBoardMemberRecords([])
+			setBoardInvites([])
+			setBoardActivities([])
+			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
+			setSelectedBoard(null)
+			navigate('/workspaces')
+			toast.error('You no longer have access to this room')
 			socket.disconnect()
 		})
 		socket.on('activity:new', (activity) => {
@@ -703,7 +714,7 @@ const Workspace = () => {
 			window.clearInterval(heartbeatTimer)
 			socket.disconnect()
 		}
-	}, [selectedBoard, authUser?._id])
+	}, [selectedBoard, authUser?._id, navigate])
 
 	useEffect(() => {
 		if (!selectedBoard) return
@@ -1166,6 +1177,37 @@ const Workspace = () => {
 			toast.error(
 				error.response?.data?.message || 'Could not update member role',
 			)
+		}
+	}
+
+	const removeBoardMember = async (memberId) => {
+		if (!selectedBoard || !isBoardOwner) return
+		const member = boardMemberRecords.find((record) => record._id === memberId)
+		if (!member?.user?._id || String(member.user._id) === String(authUser?._id)) return
+		setRemoveMemberTarget(member)
+	}
+
+	const closeRemoveMemberDialog = () => setRemoveMemberTarget(null)
+
+	const confirmRemoveMember = async () => {
+		if (!selectedBoard || !removeMemberTarget || isDevAuthBypass) {
+			if (isDevAuthBypass && removeMemberTarget) {
+				setBoardMemberRecords((current) => current.filter((record) => record._id !== removeMemberTarget._id))
+				setBoardMembers((current) => current.filter((user) => user._id !== removeMemberTarget.user._id))
+				toast.success('Member removed from the demo room')
+			}
+			closeRemoveMemberDialog()
+			return
+		}
+		const member = removeMemberTarget
+		try {
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/members/${member._id}`)
+			setBoardMemberRecords((current) => current.filter((record) => record._id !== member._id))
+			setBoardMembers((current) => current.filter((user) => user._id !== member.user._id))
+			toast.success('Member removed from the room')
+			closeRemoveMemberDialog()
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not remove member')
 		}
 	}
 
@@ -2420,7 +2462,42 @@ const Workspace = () => {
 				onClose={() => setIsInviteOpen(false)}
 				onSubmit={inviteMember}
 				onRoleChange={updateMemberRole}
+				onRemoveMember={removeBoardMember}
 			/>
+			{removeMemberTarget && selectedBoard && (
+				<div className='modal-backdrop' onMouseDown={closeRemoveMemberDialog} role='presentation'>
+					<div
+						className='modal-panel remove-member-panel'
+						onMouseDown={(event) => event.stopPropagation()}
+						role='dialog'
+						aria-modal='true'
+						aria-labelledby='remove-member-title'
+					>
+						<div className='remove-member-icon'><UserMinus size={22} /></div>
+						<div className='modal-title'>
+							<div>
+								<p className='eyebrow remove-member-eyebrow'>Access change</p>
+								<h2 id='remove-member-title'>Remove from room?</h2>
+							</div>
+							<button type='button' className='icon-button' onClick={closeRemoveMemberDialog} aria-label='Close' title='Close'>
+								<X size={18} />
+							</button>
+						</div>
+						<div className='remove-member-person'>
+							<div className='remove-member-avatar'><UserRound size={20} /></div>
+							<div>
+								<strong>{removeMemberTarget.user?.name || removeMemberTarget.user?.email}</strong>
+								<span>{removeMemberTarget.user?.email}</span>
+							</div>
+						</div>
+						<p className='delete-board-copy'>They will lose access to this room, its tasks, activity, and live updates immediately.</p>
+						<div className='delete-board-actions'>
+							<button type='button' className='quiet-button' onClick={closeRemoveMemberDialog}>Cancel</button>
+							<button type='button' className='primary-button danger-button' onClick={confirmRemoveMember}><UserMinus size={15} /> Remove member</button>
+						</div>
+					</div>
+				</div>
+			)}
 			{isDeleteBoardOpen && selectedBoard && (
 				<div
 					className='modal-backdrop'
