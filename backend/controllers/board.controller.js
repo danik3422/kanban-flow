@@ -417,13 +417,18 @@ export const removeBoardMember = async (req, res) => {
 		try {
 			await session.withTransaction(async () => {
 				const columnIds = await Column.find({ board: board._id }).distinct('_id').session(session)
-				await BoardMember.deleteOne({ _id: membership._id, board: board._id }, { session })
+				await BoardMember.deleteMany({ board: board._id, user: removedUserId }, { session })
 				await Notification.deleteMany({ user: removedUserId, board: board._id }, { session })
 				await Task.updateMany(
 					{ column: { $in: columnIds } },
 					{ $pull: { assignees: removedUserId } },
 					{ session },
 				)
+				await BoardInvite.deleteMany({
+					board: board._id,
+					email: membership.user.email.toLowerCase(),
+					usedAt: null,
+				}, { session })
 				await BoardInvite.deleteMany({ board: board._id, email: '', usedAt: null }, { session })
 				activity = await recordBoardActivity({
 					boardId: board._id,
@@ -540,8 +545,8 @@ export const revokeBoardInvite = async (req, res) => {
 		})
 		if (!invite)
 			return res.status(404).json({ message: 'Pending invite not found' })
-		if (!invite.email && invite.createdBy.toString() !== req.user._id.toString())
-			return res.status(403).json({ message: 'Only the creator can revoke this invite link' })
+		if (invite.createdBy.toString() !== req.user._id.toString())
+			return res.status(403).json({ message: 'Only the creator can revoke this invite' })
 		await invite.deleteOne()
 		await recordBoardActivity({
 			boardId: board._id,
@@ -812,7 +817,7 @@ export const leaveBoard = async (req, res) => {
 			})
 		}
 
-		const membership = await BoardMember.findOneAndDelete({
+		const membership = await BoardMember.findOne({
 			board: board._id,
 			user: userId,
 		})
@@ -820,6 +825,7 @@ export const leaveBoard = async (req, res) => {
 		if (!membership) {
 			return res.status(404).json({ message: 'You are not a member of this board.' })
 		}
+		await BoardMember.deleteMany({ board: board._id, user: userId })
 		await recordBoardActivity({
 			boardId: board._id,
 			userId,

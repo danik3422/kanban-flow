@@ -450,6 +450,48 @@ describe('board access and invitation flow', () => {
 		assert.equal(ownerLinkResponse.status, 200)
 	})
 
+	it('allows only the inviter to revoke an email invitation', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const admin = await createUser('email-invite-admin@example.com', 'Email invite admin')
+		await BoardMember.create({ board: board._id, user: admin._id, role: 'admin' })
+
+		await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: 'pending-invite@example.com', role: 'member' })
+		const invite = (await request(app)
+			.get(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(owner._id))).body.find((item) => item.email === 'pending-invite@example.com')
+
+		const adminRevokeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/invites/${invite._id}`)
+			.set('Cookie', authCookie(admin._id))
+		assert.equal(adminRevokeResponse.status, 403)
+
+		const ownerRevokeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/invites/${invite._id}`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(ownerRevokeResponse.status, 200)
+	})
+
+	it('invalidates pending email invites when a member is removed', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const removed = await createUser('removed-invite@example.com', 'Removed invite')
+		const { rawToken } = await createInvite({ boardId: board._id, email: removed.email })
+		const membership = await BoardMember.create({ board: board._id, user: removed._id, role: 'member' })
+
+		const removeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/members/${membership._id}`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(removeResponse.status, 200)
+
+		const acceptResponse = await request(app)
+			.post(`/api/board/invites/${rawToken}/accept`)
+			.set('Cookie', authCookie(removed._id))
+		assert.equal(acceptResponse.status, 400)
+		assert.equal(await BoardMember.exists({ board: board._id, user: removed._id }), null)
+	})
+
 	it('invalidates a public link across every non-public visibility', async () => {
 		const { owner } = await createBoardWithOwner()
 		const board = await Board.create({ name: 'Visibility transitions', createdBy: owner._id, visibility: 'public' })

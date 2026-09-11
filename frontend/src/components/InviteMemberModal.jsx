@@ -12,8 +12,115 @@ import {
 	UsersRound,
 	X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Popover from './Popover'
+
+const inviteRoles = [
+	{ value: 'member', label: 'Member', icon: UserRound },
+	{ value: 'admin', label: 'Admin', icon: ShieldCheck },
+]
+
+const RolePicker = ({ value, onChange, id }) => {
+	const [isOpen, setIsOpen] = useState(false)
+	const [menuPosition, setMenuPosition] = useState(null)
+	const pickerRef = useRef(null)
+	const menuRef = useRef(null)
+	const pickerId = useRef(Symbol(id))
+	const selectedRole = inviteRoles.find((role) => role.value === value) || inviteRoles[0]
+	const SelectedIcon = selectedRole.icon
+	const updateMenuPosition = () => {
+		const trigger = pickerRef.current?.querySelector('.invite-role-trigger')
+		if (!trigger) return
+		const rect = trigger.getBoundingClientRect()
+		const opensUp = rect.bottom + 170 > window.innerHeight
+		setMenuPosition({
+			left: Math.min(rect.left, window.innerWidth - 222),
+			top: opensUp ? rect.top - 8 : rect.bottom + 8,
+			transform: opensUp ? 'translateY(-100%)' : 'none',
+		})
+	}
+
+	useEffect(() => {
+		const closeOtherPickers = (event) => {
+			if (event.detail !== pickerId.current) setIsOpen(false)
+		}
+		const closeFromModalSurface = () => setIsOpen(false)
+		const closeOnOutside = (event) => {
+			if (
+				!pickerRef.current?.contains(event.target) &&
+				!menuRef.current?.contains(event.target)
+			) setIsOpen(false)
+		}
+		window.addEventListener('invite-role-picker:open', closeOtherPickers)
+		window.addEventListener('invite-role-picker:close', closeFromModalSurface)
+		document.addEventListener('click', closeOnOutside)
+		return () => {
+			window.removeEventListener('invite-role-picker:open', closeOtherPickers)
+			window.removeEventListener('invite-role-picker:close', closeFromModalSurface)
+			document.removeEventListener('click', closeOnOutside)
+		}
+	}, [])
+
+	useEffect(() => {
+		if (!isOpen) return undefined
+		updateMenuPosition()
+		window.addEventListener('resize', updateMenuPosition)
+		window.addEventListener('scroll', updateMenuPosition, true)
+		return () => {
+			window.removeEventListener('resize', updateMenuPosition)
+			window.removeEventListener('scroll', updateMenuPosition, true)
+		}
+	}, [isOpen])
+
+	return (
+		<div className='invite-role-picker' ref={pickerRef}>
+			<button
+				type='button'
+				id={id}
+				className='invite-role-trigger'
+				onClick={() => {
+					if (!isOpen) window.dispatchEvent(new CustomEvent('invite-role-picker:open', { detail: pickerId.current }))
+					setIsOpen((current) => !current)
+				}}
+				aria-expanded={isOpen}
+			>
+				<SelectedIcon size={18} />
+				<strong>{selectedRole.label}</strong>
+				<ChevronDown size={15} />
+			</button>
+			{isOpen && menuPosition && createPortal(
+				<div
+					ref={menuRef}
+					className='invite-role-menu'
+					role='menu'
+					aria-label='Access level'
+					style={menuPosition}
+					onMouseDown={(event) => event.stopPropagation()}
+					onPointerDown={(event) => event.stopPropagation()}
+				>
+					<div className='invite-role-heading'>Access level</div>
+					{inviteRoles.map(({ value: roleValue, label, icon: Icon }) => (
+						<button
+							key={roleValue}
+							type='button'
+							role='menuitem'
+							className={roleValue === value ? 'active' : ''}
+							onClick={() => {
+								onChange(roleValue)
+								setIsOpen(false)
+							}}
+						>
+							<Icon size={20} />
+							<span>{label}</span>
+						</button>
+					))}
+				</div>,
+				document.body,
+			)}
+		</div>
+	)
+}
 
 const InviteMemberModal = ({
 	email,
@@ -30,6 +137,7 @@ const InviteMemberModal = ({
 	onCreatePublicLink,
 	onRevokePublicLink,
 	onRevokeInviteLink,
+	onRevokeInvite,
 	isOpen,
 	onChange,
 	onClose,
@@ -121,6 +229,7 @@ const InviteMemberModal = ({
 			<form
 				className='modal-panel share-board-modal'
 				onSubmit={(event) => onSubmit(event, mode, role)}
+				onPointerDown={() => window.dispatchEvent(new Event('invite-role-picker:close'))}
 				onMouseDown={(event) => event.stopPropagation()}
 			>
 				<div className='modal-title share-header'>
@@ -168,15 +277,7 @@ const InviteMemberModal = ({
 									placeholder='Email address or name'
 								/>
 							</div>
-							<select
-								className='share-role'
-								aria-label='Member role'
-								value={role}
-								onChange={(event) => setRole(event.target.value)}
-							>
-								<option value='member'>Member</option>
-								<option value='admin'>Admin</option>
-							</select>
+							<RolePicker value={role} onChange={setRole} id='invite-member-role' />
 							<button
 								className='primary-button share-submit'
 								type='submit'
@@ -231,15 +332,7 @@ const InviteMemberModal = ({
 							) : (
 								<div className='invite-link-controls'>
 									<label htmlFor='invite-link-role'>Role</label>
-									<select
-										id='invite-link-role'
-										className='share-role invite-link-role'
-										value={linkRole}
-										onChange={(event) => setLinkRole(event.target.value)}
-									>
-										<option value='member'>Member</option>
-										<option value='admin'>Admin</option>
-									</select>
+									<RolePicker value={linkRole} onChange={setLinkRole} id='invite-link-role' />
 									<button
 										type='button'
 										className='primary-button public-link-create'
@@ -446,6 +539,15 @@ const InviteMemberModal = ({
 											</>
 										)}
 									</span>
+									{invite.email && invite.status === 'pending' && String(invite.createdBy?._id || invite.createdBy) === String(currentUserId) && (
+										<button
+											type='button'
+											className='quiet-button danger invite-revoke-button'
+											onClick={() => onRevokeInvite(invite)}
+										>
+											Revoke
+										</button>
+									)}
 								</div>
 							))
 						) : (

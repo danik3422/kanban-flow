@@ -942,7 +942,7 @@ const Workspace = () => {
 			)
 			setInviteEmail('')
 			if (mode === 'email') setIsInviteOpen(false)
-			await copyInviteUrl(data.inviteUrl)
+			if (mode === 'link') await copyInviteUrl(data.inviteUrl)
 			const { data: invites } = await axiosInstance.get(
 				`/board/boards/${selectedBoard._id}/invites`,
 			)
@@ -951,11 +951,15 @@ const Workspace = () => {
 				await loadInviteLink()
 				setIsInviteOpen(true)
 			}
-			toast.success(
-				mode === 'email' && data.emailSent
-					? 'Invite email sent and link copied'
-					: 'Invite link created and copied',
-			)
+			if (mode === 'email') {
+				toast[data.emailSent ? 'success' : 'warning'](
+					data.emailSent
+						? 'Invite email sent'
+						: 'Invitation created, but the email could not be sent',
+				)
+			} else {
+				toast.success('Invite link created and copied')
+			}
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not invite member')
 		}
@@ -970,6 +974,17 @@ const Workspace = () => {
 			toast.success('Invite link revoked')
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not revoke invite link')
+		}
+	}
+
+	const revokeInvite = async (invite) => {
+		if (!selectedBoard || !invite?._id) return
+		try {
+			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/invites/${invite._id}`)
+			setBoardInvites((current) => current.filter((item) => item._id !== invite._id))
+			toast.success(`Invitation for ${invite.email} revoked`)
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not revoke invitation')
 		}
 	}
 
@@ -1849,15 +1864,23 @@ const Workspace = () => {
 							<div className='workspace-board-loading' role='status' aria-live='polite'>
 								<div className='workspace-board-loading-toolbar'><span /><div className='workspace-board-loading-actions'><span /></div></div>
 								<div className='workspace-board-loading-columns'>
-									{[1, 2, 3, 4, 5].map((column) => (
-										<div className='workspace-board-loading-column' key={column}>
+									{[
+										['sparse', ['feature', 'short', 'compact']],
+										['dense', ['compact', 'compact', 'medium', 'feature']],
+										['active', ['feature', 'medium']],
+										['review', ['medium', 'feature', 'short']],
+										['empty', []],
+									].map(([columnType, cards]) => (
+										<div className={`workspace-board-loading-column is-${columnType}`} key={columnType}>
 											<div className='workspace-board-loading-column-title'><span /><i /></div>
-											<div className='workspace-board-loading-card' />
-											{column % 2 === 1 && <div className='workspace-board-loading-card short' />}
+											{cards.map((cardType, index) => (
+												<div className={`workspace-board-loading-card is-${cardType}`} key={`${columnType}-${index}`}>
+													<span /><i /><b />
+												</div>
+											))}
 										</div>
 									))}
 								</div>
-								<p className='workspace-board-loading-label'>Loading your board<span className='loading-dots'>...</span></p>
 							</div>
 							)
 						) : !selectedBoard ? (
@@ -2455,6 +2478,7 @@ const Workspace = () => {
 				onCreatePublicLink={createPublicBoardLink}
 				onRevokePublicLink={revokePublicBoardLink}
 				onRevokeInviteLink={revokeInviteLink}
+				onRevokeInvite={revokeInvite}
 				canManageMembers={
 					selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
 				}
