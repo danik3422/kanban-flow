@@ -8,9 +8,9 @@ const firebaseConfig = {
 	appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+export const firebaseEnabled = Object.values(firebaseConfig).every(Boolean)
 
-export const auth = getAuth(app)
-export const googleProvider = new GoogleAuthProvider()
-export const microsoftProvider = new OAuthProvider('microsoft.com')
-export const appleProvider = new OAuthProvider('apple.com')
+export const auth = firebaseEnabled ? getAuth(initializeApp(firebaseConfig)) : null
+export const googleProvider = firebaseEnabled ? new GoogleAuthProvider() : null
+export const microsoftProvider = firebaseEnabled ? new OAuthProvider('microsoft.com') : null
+export const appleProvider = firebaseEnabled ? new OAuthProvider('apple.com') : null

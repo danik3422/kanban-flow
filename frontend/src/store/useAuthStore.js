@@ -6,6 +6,7 @@ import { devUser, isDevAuthBypass } from '../lib/devMode'
 import {
 	appleProvider,
 	auth,
+	firebaseEnabled,
 	microsoftProvider,
 	googleProvider,
 } from '../lib/firebase'
@@ -88,6 +89,10 @@ export const useAuthStore = create((set) => ({
 	},
 
 	handleSocialSignin: async (provider) => {
+		if (!firebaseEnabled) {
+			toast.error('Social sign-in is not configured yet')
+			return { success: false }
+		}
 		const providers = {
 			google: googleProvider,
 			microsoft: microsoftProvider,
@@ -116,6 +121,10 @@ export const useAuthStore = create((set) => ({
 	},
 
 	handleSocialSignup: async (provider) => {
+		if (!firebaseEnabled) {
+			toast.error('Social sign-up is not configured yet')
+			return { success: false }
+		}
 		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
 		const firebaseProvider = providers[provider]
 		if (!firebaseProvider) return { success: false }
@@ -134,6 +143,10 @@ export const useAuthStore = create((set) => ({
 	},
 
 	connectSocialAccount: async (provider) => {
+		if (!firebaseEnabled) {
+			toast.error('Social sign-in is not configured yet')
+			return { success: false }
+		}
 		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
 		const firebaseProvider = providers[provider]
 		if (!firebaseProvider) return { success: false }
