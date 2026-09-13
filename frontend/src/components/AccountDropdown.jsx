@@ -32,13 +32,14 @@ const AccountDropdown = () => {
 
 			if (!insideDropdown) {
 				setIsClosing(true)
+				setIsSheetEntering(false)
 				window.setTimeout(() => {
 					setIsDropdownOpen(false)
 					setIsClosing(false)
 					setIsSheetExpanded(false)
 					setSheetOffset(0)
 					setSheetDragHeight(null)
-				}, 220)
+				}, 300)
 			}
 		}
 
@@ -55,6 +56,7 @@ const AccountDropdown = () => {
 		if (!isDropdownOpen || isClosing) return
 		if (swipe) {
 			setSheetDragHeight(null)
+			setIsSheetEntering(false)
 			setIsSwipeClosing(true)
 			setSheetOffset(window.innerHeight)
 			window.setTimeout(() => {
@@ -62,17 +64,18 @@ const AccountDropdown = () => {
 				setSheetOffset(0)
 				setIsSheetExpanded(false)
 				setIsSwipeClosing(false)
-			}, 220)
+			}, 300)
 			return
 		}
 		setIsClosing(true)
+		setIsSheetEntering(false)
 		window.setTimeout(() => {
 			setIsDropdownOpen(false)
 			setIsClosing(false)
 			setIsSheetExpanded(false)
 			setSheetOffset(0)
 			setSheetDragHeight(null)
-		}, 220)
+		}, 300)
 	}
 
 	const toggleMenu = () => {
@@ -139,7 +142,7 @@ const AccountDropdown = () => {
 
 	const goTo = (path) => {
 		closeMenu()
-		window.setTimeout(() => navigate(path), 220)
+		window.setTimeout(() => navigate(path), 300)
 	}
 
 	return (

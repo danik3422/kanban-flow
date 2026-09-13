@@ -12,9 +12,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 
+const AUTH_EMAIL_KEY = 'kanban-auth-email'
+
 const ResetPassword = () => {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => sessionStorage.getItem(AUTH_EMAIL_KEY) || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -59,6 +61,7 @@ const ResetPassword = () => {
         if (!ignore) {
           setIsTokenValid(true)
           setEmail(data.email || '')
+		  if (data.email) sessionStorage.setItem(AUTH_EMAIL_KEY, data.email)
         }
       } catch (error) {
         if (!ignore) {
@@ -80,6 +83,17 @@ const ResetPassword = () => {
       validationStartedRef.current = false
     }
   }, [token])
+
+  useEffect(() => {
+    if (isSubmitted) return undefined
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') navigate('/login')
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isSubmitted, navigate])
 
   const showTokenErrorState = isPasswordReset && !isTokenValid && !isValidatingToken && tokenError
   const tokenErrorTitle =
@@ -212,6 +226,7 @@ const ResetPassword = () => {
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder='At least 8 characters'
                         minLength={8}
+                        autoComplete='new-password'
                         required
                       />
                       <button
@@ -236,6 +251,7 @@ const ResetPassword = () => {
                         onChange={(event) => setConfirmPassword(event.target.value)}
                         placeholder='Repeat your password'
                         minLength={8}
+                        autoComplete='new-password'
                         required
                       />
                       <button
@@ -263,10 +279,15 @@ const ResetPassword = () => {
                       <input
                         id='reset-email'
                         type='email'
+                        name='email'
                         value={email}
-                        onChange={(event) => setEmail(event.target.value)}
+                        onChange={(event) => {
+                          setEmail(event.target.value)
+                          sessionStorage.setItem(AUTH_EMAIL_KEY, event.target.value)
+                        }}
                         placeholder='you@example.com'
-                        autoComplete='username'
+                        autoComplete='email'
+                        autoFocus={!isPasswordReset}
                         required
                       />
                     </div>

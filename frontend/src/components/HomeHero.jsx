@@ -12,6 +12,7 @@ import { useAuthStore } from '../store/useAuthStore'
 const HomeHero = () => {
 	const { authUser } = useAuthStore()
 	const [draggedCard, setDraggedCard] = useState(null)
+	const [touchDrag, setTouchDrag] = useState(null)
 	const [heroColumns, setHeroColumns] = useState([
 		{
 			id: 'backlog',
@@ -77,11 +78,30 @@ const HomeHero = () => {
 		setDraggedCard(null)
 	}
 
+	const handleTouchStart = (event, task) => {
+		event.preventDefault()
+		const touch = event.touches[0]
+		setDraggedCard(task)
+		setTouchDrag({ task, x: touch.clientX, y: touch.clientY })
+	}
+
+	const handleTouchMove = (event) => {
+		event.preventDefault()
+		const touch = event.touches[0]
+		setTouchDrag((current) => current ? { ...current, x: touch.clientX, y: touch.clientY } : current)
+	}
+
 	const handleTouchEnd = (event) => {
 		const touch = event.changedTouches[0]
 		const target = document.elementFromPoint(touch.clientX, touch.clientY)
 		const column = target?.closest('[data-hero-column]')
 		moveHeroCard(column?.dataset.heroColumn)
+		setTouchDrag(null)
+	}
+
+	const handleTouchCancel = () => {
+		setDraggedCard(null)
+		setTouchDrag(null)
 	}
 
 	return (
@@ -147,23 +167,21 @@ const HomeHero = () => {
 							{column.tasks.map((task) => (
 								<article
 									className={
-										task.accent === 'teal'
+										`${task.accent === 'teal'
 											? 'hero-card-teal'
 											: task.accent === 'done'
 												? 'hero-card-done'
-												: ''
+												: ''} ${touchDrag?.task.id === task.id ? 'is-touch-dragging' : ''}`
 									}
 									draggable
 										onPointerDown={(event) => {
 											if (event.pointerType === 'touch') event.preventDefault()
 											setDraggedCard(task)
 										}}
-										onTouchStart={(event) => {
-											event.preventDefault()
-											setDraggedCard(task)
-										}}
-										onTouchMove={(event) => event.preventDefault()}
+										onTouchStart={(event) => handleTouchStart(event, task)}
+										onTouchMove={handleTouchMove}
 										onTouchEnd={handleTouchEnd}
+										onTouchCancel={handleTouchCancel}
 									onDragStart={() => setDraggedCard(task)}
 									onDragEnd={() => setDraggedCard(null)}
 									key={task.id}
@@ -196,6 +214,17 @@ const HomeHero = () => {
 					</span>
 				</div>
 			</div>
+			{touchDrag && (
+				<div
+					className='hero-touch-drag'
+					style={{ left: `${touchDrag.x}px`, top: `${touchDrag.y}px` }}
+					aria-hidden='true'
+				>
+					<span>{touchDrag.task.label}</span>
+					<strong>{touchDrag.task.title}</strong>
+					{touchDrag.task.meta && <small>{touchDrag.task.meta}</small>}
+				</div>
+			)}
 		</section>
 	)
 }

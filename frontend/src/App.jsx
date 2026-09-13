@@ -121,7 +121,7 @@ export const App = () => {
 			<Toaster position='bottom-right' richColors />
 			{!isWorkspace && <Navbar />}
 
-			<Routes>
+			<Routes key={location.pathname}>
 				{needsSetup ? (
 					<>
 						<Route path='/setup-profile' element={<SetupProfile />} />
