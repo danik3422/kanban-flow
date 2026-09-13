@@ -77,6 +77,13 @@ const HomeHero = () => {
 		setDraggedCard(null)
 	}
 
+	const handleTouchEnd = (event) => {
+		const touch = event.changedTouches[0]
+		const target = document.elementFromPoint(touch.clientX, touch.clientY)
+		const column = target?.closest('[data-hero-column]')
+		moveHeroCard(column?.dataset.heroColumn)
+	}
+
 	return (
 		<section className='hero-section hero-entrance'>
 			<div className='hero-copy hero-entrance-copy'>
@@ -127,8 +134,12 @@ const HomeHero = () => {
 						<div
 							className={`hero-demo-column ${draggedCard ? 'is-drop-ready' : ''}`}
 							key={column.id}
+							data-hero-column={column.id}
 							onDragOver={(event) => event.preventDefault()}
 							onDrop={() => moveHeroCard(column.id)}
+							onPointerUp={(event) => {
+								if (event.pointerType !== 'touch') moveHeroCard(column.id)
+							}}
 						>
 							<p>
 								{column.title} <b>{column.tasks.length}</b>
@@ -143,6 +154,16 @@ const HomeHero = () => {
 												: ''
 									}
 									draggable
+										onPointerDown={(event) => {
+											if (event.pointerType === 'touch') event.preventDefault()
+											setDraggedCard(task)
+										}}
+										onTouchStart={(event) => {
+											event.preventDefault()
+											setDraggedCard(task)
+										}}
+										onTouchMove={(event) => event.preventDefault()}
+										onTouchEnd={handleTouchEnd}
 									onDragStart={() => setDraggedCard(task)}
 									onDragEnd={() => setDraggedCard(null)}
 									key={task.id}

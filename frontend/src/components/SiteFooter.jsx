@@ -1,4 +1,4 @@
-import { ArrowUpRight, Mail } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 
 const SiteFooter = () => {
 	const year = new Date().getFullYear()
@@ -7,25 +7,35 @@ const SiteFooter = () => {
 
 	return (
 		<footer className='site-footer'>
-			<div className='footer-identity'>
-				<div className='footer-brand'>
-					<span className='brand-mark'>K</span>
-					<strong>KanbanHub</strong>
+			<div className='footer-inner'>
+				<div className='footer-main'>
+					<div className='footer-identity'>
+						<p className='footer-kicker'>A calmer way to get work done</p>
+						<div className='footer-brand'>
+							<span className='brand-mark'>K</span>
+							<strong>KanbanHub</strong>
+						</div>
+						<p>Keep the next useful action visible.</p>
+					</div>
+					<nav className='footer-links' aria-label='Footer links'>
+						<a href='mailto:support@kanbanhub.app'>
+							<span><strong>Support</strong><small>support@kanbanhub.app</small></span>
+						</a>
+						{portfolioUrl ? (
+							<a href={portfolioUrl} target='_blank' rel='noreferrer'>
+								<span><strong>Portfolio</strong><small>See more work</small></span>
+								<ArrowUpRight size={16} />
+							</a>
+						) : (
+							<span className='footer-note'>Portfolio link coming soon</span>
+						)}
+					</nav>
 				</div>
-				<p>© {year} KanbanHub. Built by Danylo Syloats.</p>
+				<div className='footer-bottom'>
+					<span>© {year} KanbanHub</span>
+					<span>Built by Danylo Syloats</span>
+				</div>
 			</div>
-			<nav className='footer-links' aria-label='Footer links'>
-				<a href='mailto:support@kanbanhub.app'>
-					<Mail size={14} /> support@kanbanhub.app
-				</a>
-				{portfolioUrl ? (
-					<a href={portfolioUrl} target='_blank' rel='noreferrer'>
-						View portfolio <ArrowUpRight size={14} />
-					</a>
-				) : (
-					<span className='footer-note'>Portfolio link coming soon</span>
-				)}
-			</nav>
 		</footer>
 	)
 }

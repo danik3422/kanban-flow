@@ -37,6 +37,7 @@ export const App = () => {
 		location.pathname === '/my-tasks' ||
 		location.pathname === '/team'
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
+	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
 
 	useEffect(() => {
 		checkAuth()
@@ -98,12 +99,19 @@ export const App = () => {
 	if (isCheckingAuth) {
 		return (
 			<div className='loading-screen' role='status' aria-live='polite'>
-				<div className='loading-orbit' aria-hidden='true'>
-					<span />
-					<span />
-					<span />
+				<div className='loading-shell' aria-label='Checking session'>
+					<div className='loading-brand'>
+						<span className='brand-mark'>K</span>
+						<span>KanbanHub</span>
+					</div>
+					<div className='loading-pill'>
+						<span className='loading-spinner' aria-hidden='true' />
+						<p className='loading-label'>
+							{loadingLabel}
+							<span className='loading-dots'>...</span>
+						</p>
+					</div>
 				</div>
-				<p className='loading-label'>Loading<span className='loading-dots'>...</span></p>
 			</div>
 		)
 	}
