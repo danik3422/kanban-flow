@@ -88,7 +88,9 @@ const HomeHero = () => {
 	const handleTouchMove = (event) => {
 		event.preventDefault()
 		const touch = event.touches[0]
-		setTouchDrag((current) => current ? { ...current, x: touch.clientX, y: touch.clientY } : current)
+		setTouchDrag((current) =>
+			current ? { ...current, x: touch.clientX, y: touch.clientY } : current,
+		)
 	}
 
 	const handleTouchEnd = (event) => {
@@ -112,8 +114,8 @@ const HomeHero = () => {
 				</p>
 				<h1>Make progress visible.</h1>
 				<p className='hero-description'>
-					KanbanHub gives your projects a clear rhythm: capture the work, focus the
-					team, and celebrate what moves forward.
+					KanbanHub gives your projects a clear rhythm: capture the work, focus
+					the team, and celebrate what moves forward.
 				</p>
 				<div className='hero-actions'>
 					{authUser ? (
@@ -166,22 +168,22 @@ const HomeHero = () => {
 							</p>
 							{column.tasks.map((task) => (
 								<article
-									className={
-										`${task.accent === 'teal'
+									className={`${
+										task.accent === 'teal'
 											? 'hero-card-teal'
 											: task.accent === 'done'
 												? 'hero-card-done'
-												: ''} ${touchDrag?.task.id === task.id ? 'is-touch-dragging' : ''}`
-									}
+												: ''
+									} ${touchDrag?.task.id === task.id ? 'is-touch-dragging' : ''}`}
 									draggable
-										onPointerDown={(event) => {
-											if (event.pointerType === 'touch') event.preventDefault()
-											setDraggedCard(task)
-										}}
-										onTouchStart={(event) => handleTouchStart(event, task)}
-										onTouchMove={handleTouchMove}
-										onTouchEnd={handleTouchEnd}
-										onTouchCancel={handleTouchCancel}
+									onPointerDown={(event) => {
+										if (event.pointerType === 'touch') event.preventDefault()
+										setDraggedCard(task)
+									}}
+									onTouchStart={(event) => handleTouchStart(event, task)}
+									onTouchMove={handleTouchMove}
+									onTouchEnd={handleTouchEnd}
+									onTouchCancel={handleTouchCancel}
 									onDragStart={() => setDraggedCard(task)}
 									onDragEnd={() => setDraggedCard(null)}
 									key={task.id}

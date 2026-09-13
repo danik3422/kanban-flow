@@ -89,11 +89,19 @@ const AccountDropdown = () => {
 
 	const handleSheetPointerDown = (event) => {
 		if (window.innerWidth > 720) return
-		const isHandle = event.currentTarget.classList.contains('account-sheet-handle')
-		if (!isHandle && event.currentTarget !== event.target && event.target.closest('button, a, input, select, textarea')) return
+		const isHandle = event.currentTarget.classList.contains(
+			'account-sheet-handle',
+		)
+		if (
+			!isHandle &&
+			event.currentTarget !== event.target &&
+			event.target.closest('button, a, input, select, textarea')
+		)
+			return
 		sheetDragStart.current = event.clientY
 		sheetDragLastY.current = event.clientY
-		sheetBaseHeight.current = dropdownRef.current?.getBoundingClientRect().height || 0
+		sheetBaseHeight.current =
+			dropdownRef.current?.getBoundingClientRect().height || 0
 		setIsSheetDragging(false)
 		event.currentTarget.setPointerCapture(event.pointerId)
 	}
@@ -108,7 +116,9 @@ const AccountDropdown = () => {
 		if (delta < 0) {
 			const stretch = Math.min(132, Math.abs(delta) * 0.48)
 			setSheetOffset(0)
-			setSheetDragHeight(Math.min(window.innerHeight - 12, sheetBaseHeight.current + stretch))
+			setSheetDragHeight(
+				Math.min(window.innerHeight - 12, sheetBaseHeight.current + stretch),
+			)
 		} else {
 			setSheetDragHeight(sheetBaseHeight.current)
 			setSheetOffset(Math.min(180, delta))
@@ -117,7 +127,8 @@ const AccountDropdown = () => {
 
 	const handleSheetPointerUp = (event) => {
 		if (sheetDragStart.current === null) return
-		const delta = (sheetDragLastY.current ?? event.clientY) - sheetDragStart.current
+		const delta =
+			(sheetDragLastY.current ?? event.clientY) - sheetDragStart.current
 		sheetDragStart.current = null
 		sheetDragLastY.current = null
 		setIsSheetDragging(false)
@@ -176,7 +187,9 @@ const AccountDropdown = () => {
 						className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSwipeClosing ? 'is-swipe-closing' : ''} ${isSheetEntering ? 'is-entering' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''} ${isSheetDragging ? 'is-dragging' : ''} ${sheetSettle ? 'is-settling' : ''}`}
 						style={{
 							'--sheet-drag-offset': `${sheetOffset}px`,
-							'--sheet-settle-duration': sheetSettle ? `${sheetSettle.duration}ms` : undefined,
+							'--sheet-settle-duration': sheetSettle
+								? `${sheetSettle.duration}ms`
+								: undefined,
 							'--sheet-settle-ease': sheetSettle?.easing,
 							height: sheetDragHeight ? `${sheetDragHeight}px` : undefined,
 						}}

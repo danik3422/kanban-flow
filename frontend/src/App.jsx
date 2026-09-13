@@ -83,9 +83,12 @@ export const App = () => {
 				localStorage.removeItem('kanban-pending-invite')
 				const message =
 					error.response?.data?.message || 'This invite is no longer available'
-				navigate(`/invite/${pendingInvite}?error=${encodeURIComponent(message)}`, {
-					replace: true,
-				})
+				navigate(
+					`/invite/${pendingInvite}?error=${encodeURIComponent(message)}`,
+					{
+						replace: true,
+					},
+				)
 			})
 	}, [authUser, location.pathname, navigate])
 
@@ -148,7 +151,9 @@ export const App = () => {
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route
 							path='/login/verify-email'
-							element={!authUser ? <VerifyEmail /> : <Navigate to='/' replace />}
+							element={
+								!authUser ? <VerifyEmail /> : <Navigate to='/' replace />
+							}
 						/>
 
 						<Route
@@ -157,11 +162,15 @@ export const App = () => {
 						/>
 						<Route
 							path='/my-tasks'
-							element={authUser ? <MyTasks /> : <Navigate to='/login' replace />}
+							element={
+								authUser ? <MyTasks /> : <Navigate to='/login' replace />
+							}
 						/>
 						<Route
 							path='/calendar'
-							element={authUser ? <CalendarPage /> : <Navigate to='/login' replace />}
+							element={
+								authUser ? <CalendarPage /> : <Navigate to='/login' replace />
+							}
 						/>
 						<Route
 							path='/team'
