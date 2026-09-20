@@ -29,8 +29,7 @@ export const useAuthStore = create((set) => ({
 		try {
 			const res = await axiosInstance.get('/auth/get-user')
 			set({ authUser: res.data })
-		} catch (error) {
-			console.error('Error checking user:', error)
+		} catch {
 			set({ authUser: null })
 		} finally {
 			set({ isCheckingAuth: false })
@@ -64,10 +63,23 @@ export const useAuthStore = create((set) => ({
 		set({ isLoggingIn: true })
 		try {
 			const res = await axiosInstance.post('/auth/login', data)
+			
+			if (res.data.requiresVerification) {
+				toast.info('Please verify your email to complete login')
+				set({ authUser: res.data })
+				return {
+					success: true,
+					requiresVerification: true,
+					email: res.data.email,
+				}
+			}
+			
 			toast.success('Logged in successfully')
 			set({ authUser: res.data })
+			return { success: true, requiresVerification: false }
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Login failed')
+			return { success: false }
 		} finally {
 			set({ isLoggingIn: false })
 		}
@@ -75,8 +87,8 @@ export const useAuthStore = create((set) => ({
 
 	logout: async () => {
 		if (isDevAuthBypass) {
-			set({ authUser: devUser })
-			toast.info('Dev auth bypass is enabled')
+			set({ authUser: null })
+			toast.info('Logged out successfully')
 			return
 		}
 		try {
@@ -114,7 +126,6 @@ export const useAuthStore = create((set) => ({
 			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} sign-in successful`)
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error(`${provider} Sign-in Error:`, error)
 			toast.error(error.response?.data?.message || `${provider} sign-in failed`)
 			return { success: false, error }
 		}
@@ -136,7 +147,6 @@ export const useAuthStore = create((set) => ({
 			toast.success('Account created successfully')
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error(`${provider} Signup Error:`, error)
 			toast.error(error.response?.data?.message || `${provider} signup failed`)
 			return { success: false, error }
 		}
@@ -158,7 +168,6 @@ export const useAuthStore = create((set) => ({
 			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
 			return { success: true, user: response.data }
 		} catch (error) {
-			console.error(`${provider} Connect Error:`, error)
 			toast.error(error.response?.data?.message || `Could not connect ${provider}`)
 			return { success: false, error }
 		}

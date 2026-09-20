@@ -18,7 +18,7 @@ root-domain redirect or landing configuration provided by Render.
 ## Backend variables
 
 Copy `backend/.env.production.example` into the backend service variables.
-Set real values for `MONGO_URI`, `JWT_SECRET`, SMTP credentials, and Firebase
+Set real values for `MONGO_URI`, `JWT_SECRET`, `BREVO_API_KEY`, and Firebase
 Admin credentials. Keep `ALLOW_MEMORY_DB=false` and leave
 `MAIL_REDIRECT_TO` empty.
 

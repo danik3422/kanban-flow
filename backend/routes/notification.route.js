@@ -4,12 +4,12 @@ import {
 	markAllNotificationsRead,
 	markNotificationRead,
 } from '../controllers/notification.controller.js'
-import { authMiddleware } from '../middlewares/auth.middleware.js'
+import { verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
 
 const router = express.Router()
 
-router.get('/', authMiddleware, getNotifications)
-router.patch('/:id/read', authMiddleware, markNotificationRead)
-router.patch('/read-all', authMiddleware, markAllNotificationsRead)
+router.get('/', verifiedAuthMiddleware, getNotifications)
+router.patch('/:id/read', verifiedAuthMiddleware, markNotificationRead)
+router.patch('/read-all', verifiedAuthMiddleware, markAllNotificationsRead)
 
 export default router

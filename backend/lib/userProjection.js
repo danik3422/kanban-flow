@@ -12,6 +12,7 @@ export const publicUserFields = [
 	'provider',
 	'hasPassword',
 	'emailVerified',
+	'emailVerificationLastSentAt',
 	'profileSetup',
 	'createdAt',
 	'updatedAt',

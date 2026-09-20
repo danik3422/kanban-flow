@@ -50,8 +50,9 @@ io.use(async (socket, next) => {
 	try {
 		const cookies = Object.fromEntries((socket.handshake.headers.cookie || '').split('; ').filter(Boolean).map((item) => item.split('=')))
 		const decoded = jwt.verify(cookies.jwt, env.jwtSecret)
-		const user = await User.findById(decoded.userId).select('_id sessionVersion')
+		const user = await User.findById(decoded.userId).select('_id sessionVersion emailVerified')
 		if (!user) return next(new Error('Unauthorized'))
+		if (!user.emailVerified) return next(new Error('Email verification required'))
 		if (Number(decoded.sessionVersion || 0) !== Number(user.sessionVersion || 0)) {
 			return next(new Error('Session expired'))
 		}

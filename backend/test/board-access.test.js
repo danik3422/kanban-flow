@@ -98,6 +98,115 @@ describe('board access and invitation flow', () => {
 		assert.notEqual(response.status, 403)
 	})
 
+	it('blocks unverified users from application APIs while allowing auth status checks', async () => {
+		const user = await User.create({
+			email: 'unverified-api@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			emailVerified: false,
+		})
+		const cookie = authCookie(user._id)
+
+		const userResponse = await request(app)
+			.get('/api/auth/get-user')
+			.set('Cookie', cookie)
+		const boardResponse = await request(app)
+			.get('/api/board/boards')
+			.set('Cookie', cookie)
+
+		assert.equal(userResponse.status, 200)
+		assert.equal(boardResponse.status, 403)
+		assert.equal(boardResponse.body.code, 'email_verification_required')
+	})
+
+	it('does not keep a local account when its verification email cannot be sent', async () => {
+		const originalBrevoApiKey = env.brevoApiKey
+		env.brevoApiKey = ''
+		try {
+			const response = await request(app)
+				.post('/api/auth/signup')
+				.send({ email: 'email-failed@example.com', password: 'Password123!' })
+
+			assert.equal(response.status, 503)
+			assert.equal(
+				await User.findOne({ email: 'email-failed@example.com' }),
+				null,
+			)
+		} finally {
+			env.brevoApiKey = originalBrevoApiKey
+		}
+	})
+
+	it('redirects only a correctly authenticated unverified user to email verification', async () => {
+		await User.create({
+			email: 'unverified@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			emailVerified: false,
+		})
+
+		const unverifiedResponse = await request(app)
+			.post('/api/auth/login')
+			.send({ email: 'unverified@example.com', password: 'Password123!' })
+		const incorrectPasswordResponse = await request(app)
+			.post('/api/auth/login')
+			.send({ email: 'unverified@example.com', password: 'WrongPassword123!' })
+
+		assert.equal(unverifiedResponse.status, 200)
+		assert.equal(unverifiedResponse.body.requiresVerification, true)
+		assert.equal(unverifiedResponse.body.email, 'unverified@example.com')
+		assert.equal(incorrectPasswordResponse.status, 400)
+		assert.equal(incorrectPasswordResponse.body.code, undefined)
+	})
+
+	it('keeps an unverified account and its current token when a verification email resend fails', async () => {
+		const user = await User.create({
+			email: 'resend@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			emailVerified: false,
+			emailVerificationTokenHash: 'existing-verification-token',
+			emailVerificationTokenExpiresAt: new Date(Date.now() + 60_000),
+		})
+		const originalBrevoApiKey = env.brevoApiKey
+		env.brevoApiKey = ''
+		try {
+			const cookie = authCookie(user._id)
+			const existingResponse = await request(app)
+				.post('/api/auth/verify-email/resend')
+				.set('Cookie', cookie)
+				.send({ email: 'resend@example.com' })
+			const unauthenticatedResponse = await request(app)
+				.post('/api/auth/verify-email/resend')
+				.send({ email: 'missing@example.com' })
+
+			assert.equal(existingResponse.status, 503)
+			assert.equal(unauthenticatedResponse.status, 401)
+			assert.equal(
+				(await User.findOne({ email: 'resend@example.com' })).emailVerificationTokenHash,
+				'existing-verification-token',
+			)
+		} finally {
+			env.brevoApiKey = originalBrevoApiKey
+		}
+	})
+
+	it('enforces the resend cooldown on the server before sending a new verification email', async () => {
+		const user = await User.create({
+			email: 'cooldown@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			emailVerified: false,
+			emailVerificationLastSentAt: new Date(Date.now() - 30_000),
+		})
+
+		const cookie = authCookie(user._id)
+		const response = await request(app)
+			.post('/api/auth/verify-email/resend')
+			.set('Cookie', cookie)
+			.send({ email: 'cooldown@example.com' })
+
+		assert.equal(response.status, 429)
+		assert.equal(response.body.code, 'cooldown_active')
+		assert.ok(response.body.retryAfter > 0)
+	})
+
 	it('allows a reset token to be claimed only once under concurrency', async () => {
 		const password = await bcrypt.hash('OldPassword123!', 10)
 		const user = await User.create({
@@ -1070,5 +1179,47 @@ describe('board access and invitation flow', () => {
 			.set('Cookie', authCookie(member._id))
 		assert.equal(memberTasks.status, 200)
 		assert.deepEqual(memberTasks.body.map((task) => task.title), ['Already here', 'Move me'])
+	})
+
+	it('persists the complete task order after a visual reorder', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const column = await Column.create({ board: board._id, title: 'Ordered', position: 0 })
+		const first = await Task.create({ column: column._id, title: 'First', position: 0 })
+		const second = await Task.create({ column: column._id, title: 'Second', position: 1 })
+		const third = await Task.create({ column: column._id, title: 'Third', position: 2 })
+
+		const response = await request(app)
+			.patch(`/api/board/boards/${board._id}/tasks/reorder`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ columns: [{ columnId: column._id, taskIds: [third._id, first._id, second._id] }] })
+
+		assert.equal(response.status, 200)
+		const tasks = await Task.find({ column: column._id }).sort({ position: 1 }).lean()
+		assert.deepEqual(tasks.map((task) => task.title), ['Third', 'First', 'Second'])
+		assert.deepEqual(tasks.map((task) => task.position), [0, 1, 2])
+		assert.equal((await Column.findById(column._id)).sortBy, 'custom')
+	})
+
+	it('persists a task moved to another column through reorder', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const source = await Column.create({ board: board._id, title: 'Source', position: 0 })
+		const target = await Column.create({ board: board._id, title: 'Target', position: 1 })
+		const moving = await Task.create({ column: source._id, title: 'Moving', position: 0 })
+		const staying = await Task.create({ column: target._id, title: 'Staying', position: 0 })
+
+		const response = await request(app)
+			.patch(`/api/board/boards/${board._id}/tasks/reorder`)
+			.set('Cookie', authCookie(owner._id))
+			.send({
+				columns: [
+					{ columnId: source._id, taskIds: [] },
+					{ columnId: target._id, taskIds: [staying._id, moving._id] },
+				],
+			})
+
+		assert.equal(response.status, 200)
+		const movedTask = await Task.findById(moving._id).lean()
+		assert.equal(movedTask.column.toString(), target._id.toString())
+		assert.equal(movedTask.position, 1)
 	})
 })

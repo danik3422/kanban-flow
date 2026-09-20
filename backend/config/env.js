@@ -34,14 +34,10 @@ export const env = {
 	mailFrom: process.env.MAIL_FROM || '',
 	mailReplyTo: process.env.MAIL_REPLY_TO || '',
 	mailRedirectTo: process.env.MAIL_REDIRECT_TO || '',
+	brevoApiKey: process.env.BREVO_API_KEY || '',
+	brevoApiUrl:
+		process.env.BREVO_API_URL || 'https://api.brevo.com/v3/smtp/email',
 	passwordResetMinutes: Number(process.env.PASSWORD_RESET_MINUTES) || 30,
 	emailVerificationMinutes:
 		Number(process.env.EMAIL_VERIFICATION_MINUTES) || 60,
-	smtp: {
-		host: process.env.SMTP_HOST || '',
-		port: Number(process.env.SMTP_PORT) || 587,
-		secure: process.env.SMTP_SECURE === 'true',
-		user: process.env.SMTP_USER || '',
-		password: process.env.SMTP_PASSWORD || '',
-	},
 }

@@ -6,6 +6,16 @@ const rateLimitResponse = {
 
 const getRateLimitKey = (req) => ipKeyGenerator(req.ip)
 
+const verificationRateLimitHandler = (req, res) => {
+	const resetTime = req.rateLimit?.resetTime?.getTime?.() || Date.now()
+	const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000))
+	res.set('Retry-After', String(retryAfter))
+	return res.status(429).json({
+		message: 'Too many verification email requests. Please wait before trying again.',
+		retryAfter,
+	})
+}
+
 export const apiLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	limit: 1000,
@@ -33,4 +43,24 @@ export const passwordResetLimiter = rateLimit({
 	message: rateLimitResponse,
 	skipSuccessfulRequests: true,
 	keyGenerator: getRateLimitKey,
+})
+
+export const verificationEmailIpLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 20,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: rateLimitResponse,
+	keyGenerator: getRateLimitKey,
+	handler: verificationRateLimitHandler,
+})
+
+export const verificationEmailLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 5,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: rateLimitResponse,
+	keyGenerator: (req) => req.body.email,
+	handler: verificationRateLimitHandler,
 })

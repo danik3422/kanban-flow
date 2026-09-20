@@ -40,3 +40,15 @@ export const authMiddleware = async (req, res, next) => {
 		res.status(401).json({ message: 'Unauthorized' })
 	}
 }
+
+export const verifiedAuthMiddleware = (req, res, next) => {
+	authMiddleware(req, res, () => {
+		if (!req.user.emailVerified) {
+			return res.status(403).json({
+				message: 'Email verification is required for this action.',
+				code: 'email_verification_required',
+			})
+		}
+		next()
+	})
+}

@@ -1,22 +1,4 @@
-import nodemailer from 'nodemailer'
-
 import { env } from '../config/env.js'
-
-const getTransporter = () => {
-	if (!env.smtp.host || !env.smtp.user || !env.smtp.password) {
-		return null
-	}
-
-	return nodemailer.createTransport({
-		host: env.smtp.host,
-		port: env.smtp.port,
-		secure: env.smtp.secure,
-		auth: {
-			user: env.smtp.user,
-			pass: env.smtp.password,
-		},
-	})
-}
 
 const escapeHtml = (value = '') =>
 	String(value)
@@ -27,6 +9,13 @@ const escapeHtml = (value = '') =>
 		.replaceAll("'", '&#039;')
 
 const getRecipient = (email) => env.mailRedirectTo || email
+
+const parseAddress = (value) => {
+	const match = String(value || '').match(/^(.*?)\s*<([^>]+)>$/)
+	return match
+		? { name: match[1].trim(), email: match[2].trim() }
+		: { email: String(value || '').trim() }
+}
 
 const renderEmail = ({ eyebrow, title, intro, body, ctaLabel, ctaUrl, note, preheader }) => `
 <!doctype html>
@@ -54,22 +43,38 @@ const renderEmail = ({ eyebrow, title, intro, body, ctaLabel, ctaUrl, note, preh
 	</body>
 </html>`
 
-const getMailOptions = ({ email, subject, text, html }) => ({
-	from: env.mailFrom || env.smtp.user,
-	to: getRecipient(email),
-	subject,
-	text,
-	html,
-	...(env.mailReplyTo ? { replyTo: env.mailReplyTo } : {}),
-})
-
-export const sendPasswordResetEmail = async ({ email, resetUrl }) => {
-	const transporter = getTransporter()
-	if (!transporter) {
-		throw new Error('SMTP is not configured')
+const sendEmail = async ({ email, subject, text, html }) => {
+	if (!env.brevoApiKey || !env.mailFrom) {
+		throw new Error('Brevo email API is not configured')
 	}
 
-	await transporter.sendMail(getMailOptions({
+	const sender = parseAddress(env.mailFrom)
+	const payload = {
+		sender,
+		to: [{ email: getRecipient(email) }],
+		subject,
+		textContent: text,
+		htmlContent: html,
+		...(env.mailReplyTo ? { replyTo: parseAddress(env.mailReplyTo) } : {}),
+	}
+	const response = await fetch(env.brevoApiUrl, {
+		method: 'POST',
+		headers: {
+			accept: 'application/json',
+			'api-key': env.brevoApiKey,
+			'content-type': 'application/json',
+		},
+		body: JSON.stringify(payload),
+	})
+
+	if (!response.ok) {
+		const details = await response.text()
+		throw new Error(`Brevo email API failed (${response.status}): ${details}`)
+	}
+}
+
+export const sendPasswordResetEmail = async ({ email, resetUrl }) => {
+	await sendEmail({
 		email,
 		subject: 'Reset your Kanban password',
 		text: `Reset your Kanban password by opening this link: ${resetUrl}`,
@@ -83,16 +88,11 @@ export const sendPasswordResetEmail = async ({ email, resetUrl }) => {
 			ctaUrl: resetUrl,
 			note: 'If you did not request a password reset, no action is needed. Your account remains safe.',
 		}),
-	}))
+	})
 }
 
 export const sendPasswordAddedEmail = async ({ email, settingsUrl }) => {
-	const transporter = getTransporter()
-	if (!transporter) {
-		throw new Error('SMTP is not configured')
-	}
-
-	await transporter.sendMail(getMailOptions({
+	await sendEmail({
 		email,
 		subject: 'A password sign-in method was added to your KanbanHub account',
 		text: `A password sign-in method was added to your KanbanHub account. If this was not you, review your account security: ${settingsUrl}`,
@@ -106,16 +106,11 @@ export const sendPasswordAddedEmail = async ({ email, settingsUrl }) => {
 			ctaUrl: settingsUrl,
 			note: 'If you did not make this change, sign in with your provider and change the password immediately.',
 		}),
-	}))
+	})
 }
 
 export const sendAccountVerificationEmail = async ({ email, verificationUrl }) => {
-	const transporter = getTransporter()
-	if (!transporter) {
-		throw new Error('SMTP is not configured')
-	}
-
-	await transporter.sendMail(getMailOptions({
+	await sendEmail({
 		email,
 		subject: 'Verify your KanbanHub account',
 		text: `Verify your KanbanHub account by opening this link: ${verificationUrl}`,
@@ -129,16 +124,11 @@ export const sendAccountVerificationEmail = async ({ email, verificationUrl }) =
 			ctaUrl: verificationUrl,
 			note: 'If you did not create this account, you can safely ignore this email.',
 		}),
-	}))
+	})
 }
 
 export const sendBoardInviteEmail = async ({ email, boardName, boardUrl }) => {
-	const transporter = getTransporter()
-	if (!transporter) {
-		throw new Error('SMTP is not configured')
-	}
-
-	await transporter.sendMail(getMailOptions({
+	await sendEmail({
 		email,
 		subject: `You were invited to ${boardName}`,
 		text: `You were invited to collaborate on ${boardName}. Open the board here: ${boardUrl}`,
@@ -152,5 +142,5 @@ export const sendBoardInviteEmail = async ({ email, boardName, boardUrl }) => {
 			ctaUrl: boardUrl,
 			note: 'This invitation may expire or be revoked by the room owner.',
 		}),
-	}))
+	})
 }

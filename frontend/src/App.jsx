@@ -92,7 +92,8 @@ export const App = () => {
 			})
 	}, [authUser, location.pathname, navigate])
 
-	const needsSetup = authUser && authUser.profileSetup === false
+	const needsVerification = authUser && authUser.emailVerified === false
+	const needsSetup = authUser && authUser.profileSetup === false && authUser.emailVerified === true
 	const requestedRedirect = new URLSearchParams(location.search).get('redirect')
 	const loginRedirect =
 		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
@@ -125,7 +126,15 @@ export const App = () => {
 			{!isWorkspace && <Navbar />}
 
 			<Routes key={location.pathname}>
-				{needsSetup ? (
+				{needsVerification ? (
+					<>
+						<Route path='/verify-email' element={<VerifyEmail />} />
+						<Route
+							path='*'
+							element={<Navigate to='/verify-email' replace />}
+						/>
+					</>
+				) : needsSetup ? (
 					<>
 						<Route path='/setup-profile' element={<SetupProfile />} />
 						<Route
@@ -154,6 +163,10 @@ export const App = () => {
 							element={
 								!authUser ? <VerifyEmail /> : <Navigate to='/' replace />
 							}
+						/>
+						<Route
+							path='/verify-email'
+							element={<VerifyEmail />}
 						/>
 
 						<Route

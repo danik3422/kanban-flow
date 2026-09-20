@@ -1,45 +1,47 @@
-import { Camera, Check, ChevronDown, Clock3, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { Camera, Check, ChevronDown, UserRound, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import TimezonePicker from '../components/TimezonePicker'
+import { getDetectedTimezone, timezoneOptions } from '../data/timezones'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 
 const SetupProfile = () => {
 	const navigate = useNavigate()
 	const { authUser, checkAuth } = useAuthStore()
-
 	const [name, setName] = useState(() => authUser?.name || '')
 	const [jobTitle, setJobTitle] = useState(() => authUser?.jobTitle || '')
-	const [timezone, setTimezone] = useState(() => authUser?.timezone || 'UTC')
+	const [timezone, setTimezone] = useState(() => authUser?.timezone || getDetectedTimezone())
 	const [avatarFile, setAvatarFile] = useState(null)
-	const [avatarPreview, setAvatarPreview] = useState(
-		() => authUser?.avatar || '/avatar.png'
-	)
+	const [avatarPreview, setAvatarPreview] = useState(() => authUser?.avatar || '/avatar.png')
+	const avatarInputRef = useRef(null)
 	const [isSubmitting, setIsSubmitting] = useState(false)
-	const isFirstSetup = authUser.profileSetup === false
-	const timezones = ['UTC', 'Europe/London', 'Europe/Berlin', 'Europe/Kyiv', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']
+	const isFirstSetup = authUser?.profileSetup === false
 
-	const handleFileChange = (e) => {
-		const file = e.target.files[0]
+	const handleFileChange = (event) => {
+		const file = event.target.files?.[0]
 		if (file) {
 			setAvatarFile(file)
 			setAvatarPreview(URL.createObjectURL(file))
 		}
 	}
 
-	const convertFileToBase64 = (file) => {
-		return new Promise((resolve, reject) => {
-			const reader = new FileReader()
-			reader.readAsDataURL(file)
-			reader.onload = () => resolve(reader.result)
-			reader.onerror = (error) => reject(error)
-		})
+	const handleRemovePhoto = () => {
+		setAvatarFile(null)
+		setAvatarPreview(authUser?.avatar || '/avatar.png')
+		if (avatarInputRef.current) avatarInputRef.current.value = ''
 	}
 
-	const handleSubmit = async (e) => {
-		e.preventDefault()
+	const convertFileToBase64 = (file) => new Promise((resolve, reject) => {
+		const reader = new FileReader()
+		reader.readAsDataURL(file)
+		reader.onload = () => resolve(reader.result)
+		reader.onerror = reject
+	})
 
+	const handleSubmit = async (event) => {
+		event.preventDefault()
 		if (!name.trim()) {
 			toast.error('Name is required')
 			return
@@ -47,24 +49,13 @@ const SetupProfile = () => {
 
 		try {
 			setIsSubmitting(true)
-
-			let avatarBase64 = null
-			if (avatarFile) {
-				avatarBase64 = await convertFileToBase64(avatarFile)
-			}
-
-			await axiosInstance.patch('/auth/setup-profile', {
-				name,
-				jobTitle,
-				timezone,
-				avatar: avatarBase64,
-			})
-
+			const avatar = avatarFile ? await convertFileToBase64(avatarFile) : null
+			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone, avatar })
 			toast.success('Profile updated successfully!')
 			await checkAuth()
 			navigate(isFirstSetup ? '/workspaces' : '/profile')
-		} catch (err) {
-			toast.error(err?.response?.data?.message || 'Profile update failed')
+		} catch (error) {
+			toast.error(error?.response?.data?.message || 'Profile update failed')
 		} finally {
 			setIsSubmitting(false)
 		}
@@ -75,8 +66,24 @@ const SetupProfile = () => {
 	return (
 		<div className='setup-page'>
 			<div className='setup-layout'>
-				<section className='setup-intro'><div className='setup-kicker'><span className='brand-mark'>K</span><span>{isFirstSetup ? 'First things first' : 'Profile settings'}</span></div><p className='eyebrow'>{isFirstSetup ? 'Welcome to KanbanHub' : 'Your profile'}</p><h1>{isFirstSetup ? 'Make this workspace yours.' : 'Keep your profile current.'}</h1><p>{isFirstSetup ? 'A few details help your team recognize you and make your workspace feel like home.' : 'Update the details your teammates see across the workspace.'}</p><div className='setup-perks'><span><Check size={14} /> Personal workspace</span><span><Check size={14} /> Easy to update later</span></div></section>
-				<section className='setup-card'><div className='setup-card-heading'><div><p className='eyebrow'>{isFirstSetup ? 'Step 1 of 1' : 'Edit profile'}</p><h2>{isFirstSetup ? 'Tell us about you' : 'Your details'}</h2><p>Only your name is required. Everything else is optional.</p></div><div className='setup-step-icon'><UserRound size={20} /></div></div><form className='setup-form' onSubmit={handleSubmit}><label className='setup-avatar-upload'><img src={avatarPreview || '/avatar.png'} alt='' /><span><Camera size={15} /> Change photo</span><input type='file' accept='image/*' onChange={handleFileChange} /></label><div className='setup-field'><label htmlFor='setup-name'>Full name <span>Required</span></label><div className='setup-input-wrap'><UserRound size={16} /><input id='setup-name' type='text' value={name} onChange={(event) => setName(event.target.value)} placeholder='e.g. Danylo Syloats' required /></div></div><div className='setup-field'><label htmlFor='setup-job'>Role or job title <span>Optional</span></label><div className='setup-input-wrap'><input id='setup-job' type='text' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder='e.g. Product designer' /></div></div><div className='setup-field'><label htmlFor='setup-timezone'>Timezone <span>Optional</span></label><div className='setup-input-wrap'><Clock3 size={16} /><select id='setup-timezone' value={timezone} onChange={(event) => setTimezone(event.target.value)}>{timezones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}</select><ChevronDown size={15} className='setup-select-icon' /></div></div><button type='submit' className='primary-button setup-submit' disabled={isSubmitting}>{isSubmitting ? 'Saving...' : isFirstSetup ? 'Enter workspace' : 'Save changes'} <ChevronDown size={16} className='setup-submit-arrow' /></button></form></section>
+				<section className='setup-intro'>
+					<div className='setup-kicker'><span className='brand-mark'>K</span><span>{isFirstSetup ? 'First things first' : 'Profile settings'}</span></div>
+					<p className='eyebrow'>{isFirstSetup ? 'Welcome to KanbanHub' : 'Your profile'}</p>
+					<h1>{isFirstSetup ? 'Make this workspace yours.' : 'Keep your profile current.'}</h1>
+					<p>A few details help your team recognize you and make your workspace feel like home.</p>
+					<div className='setup-perks'><span><Check size={14} /> Personal workspace</span><span><Check size={14} /> Easy to update later</span></div>
+				</section>
+
+				<section className='setup-card'>
+					<div className='setup-card-heading'><div><p className='eyebrow'>{isFirstSetup ? 'Step 1 of 1' : 'Edit profile'}</p><h2>{isFirstSetup ? 'Tell us about you' : 'Your details'}</h2><p>Only your name is required. Everything else is optional.</p></div><div className='setup-step-icon'><UserRound size={20} /></div></div>
+					<form className='setup-form' onSubmit={handleSubmit}>
+						<div className='setup-avatar-control'><label className='setup-avatar-upload'><img src={avatarPreview} alt='' /><span><Camera size={15} /> Change photo</span><input ref={avatarInputRef} type='file' accept='image/*' onChange={handleFileChange} /></label>{avatarFile && <button type='button' className='setup-avatar-remove' onClick={handleRemovePhoto} aria-label='Remove selected photo' title='Remove selected photo'><X size={15} /></button>}</div>
+						<div className='setup-field'><label htmlFor='setup-name'>Full name <span>Required</span></label><div className='setup-input-wrap'><UserRound size={16} /><input id='setup-name' type='text' value={name} onChange={(event) => setName(event.target.value)} placeholder='e.g. Danylo Syloats' required /></div></div>
+						<div className='setup-field'><label htmlFor='setup-job'>Role or job title <span>Optional</span></label><div className='setup-input-wrap'><input id='setup-job' type='text' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder='e.g. Product designer' /></div></div>
+						<div className='setup-field'><label htmlFor='setup-timezone'>Timezone <span>Optional</span></label><TimezonePicker id='setup-timezone' options={timezoneOptions} value={timezone} onChange={setTimezone} /></div>
+						<button type='submit' className='primary-button setup-submit' disabled={isSubmitting}>{isSubmitting ? 'Saving...' : isFirstSetup ? 'Enter workspace' : 'Save changes'} <ChevronDown size={16} className='setup-submit-arrow' /></button>
+					</form>
+				</section>
 			</div>
 		</div>
 	)

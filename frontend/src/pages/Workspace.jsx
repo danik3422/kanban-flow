@@ -12,6 +12,7 @@ import {
 	LogOut,
 	MessageSquare,
 	MoreHorizontal,
+			Pencil,
 	Pin,
 	Plus,
 	Play,
@@ -93,7 +94,9 @@ const setNativeDragImage = (event, element) => {
 	preview.style.transform = 'rotate(1deg) scale(0.99)'
 	preview.style.boxShadow = '0 4px 8px rgba(44, 68, 59, 0.12), 0 18px 30px rgba(44, 68, 59, 0.2)'
 	document.body.appendChild(preview)
-	event.dataTransfer.setDragImage(preview, rect.width / 2, 24)
+	const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
+	const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top))
+	event.dataTransfer.setDragImage(preview, offsetX, offsetY)
 	window.setTimeout(() => preview.remove(), 0)
 }
 
@@ -157,9 +160,7 @@ const Workspace = () => {
 	const [draggedTask, setDraggedTask] = useState(null)
 	const [draggedColumn, setDraggedColumn] = useState(null)
 	const [columnDropTarget, setColumnDropTarget] = useState(null)
-	const [columnDropAfterLast, setColumnDropAfterLast] = useState(false)
 	const [draggedTaskHeight, setDraggedTaskHeight] = useState(null)
-	const [draggedColumnHeight, setDraggedColumnHeight] = useState(null)
 	const columnDragSessionRef = useRef(null)
 	const columnDragOverlayRef = useRef(null)
 	const [dropIndicator, setDropIndicator] = useState(null)
@@ -235,14 +236,17 @@ const Workspace = () => {
 		}
 		try {
 			const loadedColumns = await fetchColumns(board._id)
-			const sortPreferences = readLocalSorts(board._id, authUser?._id)
 			setColumns(
 				loadedColumns.map((column) => ({
 					...column,
-					tasks: sortTasks(column.tasks, sortPreferences[column._id] || 'custom'),
+					tasks: sortTasks(column.tasks, column.sortBy || 'custom'),
 				})),
 			)
-			setColumnSortBy(sortPreferences)
+			setColumnSortBy(
+				Object.fromEntries(
+					loadedColumns.map((column) => [column._id, column.sortBy || 'custom']),
+				),
+			)
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not load this board')
 		} finally {
@@ -253,8 +257,6 @@ const Workspace = () => {
 	const moveColumn = useCallback(async (column, targetColumnOrId, requestedIndex = null) => {
 		if (!column) {
 			setDraggedColumn(null)
-			setColumnDropTarget(null)
-			setColumnDropAfterLast(false)
 			return
 		}
 		const previousColumns = columns
@@ -271,13 +273,17 @@ const Workspace = () => {
 		const reorderedColumns = reorderColumns(columns, column._id, insertionIndex)
 		setColumns(reorderedColumns.map((item, index) => ({ ...item, position: index })))
 		setDraggedColumn(null)
-		setColumnDropTarget(null)
-		setColumnDropAfterLast(false)
 		if (isDevAuthBypass) return
 		try {
-			await axiosInstance.patch(`/board/columns/${column._id}/position`, {
+			const { data } = await axiosInstance.patch(`/board/columns/${column._id}/position`, {
 				position: insertionIndex,
 			})
+			setColumns((current) =>
+				data.map((updatedColumn) => ({
+					...updatedColumn,
+					tasks: current.find((item) => item._id === updatedColumn._id)?.tasks || [],
+				})),
+			)
 		} catch (error) {
 			setColumns(previousColumns)
 			toast.error(error.response?.data?.message || 'Could not reorder column')
@@ -340,20 +346,20 @@ const Workspace = () => {
 			try {
 				const nextColumns = await fetchColumns(selectedBoard._id)
 					if (isCurrent) {
-						const sortPreferences = readLocalSorts(
-							selectedBoard._id,
-							authUser?._id,
-						)
 						setColumns(
 							nextColumns.map((column) => ({
 								...column,
 								tasks: sortTasks(
 									column.tasks,
-									sortPreferences[column._id] || 'custom',
+									column.sortBy || 'custom',
 								),
 							})),
 						)
-						setColumnSortBy(sortPreferences)
+						setColumnSortBy(
+							Object.fromEntries(
+								nextColumns.map((column) => [column._id, column.sortBy || 'custom']),
+							),
+						)
 					}
 			} catch (error) {
 				if (isCurrent) {
@@ -386,14 +392,21 @@ const Workspace = () => {
 				.querySelectorAll('.task-card.drop-before, .task-card.drop-after')
 				.forEach((item) => item.classList.remove('drop-before', 'drop-after'))
 
-			const columnIndex = Array.from(
-				document.querySelectorAll('.kanban-column'),
-			).indexOf(columnElement)
-			const targetColumn = columns[columnIndex]
+			const targetColumn = columns.find(
+				(column) => column._id === columnElement.dataset.columnId,
+			)
 			if (!targetColumn) return
 
 			const taskList = columnElement.querySelector('.task-list')
 			if (!taskList) return
+
+			const taskListRect = taskList.getBoundingClientRect()
+			const edgeDistance = 56
+			if (event.clientY < taskListRect.top + edgeDistance) {
+				taskList.scrollTop -= Math.max(6, (taskListRect.top + edgeDistance - event.clientY) / 3)
+			} else if (event.clientY > taskListRect.bottom - edgeDistance) {
+				taskList.scrollTop += Math.max(6, (event.clientY - taskListRect.bottom + edgeDistance) / 3)
+			}
 
 			const draggedId = draggedTask?._id
 			const cards = Array.from(taskList.querySelectorAll('.task-card')).filter(
@@ -476,6 +489,9 @@ const Workspace = () => {
 				preview.dataset.dragPreview = 'true'
 				preview.setAttribute('aria-hidden', 'true')
 				preview.style.pointerEvents = 'none'
+				preview.style.opacity = '1'
+				preview.style.zIndex = '100'
+				preview.style.boxShadow = '0 8px 16px rgba(44, 68, 59, 0.14), 0 24px 42px rgba(44, 68, 59, 0.22)'
 				document.body.appendChild(preview)
 				columnDragOverlayRef.current = preview
 			}
@@ -484,11 +500,12 @@ const Workspace = () => {
 				height: `${session.height}px`,
 				left: `${event.clientX}px`,
 				top: `${event.clientY}px`,
-				transform: 'translate(-50%, -24px) rotate(1deg)',
+				transform: `translate(-${session.grabOffsetX}px, -${session.grabOffsetY}px) rotate(1deg)`,
 			})
 			if (!session.pinned) {
+				const movableColumns = columns.filter((column) => !column.pinned)
 				const centers = Object.fromEntries(
-					columns.map((column) => {
+					movableColumns.map((column) => {
 						const element = document.querySelector(
 							`.kanban-column[data-column-id="${column._id}"]:not([data-drag-preview="true"])`,
 						)
@@ -497,18 +514,28 @@ const Workspace = () => {
 					}),
 				)
 				const normalizedIndex = getColumnInsertionIndex(
-					columns,
+					movableColumns,
 					session.column._id,
 					centers,
 					event.clientX,
 				)
+				const remainingMovable = movableColumns.filter((column) => column._id !== session.column._id)
+				const targetId = remainingMovable[normalizedIndex]?._id || null
 				const remainingColumns = columns.filter((column) => column._id !== session.column._id)
-				const targetId = remainingColumns[normalizedIndex]?._id || null
-				if (session.targetIndex !== normalizedIndex) {
-					session.targetIndex = normalizedIndex
+				const sourceMovableIndex = movableColumns.findIndex(
+					(column) => column._id === session.column._id,
+				)
+				const targetMovableIndex = movableColumns.findIndex(
+					(column) => column._id === targetId,
+				)
+				const movingRight = targetId && sourceMovableIndex < targetMovableIndex
+				const rawIndex = targetId
+					? remainingColumns.findIndex((column) => column._id === targetId) + (movingRight ? 1 : 0)
+					: remainingColumns.length
+				if (session.targetIndex !== rawIndex) {
+					session.targetIndex = rawIndex
 					session.targetId = targetId
 					setColumnDropTarget(targetId)
-					setColumnDropAfterLast(!targetId)
 				}
 			}
 		}
@@ -527,7 +554,6 @@ const Workspace = () => {
 			columnDragSessionRef.current = null
 			setDraggedColumn(null)
 			setColumnDropTarget(null)
-			setColumnDropAfterLast(false)
 		}
 		const handleLostPointerCapture = () => {
 			if (columnDragSessionRef.current) handlePointerUp()
@@ -548,6 +574,7 @@ const Workspace = () => {
 			columnDragOverlayRef.current?.remove()
 			columnDragOverlayRef.current = null
 			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
+			setColumnDropTarget(null)
 		}
 	}, [columns, moveColumn])
 
@@ -614,7 +641,6 @@ const Workspace = () => {
 		})
 		const heartbeatTimer = window.setInterval(heartbeat, 20_000)
 		socket.on('task:created', (task) => {
-			const localSorts = readLocalSorts(selectedBoard._id, authUser?._id)
 			setColumns((current) =>
 				current.map((column) =>
 					column._id === task.column
@@ -624,7 +650,7 @@ const Workspace = () => {
 									column.tasks.some((item) => item._id === task._id)
 										? column.tasks
 										: [...column.tasks, task],
-									localSorts[column._id],
+									column.sortBy || 'custom',
 									),
 							}
 						: column,
@@ -632,7 +658,6 @@ const Workspace = () => {
 			)
 		})
 		socket.on('task:updated', (task) => {
-			const localSorts = readLocalSorts(selectedBoard._id, authUser?._id)
 			setColumns((current) =>
 				current.map((column) => {
 					const withoutTask = column.tasks.filter(
@@ -643,7 +668,7 @@ const Workspace = () => {
 								...column,
 								tasks: sortTasks(
 									[...withoutTask, task],
-									localSorts[column._id],
+									column.sortBy || 'custom',
 								),
 							}
 						: { ...column, tasks: withoutTask }
@@ -663,22 +688,10 @@ const Workspace = () => {
 			)
 		})
 		socket.on('column:tasks-reordered', ({ columnId, tasks }) => {
-			let localSorts = {}
-			try {
-				localSorts = JSON.parse(
-					localStorage.getItem(
-						getSortStorageKey(selectedBoard._id, authUser?._id),
-					) || '{}',
-				)
-			} catch {
-				localStorage.removeItem(
-					getSortStorageKey(selectedBoard._id, authUser?._id),
-				)
-			}
 			setColumns((current) =>
 				current.map((column) =>
 					column._id === columnId
-						? { ...column, tasks: sortTasks(tasks, localSorts[columnId]) }
+						? { ...column, tasks: sortTasks(tasks, column.sortBy || 'custom') }
 						: column,
 				),
 			)
@@ -688,6 +701,17 @@ const Workspace = () => {
 				current.map((column) =>
 					column._id === updatedColumn._id
 						? { ...column, ...updatedColumn }
+						: column,
+				),
+			)
+		})
+		socket.on('column:sort-updated', (updatedColumn) => {
+			const sortType = updatedColumn.sortBy || 'custom'
+			setColumnSortBy((current) => ({ ...current, [updatedColumn._id]: sortType }))
+			setColumns((current) =>
+				current.map((column) =>
+					column._id === updatedColumn._id
+						? { ...column, ...updatedColumn, tasks: sortTasks(column.tasks, sortType) }
 						: column,
 				),
 			)
@@ -1341,26 +1365,54 @@ const Workspace = () => {
 			setEditingColumn(null)
 			toast.success('Column renamed')
 		} catch (error) {
-			console.error('Column update error:', error)
 			setEditingColumn(null)
 			toast.error(error.response?.data?.message || 'Could not rename column')
 		}
 	}
 
 	const sortColumnTasks = async (columnId, sortType) => {
+		const previousColumn = columns.find((column) => column._id === columnId)
+		const previousSort = previousColumn?.sortBy || columnSortBy[columnId] || 'custom'
 		setColumns((current) =>
 			current.map((col) => {
 				if (col._id !== columnId) return col
-				return { ...col, tasks: sortTasks(col.tasks, sortType) }
+				return { ...col, sortBy: sortType, tasks: sortTasks(col.tasks, sortType) }
 			}),
 		)
 		setColumnSortBy((prev) => ({ ...prev, [columnId]: sortType }))
-		const storedSorts = readLocalSorts(selectedBoard._id, authUser?._id)
-		saveLocalSorts(selectedBoard._id, authUser?._id, {
-			...storedSorts,
-			[columnId]: sortType,
-		})
 		setOpenColumnMenuId(null)
+		setSortSubmenuOpen(null)
+		if (isDevAuthBypass) {
+			saveLocalSorts(selectedBoard._id, authUser?._id, {
+				...readLocalSorts(selectedBoard._id, authUser?._id),
+				[columnId]: sortType,
+			})
+			toast.success('Tasks sorted')
+			return
+		}
+		try {
+			const { data } = await axiosInstance.patch(`/board/columns/${columnId}/sort`, {
+				sortBy: sortType,
+			})
+			setColumns((current) =>
+				current.map((column) =>
+					column._id === columnId
+						? { ...column, ...data, tasks: sortTasks(column.tasks, data.sortBy || 'custom') }
+						: column,
+				),
+			)
+		} catch (error) {
+			setColumnSortBy((current) => ({ ...current, [columnId]: previousSort }))
+			setColumns((current) =>
+				current.map((column) =>
+					column._id === columnId
+						? { ...column, sortBy: previousSort, tasks: sortTasks(column.tasks, previousSort) }
+						: column,
+				),
+			)
+			toast.error(error.response?.data?.message || 'Could not save task sorting')
+			return
+		}
 		toast.success('Tasks sorted')
 	}
 
@@ -1648,6 +1700,7 @@ const Workspace = () => {
 			return
 		}
 		const previousColumns = columns
+		const previousSortBy = columnSortBy
 		const requestedIndex =
 			dropIndicator?.columnId === targetColumn._id
 				? dropIndicator.index
@@ -1655,8 +1708,9 @@ const Workspace = () => {
 		const sourceIndex = sourceColumn.tasks.findIndex(
 			(item) => item._id === task._id,
 		)
+		const hasDropIndicator = dropIndicator?.columnId === targetColumn._id
 		const insertionIndex =
-			sourceColumn._id === targetColumn._id && requestedIndex > sourceIndex
+			sourceColumn._id === targetColumn._id && !hasDropIndicator && requestedIndex > sourceIndex
 				? requestedIndex - 1
 				: requestedIndex
 		if (
@@ -1675,8 +1729,7 @@ const Workspace = () => {
 					(sourceColumn._id === targetColumn._id ? 1 : 0),
 			),
 		)
-		setColumns((current) =>
-			current.map((column) => {
+		const reorderedColumns = columns.map((column) => {
 				if (column._id !== sourceColumn._id && column._id !== targetColumn._id)
 					return column
 				const nextTasks = column.tasks.filter((item) => item._id !== task._id)
@@ -1693,8 +1746,8 @@ const Workspace = () => {
 					sortBy: 'custom',
 					tasks: nextTasks.map((item, index) => ({ ...item, position: index })),
 				}
-			}),
-		)
+		})
+		setColumns(reorderedColumns)
 		const affectedColumnIds = [targetColumn._id]
 		if (sourceColumn._id !== targetColumn._id) affectedColumnIds.push(sourceColumn._id)
 		setColumnSortBy((prev) => {
@@ -1702,20 +1755,23 @@ const Workspace = () => {
 			affectedColumnIds.forEach((columnId) => {
 				next[columnId] = 'custom'
 			})
-			saveLocalSorts(selectedBoard._id, authUser?._id, next)
+			if (isDevAuthBypass) saveLocalSorts(selectedBoard._id, authUser?._id, next)
 			return next
 		})
 		setDraggedTask(null)
 		setDropIndicator(null)
 		if (isDevAuthBypass) return
 		try {
-			// Update task position
-			await axiosInstance.patch(`/board/tasks/${task._id}`, {
-				column: targetColumn._id,
-				position: nextPosition,
+			await axiosInstance.patch(`/board/boards/${selectedBoard._id}/tasks/reorder`, {
+				columns: affectedColumnIds.map((columnId) => ({
+					columnId,
+					taskIds: reorderedColumns.find((column) => column._id === columnId)
+						?.tasks.map((item) => item._id) || [],
+				})),
 			})
 		} catch (error) {
 			setColumns(previousColumns)
+			setColumnSortBy(previousSortBy)
 			toast.error(error.response?.data?.message || 'Could not move task')
 		}
 	}
@@ -1928,7 +1984,7 @@ const Workspace = () => {
 										aria-labelledby='leave-board-title'
 									>
 										<div className='modal-title'>
-											<div>
+															<div className='column-heading'>
 												<p className='eyebrow'>Leave room</p>
 												<h2 id='leave-board-title'>Leave this room?</h2>
 											</div>
@@ -2013,23 +2069,13 @@ const Workspace = () => {
 									<div className='kanban-grid' onClick={() => setOpenColumnMenuId(null)}>
 										{visibleColumns.map((column) => (
 											<Fragment key={column._id}>
-												{draggedColumn && columnDropTarget === column._id && (
-														<div
-															className='column-drag-placeholder'
-															style={{ minHeight: draggedColumnHeight || undefined }}
-															aria-hidden='true'
-														/>
-													)}
 											<section
-												className={`kanban-column ${column.pinned ? 'pinned-column' : ''} ${draggedTask ? 'drop-target-ready' : ''} ${draggedColumn?._id === column._id ? 'is-dragging' : ''} ${draggedColumn && draggedColumn._id !== column._id ? 'column-drop-target' : ''}`}
+																					className={`kanban-column ${column.pinned ? 'pinned-column' : ''} ${draggedTask ? 'drop-target-ready' : ''} ${draggedColumn?._id === column._id ? 'is-dragging' : ''} ${columnDropTarget === column._id ? 'column-drop-target' : ''}`}
 												key={column._id}
 												data-column-id={column._id}
 												onDragOver={(event) => {
 													event.preventDefault()
 														event.dataTransfer.dropEffect = 'move'
-													if (draggedColumn && draggedColumn._id !== column._id) {
-														setColumnDropTarget(column._id)
-													}
 												}}
 												onDrop={() =>
 													draggedColumn
@@ -2051,20 +2097,19 @@ const Workspace = () => {
 														pointerId: event.pointerId,
 														startX: event.clientX,
 														startY: event.clientY,
-														width: event.currentTarget.getBoundingClientRect().width,
+														width: event.currentTarget.closest('.kanban-column').getBoundingClientRect().width,
 														height: event.currentTarget.closest('.kanban-column').getBoundingClientRect().height,
+														grabOffsetX: event.clientX - event.currentTarget.closest('.kanban-column').getBoundingClientRect().left,
+														grabOffsetY: event.clientY - event.currentTarget.closest('.kanban-column').getBoundingClientRect().top,
 														element: event.currentTarget.closest('.kanban-column'),
 																active: false,
 																targetId: null,
 																pinned: Boolean(column.pinned),
 													}
 												document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
-													setDraggedColumnHeight(
-														event.currentTarget.closest('.kanban-column').getBoundingClientRect().height,
-													)
 												}}
 												>
-													<div>
+															<div className='column-heading'>
 														{editingColumn?._id === column._id ? (
 															<form
 																className='column-title-form'
@@ -2076,6 +2121,7 @@ const Workspace = () => {
 															>
 																<input
 																	autoFocus
+																			maxLength={60}
 																	value={editingColumnTitle}
 																	onChange={(event) =>
 																		setEditingColumnTitle(event.target.value)
@@ -2095,7 +2141,8 @@ const Workspace = () => {
 																	setEditingColumnTitle(column.title)
 																}}
 																style={{ cursor: 'pointer' }}
-																title='Click to edit'
+																		title={column.title}
+																		aria-label={`Rename column ${column.title}`}
 															>
 																{column.title}
 															</h2>
@@ -2138,7 +2185,8 @@ const Workspace = () => {
 																		onClick={() => setSortSubmenuOpen(
 																			sortSubmenuOpen === column._id ? null : column._id
 																		)}
-																		className='column-menu-item-with-submenu'
+																		className={`column-menu-item-with-submenu ${sortSubmenuOpen === column._id ? 'active' : ''}`}
+																		aria-expanded={sortSubmenuOpen === column._id}
 																	>
 																		Sort by
 																	</button>
@@ -2180,6 +2228,17 @@ const Workspace = () => {
 																		</div>
 																	)}
 																</div>
+																		<button
+																			type='button'
+																			className='column-menu-item'
+																			onClick={() => {
+																				setEditingColumn(column)
+																				setEditingColumnTitle(column.title)
+																				setOpenColumnMenuId(null)
+																			}}
+																		>
+																			<Pencil size={14} /> Rename column
+																		</button>
 																<button
 																type='button'
 																onClick={() => {
@@ -2231,13 +2290,14 @@ const Workspace = () => {
 																event.dataTransfer.setData('text/plain', task._id)
 															setNativeDragImage(event, event.currentTarget)
 															setDraggedColumn(null)
-															setDraggedColumnHeight(null)
+																setDropIndicator(null)
 															setDraggedTask(task)
 															setDraggedTaskHeight(event.currentTarget.getBoundingClientRect().height)
 														}}
 															onDragEnd={() => {
 															setDraggedTask(null)
 															setDraggedTaskHeight(null)
+																setDropIndicator(null)
 														}}
 																key={task._id}
 																onClick={() => openTaskDetails(task)}
@@ -2412,13 +2472,6 @@ const Workspace = () => {
 											</section>
 											</Fragment>
 										))}
-												{draggedColumn && columnDropAfterLast && (
-													<div
-														className='column-drag-placeholder'
-														style={{ minHeight: draggedColumnHeight || undefined }}
-														aria-hidden='true'
-													/>
-												)}
 										{isCreatingColumn ? (
 											<form
 												className='kanban-column add-column-form'
@@ -2431,6 +2484,7 @@ const Workspace = () => {
 														setNewColumnTitle(event.target.value)
 													}
 													placeholder='Column name'
+																													maxLength={60}
 												/>
 												<div>
 													<button type='submit' className='mini-primary'>

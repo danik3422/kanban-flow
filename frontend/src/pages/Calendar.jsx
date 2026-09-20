@@ -3,8 +3,8 @@ import {
   ArrowRight,
   CalendarDays,
   ChevronRight,
-  ClipboardList,
   Search,
+  X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -17,6 +17,13 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 const CalendarPage = () => {
   const navigate = useNavigate()
   const [boards, setBoards] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [search, setSearch] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [cursorMonth, setCursorMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
   const {
     isSidebarOpen,
     setIsSidebarOpen,
@@ -25,19 +32,45 @@ const CalendarPage = () => {
   } = useWorkspaceNavigation()
 
   useEffect(() => {
-    axiosInstance
-      .get('/board/boards')
-      .then((response) => setBoards(response.data))
-      .catch((error) => {
-        toast.error(error.response?.data?.message || 'Could not load rooms')
+    let isCurrent = true
+    Promise.all([
+      axiosInstance.get('/board/boards'),
+      axiosInstance.get('/board/my-tasks'),
+    ])
+      .then(([boardsResponse, tasksResponse]) => {
+        if (!isCurrent) return
+        setBoards(boardsResponse.data)
+        setTasks(tasksResponse.data.filter((task) => task.dueDate))
       })
+      .catch((error) => {
+        if (isCurrent) toast.error(error.response?.data?.message || 'Could not load calendar')
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false)
+      })
+    return () => {
+      isCurrent = false
+    }
   }, [])
 
-  const today = new Date(2026, 6, 26)
-  const month = 2026
-  const monthNumber = 6
-  const monthName = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(today)
+  const today = new Date()
+  const todayKey = today.toISOString().slice(0, 10)
+  const monthName = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursorMonth)
+  const filteredTasks = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return tasks
+    return tasks.filter((task) => {
+      const boardName = task.column?.board?.name || ''
+      const columnName = task.column?.title || ''
+      return [task.title, boardName, columnName].some((value) =>
+        String(value || '').toLowerCase().includes(query),
+      )
+    })
+  }, [search, tasks])
+
   const days = useMemo(() => {
+    const month = cursorMonth.getFullYear()
+    const monthNumber = cursorMonth.getMonth()
     const start = new Date(month, monthNumber, 1)
     const startOffset = start.getDay()
     const daysInMonth = new Date(month, monthNumber + 1, 0).getDate()
@@ -52,17 +85,28 @@ const CalendarPage = () => {
       grid.push(null)
     }
     return grid
-  }, [month, monthNumber])
+  }, [cursorMonth])
 
-  const sampleTasks = {
-    1: ['Social media calendar', 'Landing page planning'],
-    2: ['Design system review'],
-    6: ['Quarterly planning deck'],
-    7: ['Top tasks'],
-    11: ['Launch plan'],
-    14: ['Release'],
-    19: ['User interview'],
-    24: ['Set up authentication'],
+  const tasksByDate = useMemo(() => {
+    const grouped = new Map()
+    filteredTasks.forEach((task) => {
+      const dateKey = String(task.dueDate).slice(0, 10)
+      const current = grouped.get(dateKey) || []
+      grouped.set(dateKey, [...current, task])
+    })
+    return grouped
+  }, [filteredTasks])
+
+  const moveMonth = (amount) => {
+    setCursorMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1))
+  }
+
+  const goToday = () => setCursorMonth(new Date(today.getFullYear(), today.getMonth(), 1))
+
+  const getTaskState = (dateKey) => {
+    if (dateKey < todayKey) return 'overdue'
+    if (dateKey === todayKey) return 'today'
+    return 'upcoming'
   }
 
   return (
@@ -93,18 +137,33 @@ const CalendarPage = () => {
           </div>
         </WorkspaceTopbar>
 
-        <section className='calendar-page workspace-content'>
+        <section className='calendar-page workspace-content my-tasks-page'>
           <header className='calendar-page-header'>
             <div className='calendar-title-wrap'>
-              <span className='calendar-page-icon'><CalendarDays size={24} /></span>
               <div>
-                <div className='calendar-kicker'>Calendar</div>
-                <h1 className='calendar-heading'>Calendar</h1>
+                <p className='eyebrow'>Planning view</p>
+                <h1 className='my-tasks-title'>Calendar</h1>
+                <p className='calendar-heading-copy'>See everything scheduled across your rooms in one calm view.</p>
               </div>
             </div>
             <div className='calendar-page-actions'>
-              <button className='calendar-page-button'><Search size={14} /> Search tasks, boards...</button>
-              <button className='calendar-page-button create-button'>+ New board</button>
+              <label className='calendar-search'>
+                <Search size={14} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder='Search tasks or rooms'
+                  aria-label='Search tasks or rooms'
+                />
+                {search && (
+                  <button type='button' onClick={() => setSearch('')} aria-label='Clear search' title='Clear search'>
+                    <X size={14} />
+                  </button>
+                )}
+              </label>
+              <button className='calendar-page-button create-button' onClick={() => navigate('/workspaces')}>
+                + New board
+              </button>
             </div>
           </header>
 
@@ -112,12 +171,12 @@ const CalendarPage = () => {
             <div className='calendar-toolbar'>
               <div className='calendar-month-switcher'>
                 <span className='calendar-month-name'>{monthName}</span>
-                <span className='calendar-date-pill'>37 due</span>
+                <span className='calendar-date-pill'>{filteredTasks.length} due</span>
               </div>
               <div className='calendar-top-switch'>
-                <button className='calendar-arrow'><ArrowLeft size={16} /></button>
-                <button className='calendar-today'>Today</button>
-                <button className='calendar-arrow'><ArrowRight size={16} /></button>
+                <button className='calendar-arrow' onClick={() => moveMonth(-1)} aria-label='Previous month' title='Previous month'><ArrowLeft size={16} /></button>
+                <button className='calendar-today' onClick={goToday}>Today</button>
+                <button className='calendar-arrow' onClick={() => moveMonth(1)} aria-label='Next month' title='Next month'><ArrowRight size={16} /></button>
               </div>
             </div>
 
@@ -129,21 +188,30 @@ const CalendarPage = () => {
 
             <div className='calendar-days-grid'>
               {days.map((date, index) => {
-                const day = date ? date.getDate() : ''
                 const key = date ? date.toISOString().slice(0, 10) : `empty-${index}`
-                const tasks = date ? sampleTasks[day] || [] : []
+                const dayTasks = date ? tasksByDate.get(key) || [] : []
                 return (
-                  <div key={key} className={`calendar-day-cell ${date ? 'has-date' : 'empty-date'} ${day === 26 ? 'today-cell' : ''}`}> 
+                  <div key={key} className={`calendar-day-cell ${date ? 'has-date' : 'empty-date'} ${key === todayKey ? 'today-cell' : ''}`}>
                     {date && (
                       <>
-                        <div className='calendar-date-label'>{day}</div>
+                        <div className='calendar-date-label'>
+                          <span>{date.getDate()}</span>
+                          {dayTasks.length > 0 && <small>{dayTasks.length}</small>}
+                        </div>
                         <div className='calendar-task-stack'>
-                          {tasks.map((task, i) => (
-                            <div key={`${task}-${i}`} className='calendar-task-chip'>
+                          {dayTasks.slice(0, 3).map((task) => (
+                            <button
+                              key={task._id}
+                              type='button'
+                              className={`calendar-task-chip is-${getTaskState(key)}`}
+                              onClick={() => task.column?.board?._id && navigate(`/workspaces/${task.column.board._id}`)}
+                              title={`${task.title} - ${task.column?.board?.name || 'Room'}`}
+                            >
                               <span className='calendar-task-dot' />
-                              <span>{task}</span>
-                            </div>
+                              <span>{task.title}</span>
+                            </button>
                           ))}
+                          {dayTasks.length > 3 && <span className='calendar-more'>+{dayTasks.length - 3} more</span>}
                         </div>
                       </>
                     )}
@@ -151,6 +219,13 @@ const CalendarPage = () => {
                 )
               })}
             </div>
+            {!isLoading && filteredTasks.length === 0 && (
+              <div className='calendar-empty-state'>
+                <CalendarDays size={20} />
+                <strong>{search ? 'No matching tasks' : 'No scheduled tasks'}</strong>
+                <span>{search ? 'Try another search.' : 'Tasks with due dates will appear here.'}</span>
+              </div>
+            )}
           </section>
         </section>
       </main>

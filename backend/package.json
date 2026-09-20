@@ -7,7 +7,7 @@
 		"start": "node index.js",
 		"seed:demo": "node scripts/seed-test-room-demo.js",
 		"migrate:provider-uids": "node scripts/migrate-provider-uids.js",
-        "migrate:password-flags": "node scripts/migrate-password-flags.js",
+		"migrate:password-flags": "node scripts/migrate-password-flags.js",
 		"test": "NODE_ENV=test node --test"
 	},
 	"keywords": [],
@@ -27,7 +27,6 @@
 		"helmet": "^8.3.0",
 		"jsonwebtoken": "^9.0.3",
 		"mongoose": "^9.9.5",
-		"nodemailer": "^10.0.1",
 		"socket.io": "^4.8.3",
 		"zod": "^4.5.4"
 	},

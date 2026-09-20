@@ -32,6 +32,7 @@ import {
 	updateColumn,
 	reorderColumn,
 	updateColumnSort,
+	reorderTasks,
 	updateTask,
 } from '../controllers/board.controller.js'
 import {
@@ -40,75 +41,76 @@ import {
 	startTaskTimer,
 	stopTaskTimer,
 } from '../controllers/taskActivity.controller.js'
-import { authMiddleware } from '../middlewares/auth.middleware.js'
+import { verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
 import {
 	boardMiddleware,
 	columnMiddleware,
 } from '../middlewares/board.middleware.js'
 
 const router = express.Router()
+const authMiddleware = verifiedAuthMiddleware
 
 // Boards
-router.get('/boards', authMiddleware, getUserBoards)
-router.get('/my-tasks', authMiddleware, getMyTasks)
+	router.get('/boards', verifiedAuthMiddleware, getUserBoards)
+	router.get('/my-tasks', verifiedAuthMiddleware, getMyTasks)
 router.get('/public/:token', getPublicBoard)
-router.post('/boards', authMiddleware, createBoard)
-router.get('/boards/:id', authMiddleware, boardMiddleware, getBoardById)
-router.get('/boards/:id/public-link', authMiddleware, boardMiddleware, getPublicBoardLink)
-router.post('/boards/:id/public-link', authMiddleware, boardMiddleware, createPublicBoardLink)
-router.delete('/boards/:id/public-link', authMiddleware, boardMiddleware, revokePublicBoardLink)
-router.get('/boards/:id/activity', authMiddleware, boardMiddleware, getBoardActivities)
-router.patch('/boards/:id', authMiddleware, boardMiddleware, updateBoard)
-router.delete('/boards/:id', authMiddleware, boardMiddleware, removeBoard)
-router.post('/boards/:id/leave', authMiddleware, boardMiddleware, leaveBoard)
+router.post('/boards', verifiedAuthMiddleware, createBoard)
+router.get('/boards/:id', verifiedAuthMiddleware, boardMiddleware, getBoardById)
+router.get('/boards/:id/public-link', verifiedAuthMiddleware, boardMiddleware, getPublicBoardLink)
+router.post('/boards/:id/public-link', verifiedAuthMiddleware, boardMiddleware, createPublicBoardLink)
+router.delete('/boards/:id/public-link', verifiedAuthMiddleware, boardMiddleware, revokePublicBoardLink)
+router.get('/boards/:id/activity', verifiedAuthMiddleware, boardMiddleware, getBoardActivities)
+router.patch('/boards/:id', verifiedAuthMiddleware, boardMiddleware, updateBoard)
+router.delete('/boards/:id', verifiedAuthMiddleware, boardMiddleware, removeBoard)
+router.post('/boards/:id/leave', verifiedAuthMiddleware, boardMiddleware, leaveBoard)
 
 // Members
 router.get(
 	'/boards/:id/members',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	getBoardMembers,
 )
 router.patch(
 	'/boards/:id/members/:memberId',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	updateBoardMemberRole,
 )
 router.delete(
 	'/boards/:id/members/:memberId',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	removeBoardMember,
 )
 router.get(
 	'/boards/:id/invites',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	getBoardInvites,
 )
 router.get('/boards/:id/invites/link', authMiddleware, boardMiddleware, getBoardInviteLink)
 router.delete(
 	'/boards/:id/invites/:inviteId',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	revokeBoardInvite,
 )
 router.post(
 	'/boards/:id/members',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	addMemberToBoard,
 )
 router.post(
 	'/boards/:id/invites',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	createBoardInvite,
 )
 router.post(
 	'/boards/:id/invites/:inviteId/copy',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	boardMiddleware,
 	copyBoardInviteLink,
 )
@@ -131,6 +133,7 @@ router.post(
 router.patch('/columns/:id', authMiddleware, columnMiddleware, updateColumn)
 router.patch('/columns/:id/position', authMiddleware, columnMiddleware, reorderColumn)
 router.patch('/columns/:id/sort', authMiddleware, columnMiddleware, updateColumnSort)
+router.patch('/boards/:id/tasks/reorder', authMiddleware, boardMiddleware, reorderTasks)
 router.delete('/columns/:id', authMiddleware, columnMiddleware, deleteColumn)
 
 // Tasks

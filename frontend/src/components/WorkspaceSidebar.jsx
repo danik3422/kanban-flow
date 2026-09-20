@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 const MIN_WIDTH = 220
-const MAX_WIDTH = 390
+const MAX_WIDTH = 286
 const SIDEBAR_WIDTH_KEY = 'kanban-sidebar-width'
 
 const readStoredWidth = () => {
@@ -91,10 +91,11 @@ const WorkspaceSidebar = ({
 	const sidebarRef = useRef(null)
 	const [isResizing, setIsResizing] = useState(false)
 	const location = useLocation()
+	const effectiveWidth = Math.min(width, MAX_WIDTH)
 
 	useEffect(() => {
-		window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width))
-	}, [width])
+		window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(effectiveWidth))
+	}, [effectiveWidth])
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {
@@ -128,7 +129,7 @@ const WorkspaceSidebar = ({
 	const navItems = [
 		{ icon: <Home size={17} />, label: 'Workspace', to: '/workspaces' },
 		{ icon: <ClipboardList size={17} />, label: 'My tasks', to: '/my-tasks' },
-		{ icon: <CalendarDays size={17} />, label: 'Calendar', disabled: true },
+		{ icon: <CalendarDays size={17} />, label: 'Calendar', to: '/calendar' },
 		{ icon: <Users size={17} />, label: 'Team', to: '/team' },
 	]
 
@@ -140,7 +141,7 @@ const WorkspaceSidebar = ({
 			/>
 			<aside
 				ref={sidebarRef}
-				style={{ width: isCollapsed ? 76 : width }}
+				style={{ width: isCollapsed ? 76 : effectiveWidth }}
 				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
 			>
 				<div className='workspace-sidebar-main'>

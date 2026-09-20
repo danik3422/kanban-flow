@@ -4,17 +4,23 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
+import { getDetectedTimezone, timezoneOptions } from '../data/timezones'
 
 const EditProfile = () => {
 	const navigate = useNavigate()
 	const { authUser, checkAuth } = useAuthStore()
 	const [name, setName] = useState(authUser?.name || '')
 	const [jobTitle, setJobTitle] = useState(authUser?.jobTitle || '')
-	const [timezone, setTimezone] = useState(authUser?.timezone || 'UTC')
+	const timezoneValues = Object.fromEntries(
+		timezoneOptions.map((option) => [option.label, option.value]),
+	)
+	const [timezone, setTimezone] = useState(
+		Object.entries(timezoneValues).find(([, value]) => value === (authUser?.timezone || getDetectedTimezone()))?.[0] || timezoneOptions[0].label
+	)
 	const [avatarFile, setAvatarFile] = useState(null)
 	const [avatarPreview, setAvatarPreview] = useState(authUser?.avatar || '/avatar.png')
 	const [isSaving, setIsSaving] = useState(false)
-	const timezones = ['UTC', 'Europe/London', 'Europe/Berlin', 'Europe/Kyiv', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']
+	const timezones = timezoneOptions.map((option) => option.label)
 
 	const convertFileToBase64 = (file) => new Promise((resolve, reject) => {
 		const reader = new FileReader()
@@ -32,7 +38,7 @@ const EditProfile = () => {
 		setIsSaving(true)
 		try {
 			const avatar = avatarFile ? await convertFileToBase64(avatarFile) : null
-			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone, avatar })
+			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone: timezoneValues[timezone], avatar })
 			await checkAuth()
 			toast.success('Profile updated successfully')
 			navigate('/profile')

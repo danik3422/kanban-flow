@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema(
 		emailVerified: { type: Boolean, default: false },
 		emailVerificationTokenHash: { type: String, default: '' },
 		emailVerificationTokenExpiresAt: { type: Date, default: null },
+		emailVerificationLastSentAt: { type: Date, default: null },
 		profileSetup: { type: Boolean, default: false },
 		sessionVersion: { type: Number, default: 0 },
 	},

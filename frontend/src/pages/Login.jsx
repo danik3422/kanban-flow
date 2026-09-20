@@ -42,9 +42,10 @@ const Login = () => {
 		}
 	}
 
-	const handleLogin = (e) => {
+	const handleLogin = async (e) => {
 		e.preventDefault()
-		login(formData)
+		await login(formData)
+		// App.jsx will handle redirect to /verify-email if email not verified
 	}
 
 	const handleEditEmail = () => {

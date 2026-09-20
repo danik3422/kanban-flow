@@ -1270,6 +1270,9 @@ export const createColumn = async (req, res) => {
 		if (!title || title.trim() === '') {
 			return res.status(400).json({ message: 'Column title is required' })
 		}
+		if (title.trim().length > 60) {
+			return res.status(400).json({ message: 'Column title must be 60 characters or fewer' })
+		}
 
 		if (board.createdBy.toString() !== userId.toString()) {
 			const boardMember = await BoardMember.findOne({
@@ -1342,6 +1345,9 @@ export const updateColumn = async (req, res) => {
 			if (!title || title.trim() === '') {
 				return res.status(400).json({ message: 'Column title is required' })
 			}
+			if (title.trim().length > 60) {
+				return res.status(400).json({ message: 'Column title must be 60 characters or fewer' })
+			}
 			column.title = title.trim()
 		}
 
@@ -1378,6 +1384,7 @@ export const updateColumn = async (req, res) => {
 }
 
 export const reorderColumn = async (req, res) => {
+	let session
 	try {
 		const columnId = req.params.id
 		const userId = req.user._id
@@ -1404,40 +1411,53 @@ export const reorderColumn = async (req, res) => {
 			})
 		}
 
-		const columnCount = await Column.countDocuments({ board: board._id })
-		const nextPosition = Math.min(requestedPosition, Math.max(0, columnCount - 1))
-		const originalPosition = column.position
-		if (nextPosition < originalPosition) {
-			await Column.updateMany(
-				{ board: board._id, _id: { $ne: column._id }, position: { $gte: nextPosition, $lt: originalPosition } },
-				{ $inc: { position: 1 } },
-			)
-		} else if (nextPosition > originalPosition) {
-			await Column.updateMany(
-				{ board: board._id, _id: { $ne: column._id }, position: { $gt: originalPosition, $lte: nextPosition } },
-				{ $inc: { position: -1 } },
-			)
-		}
-		column.position = nextPosition
-		await column.save()
-		if (nextPosition !== originalPosition) {
-			await recordBoardActivity({
-				boardId: board._id,
-				userId,
-				action: 'reordered',
-				entityType: 'column',
-				entityId: column._id,
-				entityName: column.title,
-				details: `moved ${column.title} from position ${originalPosition + 1} to ${nextPosition + 1}`,
-			})
-		}
-
-		const columns = await Column.find({ board: board._id })
-			.sort({ position: 1, createdAt: 1 })
-			.lean()
+		let columns
+		let activity = null
+		session = await mongoose.startSession()
+		await session.withTransaction(async () => {
+			const currentColumn = await Column.findById(columnId).session(session)
+			const columnCount = await Column.countDocuments({ board: board._id }).session(session)
+			const nextPosition = Math.min(requestedPosition, Math.max(0, columnCount - 1))
+			const originalPosition = currentColumn.position
+			if (nextPosition < originalPosition) {
+				await Column.updateMany(
+					{ board: board._id, _id: { $ne: currentColumn._id }, position: { $gte: nextPosition, $lt: originalPosition } },
+					{ $inc: { position: 1 } },
+					{ session },
+				)
+			} else if (nextPosition > originalPosition) {
+				await Column.updateMany(
+					{ board: board._id, _id: { $ne: currentColumn._id }, position: { $gt: originalPosition, $lte: nextPosition } },
+					{ $inc: { position: -1 } },
+					{ session },
+				)
+			}
+			currentColumn.position = nextPosition
+			await currentColumn.save({ session })
+			if (nextPosition !== originalPosition) {
+				activity = await recordBoardActivity({
+					boardId: board._id,
+					userId,
+					action: 'reordered',
+					entityType: 'column',
+					entityId: currentColumn._id,
+					entityName: currentColumn.title,
+					details: `moved ${currentColumn.title} from position ${originalPosition + 1} to ${nextPosition + 1}`,
+					session,
+					emit: false,
+				})
+			}
+			columns = await Column.find({ board: board._id })
+				.sort({ position: 1, createdAt: 1 })
+				.session(session)
+				.lean()
+		})
+		await session.endSession()
+		if (activity) emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(board._id.toString(), 'columns:reordered', { columns })
 		return res.status(200).json(columns)
 	} catch (error) {
+		if (session) await session.endSession().catch(() => {})
 		console.error('Error reordering column:', error)
 		return res.status(500).json({ message: 'Could not reorder column' })
 	}
@@ -1500,6 +1520,92 @@ export const updateColumnSort = async (req, res) => {
 	} catch (error) {
 		console.error('Error updating column sort:', error)
 		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const reorderTasks = async (req, res) => {
+	let session
+	try {
+		const { columns } = req.body
+		if (!Array.isArray(columns) || columns.length === 0) {
+			return res.status(400).json({ message: 'Task order is required' })
+		}
+		if (columns.some((item) => !item || !Array.isArray(item.taskIds))) {
+			return res.status(400).json({ message: 'Task order must contain task arrays' })
+		}
+
+		const board = req.board
+		const { allowed } = await ensureBoardEditAccess(req.user._id, board._id)
+		if (!allowed) return res.status(403).json({ message: 'Access denied' })
+
+		const columnIds = columns.map((item) => item?.columnId)
+		const taskIds = columns.flatMap((item) => item.taskIds || [])
+		session = await mongoose.startSession()
+		await session.withTransaction(async () => {
+			if (columnIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+				const error = new Error('Invalid column ID')
+				error.statusCode = 400
+				throw error
+			}
+			const boardColumns = await Column.find({ board: board._id, _id: { $in: columnIds } }).session(session)
+			if (boardColumns.length !== columns.length) {
+				const error = new Error('Invalid board column')
+				error.statusCode = 400
+				throw error
+			}
+			if (taskIds.some((id) => !mongoose.Types.ObjectId.isValid(id)) || new Set(taskIds).size !== taskIds.length) {
+				const error = new Error('Invalid task order')
+				error.statusCode = 400
+				throw error
+			}
+			const tasks = await Task.find({ column: { $in: columnIds } }).select('_id column').session(session)
+			if (tasks.length !== taskIds.length || !tasks.every((task) => taskIds.includes(task._id.toString()))) {
+				const error = new Error('Task order does not match the board')
+				error.statusCode = 400
+				throw error
+			}
+
+			const operations = []
+			for (const column of columns) {
+				column.taskIds.forEach((taskId, position) => {
+					operations.push({
+						updateOne: {
+							filter: { _id: taskId },
+							update: { $set: { column: column.columnId, position } },
+						},
+					})
+				})
+			}
+			if (operations.length) await Task.bulkWrite(operations, { session })
+			await Column.updateMany(
+				{ board: board._id, _id: { $in: columnIds } },
+				{ $set: { sortBy: 'custom' } },
+				{ session },
+			)
+		})
+		await session.endSession()
+
+		for (const columnId of columnIds) {
+			const reorderedTasks = await Task.find({ column: columnId })
+				.populate('assignees', 'name email avatar')
+				.sort({ position: 1, createdAt: 1 })
+				.lean()
+			emitBoardEvent(board._id.toString(), 'column:tasks-reordered', {
+				columnId,
+				tasks: reorderedTasks,
+			})
+			emitBoardEvent(board._id.toString(), 'column:sort-updated', {
+				_id: columnId,
+				sortBy: 'custom',
+			})
+		}
+		return res.status(200).json({ message: 'Task order updated' })
+	} catch (error) {
+		if (session) await session.endSession().catch(() => {})
+		console.error('Error reordering tasks:', error)
+		return res.status(error.statusCode || 500).json({
+			message: error.statusCode ? error.message : 'Could not reorder tasks',
+		})
 	}
 }
 

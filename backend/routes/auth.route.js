@@ -10,6 +10,7 @@ import {
 	logout,
 	requestPasswordReset,
 	resetPassword,
+	resendVerificationEmail,
 	setupProfile,
 	signup,
 	updateSettings,
@@ -20,6 +21,7 @@ import {
 	loginSchema,
 	passwordResetConfirmSchema,
 	passwordResetRequestSchema,
+	resendVerificationSchema,
 	changePasswordSchema,
 	connectSocialSchema,
 	setSocialPasswordSchema,
@@ -27,10 +29,12 @@ import {
 	settingsSchema,
 	signupSchema,
 } from '../lib/validation.js'
-import { authMiddleware } from '../middlewares/auth.middleware.js'
+import { authMiddleware, verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
 import {
 	authLimiter,
 	passwordResetLimiter,
+	verificationEmailIpLimiter,
+	verificationEmailLimiter,
 } from '../middlewares/security.middleware.js'
 import { validateBody } from '../middlewares/validation.middleware.js'
 
@@ -39,7 +43,17 @@ const router = express.Router()
 // Public routes
 router.post('/signup', authLimiter, validateBody(signupSchema), signup)
 router.post('/login', authLimiter, validateBody(loginSchema), login)
-router.post('/verify-email', verifyEmail)
+
+// Protected routes for email verification (require authentication)
+router.post('/verify-email', authMiddleware, verifyEmail)
+router.post(
+	'/verify-email/resend',
+	authMiddleware,
+	validateBody(resendVerificationSchema),
+	verificationEmailIpLimiter,
+	verificationEmailLimiter,
+	resendVerificationEmail,
+)
 router.get('/password-reset/validate', (req, res) => {
 	import('../controllers/auth.controller.js')
 		.then(({ validatePasswordResetToken }) => validatePasswordResetToken(req, res))
@@ -70,24 +84,24 @@ router.post('/social/signup', authLimiter, validateBody(socialAuthSchema), socia
 
 // Protected routes
 router.post('/logout', logout)
-router.post('/social/connect', authMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
-router.post('/social/set-password', authMiddleware, authLimiter, validateBody(setSocialPasswordSchema), setSocialPassword)
+	router.post('/social/connect', verifiedAuthMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
+	router.post('/social/set-password', verifiedAuthMiddleware, authLimiter, validateBody(setSocialPasswordSchema), setSocialPassword)
 router.get('/get-user', authMiddleware, getAuthUser)
 router.patch(
 	'/setup-profile',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	validateBody(setupProfileSchema),
 	setupProfile,
 )
 router.patch(
 	'/settings',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	validateBody(settingsSchema),
 	updateSettings,
 )
 router.patch(
 	'/change-password',
-	authMiddleware,
+	verifiedAuthMiddleware,
 	validateBody(changePasswordSchema),
 	changePassword,
 )

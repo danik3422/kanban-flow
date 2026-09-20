@@ -25,6 +25,8 @@ export const connectSocialSchema = socialAuthSchema.extend({
 
 export const passwordResetRequestSchema = z.object({ email })
 
+export const resendVerificationSchema = z.object({ email })
+
 export const passwordResetConfirmSchema = z.object({
 	token: z.string().length(64),
 	password: passwordSchema,
