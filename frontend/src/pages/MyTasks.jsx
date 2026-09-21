@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import { axiosInstance } from '../lib/axios'
+import { fetchBoardsWithCache } from '../lib/boardsCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 
 const MyTasks = () => {
@@ -54,8 +55,8 @@ const MyTasks = () => {
 	}
 
 	useEffect(() => {
-		axiosInstance.get('/board/boards')
-			.then((boardsResponse) => setBoards(boardsResponse.data))
+		fetchBoardsWithCache()
+			.then((nextBoards) => setBoards(nextBoards))
 			.catch((error) => {
 				if ([404, 204].includes(error.response?.status)) {
 					setBoards([])
@@ -197,21 +198,6 @@ const MyTasks = () => {
 					</div>
 				</WorkspaceTopbar>
 				<div className='workspace-content my-tasks-page'>
-					<header className={`my-tasks-heading ${isLoading ? 'is-loading' : ''}`}>
-						{isLoading ? (
-							<div className='my-tasks-heading-loading' aria-hidden='true'>
-								<span className='my-tasks-heading-loading-eyebrow' />
-								<span className='my-tasks-heading-loading-title' />
-								<span className='my-tasks-heading-loading-copy' />
-							</div>
-						) : (
-							<div>
-								<p className='eyebrow'>Focus view</p>
-								<h1 className='my-tasks-title'>My tasks</h1>
-								<p className='my-tasks-heading-copy'>Everything assigned to you, grouped by room and ready for the next move.</p>
-							</div>
-						)}
-					</header>
 					{!isLoading && <>
 					<div className='my-tasks-stats-grid'>
 						<div className='my-tasks-stat-card'>

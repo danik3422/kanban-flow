@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import { axiosInstance } from '../lib/axios'
+import { fetchBoardsWithCache } from '../lib/boardsCache'
+import { fetchBoardMembersWithCache } from '../lib/boardMembersCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 
 const getInitials = (person) => {
@@ -42,7 +44,7 @@ const Team = () => {
 		let isCurrent = true
 		const loadTeam = async () => {
 			try {
-				const { data: boardList } = await axiosInstance.get('/board/boards')
+				const boardList = await fetchBoardsWithCache()
 				if (!Array.isArray(boardList) || boardList.length === 0) {
 					if (isCurrent) {
 						setBoards([])
@@ -52,10 +54,8 @@ const Team = () => {
 				}
 				const results = await Promise.all(
 					boardList.map(async (board) => {
-						const { data: members } = await axiosInstance.get(
-							`/board/boards/${board._id}/members`,
-						)
-						return { board, members }
+						const members = await fetchBoardMembersWithCache(board._id)
+						return { board, members: Array.isArray(members) ? members : [] }
 					}),
 				)
 				const peopleById = new Map()

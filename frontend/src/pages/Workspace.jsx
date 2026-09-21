@@ -35,6 +35,7 @@ import RichTextEditor from '../components/RichTextEditor'
 import Popover from '../components/Popover'
 import { sanitizeDescription } from '../lib/richText'
 import { axiosInstance } from '../lib/axios'
+import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { socketUrl } from '../lib/runtimeConfig'
 import { sortTasks } from '../utils/taskSorting'
 import { getColumnInsertionIndex, reorderColumns } from '../utils/columnOrdering'
@@ -317,7 +318,7 @@ const Workspace = () => {
 				return
 			}
 			try {
-				const { data } = await axiosInstance.get('/board/boards')
+				const data = await fetchBoardsWithCache()
 				setBoards(data)
 				const nextBoard = boardId
 					? data.find((board) => board._id === boardId)
