@@ -142,7 +142,7 @@ const WorkspaceSidebar = ({
 			<aside
 				ref={sidebarRef}
 				style={{ width: isCollapsed ? 76 : effectiveWidth }}
-				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}
 			>
 				<div className='workspace-sidebar-main'>
 					<div className='workspace-brand-row'>

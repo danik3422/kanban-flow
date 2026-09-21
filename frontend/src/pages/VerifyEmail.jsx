@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, MailWarning, ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
@@ -47,8 +47,10 @@ const getRetryAfterSeconds = (value) => {
 
 const VerifyEmail = () => {
 	const navigate = useNavigate()
-	const [searchParams] = useSearchParams()
-	const token = searchParams.get('token')
+	const [token] = useState(() => {
+		if (typeof window === 'undefined') return ''
+		return new URLSearchParams(window.location.search).get('token') || ''
+	})
 	const { authUser, checkAuth, logout } = useAuthStore()
 	const [status, setStatus] = useState(token ? 'pending' : 'idle')
 	const [message, setMessage] = useState('')

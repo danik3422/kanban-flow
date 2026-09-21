@@ -29,8 +29,11 @@ const ResetPassword = () => {
 	const [tokenError, setTokenError] = useState('')
 	const [tokenStatus, setTokenStatus] = useState('')
 	const [isTokenValid, setIsTokenValid] = useState(false)
+	const [token] = useState(() => {
+		if (typeof window === 'undefined') return ''
+		return new URLSearchParams(window.location.search).get('token') || ''
+	})
 
-	const token = new URLSearchParams(window.location.search).get('token')
 	const isPasswordReset = Boolean(token)
 	const validationStartedRef = useRef(false)
 

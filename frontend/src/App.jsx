@@ -26,6 +26,7 @@ import Signup from './pages/Signup'
 import Team from './pages/Team'
 import VerifyEmail from './pages/VerifyEmail'
 import Workspace from './pages/Workspace'
+import { shouldBlockAccountGateRoute } from './lib/authRouteRules'
 import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
@@ -35,7 +36,8 @@ export const App = () => {
 	const isWorkspace =
 		location.pathname.startsWith('/workspaces') ||
 		location.pathname === '/my-tasks' ||
-		location.pathname === '/team'
+		location.pathname === '/team' ||
+		location.pathname === '/calendar'
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
 
@@ -95,6 +97,7 @@ export const App = () => {
 	const needsVerification = authUser && authUser.emailVerified === false
 	const needsSetup = authUser && authUser.profileSetup === false && authUser.emailVerified === true
 	const requestedRedirect = new URLSearchParams(location.search).get('redirect')
+	const accountGateBlocked = shouldBlockAccountGateRoute(location.pathname, authUser)
 	const loginRedirect =
 		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
 			? requestedRedirect
@@ -129,17 +132,32 @@ export const App = () => {
 				{needsVerification ? (
 					<>
 						<Route path='/verify-email' element={<VerifyEmail />} />
+						<Route path='/login/verify-email' element={<VerifyEmail />} />
+						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route
 							path='*'
-							element={<Navigate to='/verify-email' replace />}
+							element={
+								accountGateBlocked ? (
+									<Navigate to='/verify-email' replace />
+								) : (
+									<VerifyEmail />
+								)
+							}
 						/>
 					</>
 				) : needsSetup ? (
 					<>
 						<Route path='/setup-profile' element={<SetupProfile />} />
+						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route
 							path='*'
-							element={<Navigate to='/setup-profile' replace />}
+							element={
+								accountGateBlocked ? (
+									<Navigate to='/setup-profile' replace />
+								) : (
+									<SetupProfile />
+								)
+							}
 						/>
 					</>
 				) : (
