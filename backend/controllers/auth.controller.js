@@ -1212,6 +1212,11 @@ export const setupProfile = async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Profile setup error:', error)
-		res.status(500).json({ message: 'Failed to update profile' })
+		const isCloudinaryError = Boolean(error?.http_code)
+		res.status(isCloudinaryError ? 502 : 500).json({
+			message: isCloudinaryError
+				? 'Avatar storage is temporarily unavailable. Please try again.'
+				: 'Failed to update profile',
+		})
 	}
 }

@@ -131,7 +131,8 @@ io.on('connection', (socket) => {
 // Middleware
 app.disable('x-powered-by')
 app.use(helmet())
-app.use(express.json({ limit: '100kb' }))
+// Avatar payloads are compressed client-side, but base64 adds overhead.
+app.use(express.json({ limit: '200kb' }))
 app.use(cookieParser())
 app.use(
 	cors({

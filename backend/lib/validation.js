@@ -43,7 +43,7 @@ export const setupProfileSchema = z.object({
 	name: z.string().trim().min(1).max(120),
 	jobTitle: z.string().trim().max(120).optional(),
 	timezone: z.string().trim().min(1).max(64).optional(),
-	avatar: z.string().max(100000).nullable().optional(),
+	avatar: z.string().max(200000).nullable().optional(),
 	removeAvatar: z.boolean().optional(),
 }).strict()
 
