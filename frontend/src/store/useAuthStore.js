@@ -205,11 +205,13 @@ export const useAuthStore = create((set, get) => ({
 		if (!provider || !auth) return { success: false }
 		try {
 			const result = await getRedirectResult(auth)
-			if (!result?.user) {
+			const redirectUser = result?.user || auth.currentUser
+			if (!redirectUser) {
+				console.warn('Firebase redirect completed without a user result', { provider })
 				toast.error('Google sign-in did not return an account. Please try again.')
 				return { success: false }
 			}
-			const idToken = await result.user.getIdToken(true)
+			const idToken = await redirectUser.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
 			sessionStorage.removeItem('pending-social-provider')
 			set({ authUser: response.data })

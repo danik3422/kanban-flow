@@ -33,6 +33,7 @@ export const App = () => {
 	const location = useLocation()
 	const navigate = useNavigate()
 	const handledInviteRef = useRef(null)
+	const handledSocialRedirectRef = useRef(false)
 	const isWorkspace =
 		location.pathname.startsWith('/workspaces') ||
 		location.pathname === '/my-tasks' ||
@@ -62,7 +63,8 @@ export const App = () => {
 	}, [checkAuth])
 
 	useEffect(() => {
-		if (!authUser || !sessionStorage.getItem('pending-social-provider')) return
+		if (handledSocialRedirectRef.current || !sessionStorage.getItem('pending-social-provider')) return
+		handledSocialRedirectRef.current = true
 		completeSocialRedirect().then((result) => {
 			if (result.success) checkAuth()
 		})
