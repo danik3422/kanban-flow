@@ -12501,6 +12501,39 @@ html[data-theme='dark'] .notification-preview-item {
 .verification-back-link:hover {
 	color: var(--coral);
 }
+html[data-theme='dark'] .reset-icon {
+	color: var(--teal-dark);
+	background: rgba(79, 176, 169, 0.14);
+}
+html[data-theme='dark'] .reset-success-icon {
+	color: var(--teal-dark);
+	background: rgba(79, 176, 169, 0.16);
+}
+html[data-theme='dark'] .verification-actions-card {
+	border-color: #385254;
+	background: linear-gradient(145deg, #172628, #111c1e);
+	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+html[data-theme='dark'] .verification-email-label {
+	color: #91aaa7;
+}
+html[data-theme='dark'] .verification-email {
+	color: var(--ink);
+}
+html[data-theme='dark'] .verification-help {
+	color: #9aacab;
+}
+html[data-theme='dark'] .verification-sent {
+	border: 1px solid rgba(79, 176, 169, 0.28);
+	color: var(--teal-dark);
+	background: rgba(79, 176, 169, 0.12);
+}
+html[data-theme='dark'] .verification-back-link {
+	color: var(--teal-dark);
+}
+html[data-theme='dark'] .verification-back-link:hover {
+	color: #a6e5df;
+}
 @keyframes auth-page-in {
 	from {
 		opacity: 0;
