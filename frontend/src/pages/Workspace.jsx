@@ -328,7 +328,7 @@ const Workspace = () => {
 				return
 			}
 			try {
-				const data = await fetchBoardsWithCache()
+				const data = await fetchBoardsWithCache(authUser?._id)
 				setBoards(data)
 				const nextBoard = boardId
 					? data.find((board) => board._id === boardId)
@@ -347,7 +347,7 @@ const Workspace = () => {
 			}
 		}
 		loadBoards()
-	}, [boardId, navigate])
+	}, [authUser?._id, boardId, navigate])
 
 	useEffect(() => {
 		if (!selectedBoard || isDevAuthBypass) return

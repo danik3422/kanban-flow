@@ -18,8 +18,10 @@ import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
+import { useAuthStore } from '../store/useAuthStore'
 
 const MyTasks = () => {
+	const authUser = useAuthStore((state) => state.authUser)
 	const navigate = useNavigate()
 	const [boards, setBoards] = useState([])
 	const [tasks, setTasks] = useState([])
@@ -57,7 +59,7 @@ const MyTasks = () => {
 	}
 
 	useEffect(() => {
-		fetchBoardsWithCache()
+		fetchBoardsWithCache(authUser?._id)
 			.then((nextBoards) => setBoards(nextBoards))
 			.catch((error) => {
 				if ([404, 204].includes(error.response?.status)) {
@@ -66,7 +68,7 @@ const MyTasks = () => {
 				}
 				toast.error(error.response?.data?.message || 'Could not load boards')
 			})
-	}, [])
+	}, [authUser?._id])
 
 	useEffect(() => {
 		let isCurrent = true

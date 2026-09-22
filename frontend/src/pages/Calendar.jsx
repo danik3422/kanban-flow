@@ -16,8 +16,10 @@ import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import { useAuthStore } from '../store/useAuthStore'
 
 const CalendarPage = () => {
+  const authUser = useAuthStore((state) => state.authUser)
   const navigate = useNavigate()
   const hoverTimerRef = useRef(null)
   const touchStartYRef = useRef(0)
@@ -54,7 +56,7 @@ const CalendarPage = () => {
   useEffect(() => {
     let isCurrent = true
     Promise.all([
-      fetchBoardsWithCache(),
+      fetchBoardsWithCache(authUser?._id),
       axiosInstance.get('/board/my-tasks'),
     ])
       .then(([nextBoards, tasksResponse]) => {
@@ -71,7 +73,7 @@ const CalendarPage = () => {
     return () => {
       isCurrent = false
     }
-  }, [])
+  }, [authUser?._id])
 
   const today = useMemo(() => new Date(), [])
   const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 10)

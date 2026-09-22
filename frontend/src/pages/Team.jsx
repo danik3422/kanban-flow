@@ -8,6 +8,7 @@ import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { fetchBoardMembersWithCache } from '../lib/boardMembersCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { handleAvatarError } from '../utils/avatar'
+import { useAuthStore } from '../store/useAuthStore'
 
 const getInitials = (person) => {
 	const name = person.name || person.email || '?'
@@ -25,6 +26,7 @@ const roleOrder = ['owner', 'admin', 'member']
 const roleLabels = { owner: 'Owner', admin: 'Admin', member: 'Member' }
 
 const Team = () => {
+	const authUser = useAuthStore((state) => state.authUser)
 	const navigate = useNavigate()
 	const [boards, setBoards] = useState([])
 	const [people, setPeople] = useState([])
@@ -44,7 +46,7 @@ const Team = () => {
 		let isCurrent = true
 		const loadTeam = async () => {
 			try {
-				const boardList = await fetchBoardsWithCache()
+				const boardList = await fetchBoardsWithCache(authUser?._id)
 				if (!Array.isArray(boardList) || boardList.length === 0) {
 					if (isCurrent) {
 						setBoards([])
@@ -54,7 +56,7 @@ const Team = () => {
 				}
 				const results = await Promise.all(
 					boardList.map(async (board) => {
-						const members = await fetchBoardMembersWithCache(board._id)
+						const members = await fetchBoardMembersWithCache(authUser?._id, board._id)
 						return { board, members: Array.isArray(members) ? members : [] }
 					}),
 				)
@@ -97,7 +99,7 @@ const Team = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [])
+	}, [authUser?._id])
 
 	const filteredPeople = useMemo(() => {
 		const query = search.trim().toLowerCase()
