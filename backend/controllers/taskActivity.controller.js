@@ -1,11 +1,10 @@
 import mongoose from 'mongoose'
 import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
-import Notification from '../models/notification.model.js'
+import { notifyTaskRecipients } from '../lib/notificationDelivery.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
-import { emitUserEvent } from '../lib/realtime.js'
 
 const getAccessibleTask = async (taskId, userId) => {
 	if (!mongoose.Types.ObjectId.isValid(taskId)) return null
@@ -61,17 +60,15 @@ export const addTaskComment = async (req, res) => {
 
 		const actorName = req.user.name || req.user.email || 'Someone'
 		const assigneeUserIds = [...new Set((access.task.assignees || []).map((assignee) => assignee.toString()).filter((id) => id !== req.user._id.toString()))]
-		for (const assigneeId of assigneeUserIds) {
-			const notification = await Notification.create({
-				user: assigneeId,
-				type: 'task_commented',
-				title: 'New task update',
-				message: `${actorName} commented on “${access.task.title}”`,
-				board: access.board._id,
-				task: access.task._id,
-			})
-			emitUserEvent(assigneeId, 'notification:new', notification.toObject())
-		}
+		await notifyTaskRecipients({
+			userIds: assigneeUserIds,
+			actorId: req.user._id,
+			task: access.task,
+			board: access.board,
+			type: 'task_commented',
+			title: 'New task update',
+			message: `${actorName} commented on “${access.task.title}”`,
+		})
 
 		return res.status(201).json(await activity.populate('user', 'name email avatar'))
 	} catch (error) {

@@ -144,3 +144,22 @@ export const sendBoardInviteEmail = async ({ email, boardName, boardUrl }) => {
 		}),
 	})
 }
+
+export const sendTaskNotificationEmail = async ({ email, type, taskTitle, boardName, message, boardUrl }) => {
+	const isMove = type === 'task_moved'
+	await sendEmail({
+		email,
+		subject: isMove ? `Task moved in ${boardName}` : `You were assigned a task in ${boardName}`,
+		text: `${message} Open KanbanHub: ${boardUrl}`,
+		html: renderEmail({
+			preheader: message,
+			eyebrow: isMove ? 'Task movement' : 'Task assignment',
+			title: isMove ? 'A task moved' : 'You have a new task',
+			intro: `A task update needs your attention in ${boardName}.`,
+			body: `<strong>${escapeHtml(taskTitle)}</strong><br><span style="color:#687875;">${escapeHtml(message)}</span>`,
+			ctaLabel: 'Open workspace',
+			ctaUrl: boardUrl,
+			note: 'You will only receive email for important task events. Comments and routine updates stay in the app.',
+		}),
+	})
+}

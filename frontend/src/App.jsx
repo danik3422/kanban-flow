@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import {
 	Navigate,
 	Route,
@@ -10,22 +10,22 @@ import { Toaster } from 'sonner'
 
 import Navbar from './components/Navbar'
 import { axiosInstance } from './lib/axios'
-import BoardInvite from './pages/BoardInvite'
-import CalendarPage from './pages/Calendar'
-import EditProfile from './pages/EditProfile'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import MyTasks from './pages/MyTasks'
-import NotFound from './pages/NotFound'
-import Profile from './pages/Profile'
-import PublicBoard from './pages/PublicBoard'
-import ResetPassword from './pages/ResetPassword'
-import Settings from './pages/Settings'
-import SetupProfile from './pages/SetupProfile'
-import Signup from './pages/Signup'
-import Team from './pages/Team'
-import VerifyEmail from './pages/VerifyEmail'
-import Workspace from './pages/Workspace'
+const BoardInvite = lazy(() => import('./pages/BoardInvite'))
+const CalendarPage = lazy(() => import('./pages/Calendar'))
+const EditProfile = lazy(() => import('./pages/EditProfile'))
+const Home = lazy(() => import('./pages/Home'))
+const Login = lazy(() => import('./pages/Login'))
+const MyTasks = lazy(() => import('./pages/MyTasks'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const Profile = lazy(() => import('./pages/Profile'))
+const PublicBoard = lazy(() => import('./pages/PublicBoard'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Settings = lazy(() => import('./pages/Settings'))
+const SetupProfile = lazy(() => import('./pages/SetupProfile'))
+const Signup = lazy(() => import('./pages/Signup'))
+const Team = lazy(() => import('./pages/Team'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const Workspace = lazy(() => import('./pages/Workspace'))
 import { shouldBlockAccountGateRoute } from './lib/authRouteRules'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -40,6 +40,22 @@ export const App = () => {
 		location.pathname === '/calendar'
 	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
 	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
+
+	useEffect(() => {
+		const publicRoute = location.pathname === '/' || location.pathname.startsWith('/public/') || location.pathname.startsWith('/invite/')
+		const pageMeta = location.pathname.startsWith('/public/')
+			? { title: 'Public board — KanbanHub', description: 'View a shared KanbanHub board.' }
+			: location.pathname.startsWith('/invite/')
+				? { title: 'Board invitation — KanbanHub', description: 'Join a KanbanHub workspace.' }
+				: { title: 'KanbanHub — Make progress visible', description: 'A focused workspace for turning ideas into visible progress.' }
+		document.title = pageMeta.title
+		const description = document.querySelector('meta[name="description"]')
+		const robots = document.querySelector('meta[name="robots"]')
+		const canonical = document.querySelector('link[rel="canonical"]')
+		if (description) description.setAttribute('content', pageMeta.description)
+		if (robots) robots.setAttribute('content', publicRoute ? 'index,follow' : 'noindex,nofollow')
+		if (canonical) canonical.setAttribute('href', `${window.location.origin}${publicRoute ? location.pathname : '/'}`)
+	}, [location.pathname])
 
 	useEffect(() => {
 		checkAuth()
@@ -127,7 +143,7 @@ export const App = () => {
 		<>
 			<Toaster position='bottom-right' richColors />
 			{!isWorkspace && <Navbar />}
-
+			<Suspense fallback={<div className='loading-screen' role='status' aria-live='polite'><div className='loading-shell' aria-label='Loading page'><div className='loading-brand'><span className='brand-mark'>K</span><span>KanbanHub</span></div><div className='loading-pill'><span className='loading-spinner' aria-hidden='true' /><p className='loading-label'>Loading<span className='loading-dots'>...</span></p></div></div></div>}>
 			<Routes key={location.pathname}>
 				{needsVerification ? (
 					<>
@@ -233,6 +249,7 @@ export const App = () => {
 					</>
 				)}
 			</Routes>
+			</Suspense>
 		</>
 	)
 }

@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
 		timezone: { type: String, default: 'UTC' },
 		emailNotifications: { type: Boolean, default: true },
 		taskNotifications: { type: Boolean, default: true },
+		taskNotificationEmailLastSentAt: { type: Date, default: null },
 		weeklyDigest: { type: Boolean, default: false },
 		language: { type: String, enum: ['en', 'uk', 'ru'], default: 'en' },
 		avatar: { type: String, default: '' },
@@ -51,6 +52,16 @@ userSchema.index(
 		unique: true,
 		partialFilterExpression: {
 			providerUid: { $exists: true, $type: 'string' },
+		},
+	},
+)
+
+userSchema.index(
+	{ 'linkedProviders.provider': 1, 'linkedProviders.providerUid': 1 },
+	{
+		unique: true,
+		partialFilterExpression: {
+			'linkedProviders.providerUid': { $exists: true, $type: 'string' },
 		},
 	},
 )

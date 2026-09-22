@@ -70,3 +70,22 @@ export const markAllNotificationsRead = async (req, res) => {
 		return res.status(500).json({ message: 'Could not update notifications' })
 	}
 }
+
+export const deleteNotification = async (req, res) => {
+	try {
+		const accessibleBoardIds = await getAccessibleBoardIds(req.user._id)
+		const notification = await Notification.findOneAndDelete({
+			_id: req.params.id,
+			user: req.user._id,
+			$or: [
+				{ board: { $in: accessibleBoardIds } },
+				{ board: { $exists: false } },
+			],
+		})
+		if (!notification) return res.status(404).json({ message: 'Notification not found' })
+		return res.status(204).send()
+	} catch (error) {
+		console.error('Notification delete failed:', error)
+		return res.status(500).json({ message: 'Could not delete notification' })
+	}
+}

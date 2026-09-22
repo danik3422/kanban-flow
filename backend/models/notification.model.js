@@ -17,6 +17,7 @@ const notificationSchema = new mongoose.Schema(
 		board: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' },
 		task: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
 		readAt: { type: Date, default: null },
+		emailSentAt: { type: Date, default: null },
 	},
 	{ timestamps: true },
 )

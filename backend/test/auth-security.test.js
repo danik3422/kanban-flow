@@ -65,6 +65,22 @@ describe('social auth security helpers', () => {
 		assert.ok(owner._id)
 	})
 
+	it('enforces unique linked provider identities', async () => {
+		await User.create({
+			email: 'linked-one@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			linkedProviders: [{ provider: 'google', providerUid: 'linked-google-uid' }],
+		})
+		await assert.rejects(
+			User.create({
+				email: 'linked-two@example.com',
+				password: await bcrypt.hash('Password123!', 10),
+				linkedProviders: [{ provider: 'google', providerUid: 'linked-google-uid' }],
+			}),
+			(error) => error.code === 11000,
+		)
+	})
+
 	it('requires the current password for provider linking', async () => {
 		const user = { password: await bcrypt.hash('CorrectPassword123!', 10) }
 		await assert.rejects(

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /profile
+Disallow: /settings
+Disallow: /workspaces
+Disallow: /my-tasks
+Disallow: /calendar
+Disallow: /team
+
+Sitemap: /sitemap.xml

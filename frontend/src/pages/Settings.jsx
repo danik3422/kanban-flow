@@ -1,11 +1,13 @@
 import {
 	ArrowLeft,
 	Bell,
+	ClipboardList,
 	Clock3,
 	Languages,
 	KeyRound,
 	LockKeyhole,
 	Mail,
+	MessageCircle,
 	Palette,
 	ShieldCheck,
 	Smartphone,
@@ -275,15 +277,13 @@ const Settings = () => {
 								title='Task activity'
 								description='Keep a pulse on task changes, comments, and assignments.'
 							/>
-							<SettingToggle
-								checked={settings.weeklyDigest}
-								onChange={(event) =>
-									updateSetting('weeklyDigest', event.target.checked)
-								}
-								title='Weekly digest'
-								description='Get a summary of progress and pending work each week.'
-							/>
 						</div>
+						{(settings.emailNotifications || settings.taskNotifications) && <div className='notification-preview'>
+							<div className='notification-preview-heading'><span><Bell size={14} /> Preview</span><small>Examples of what you will receive</small></div>
+							{settings.taskNotifications && <div className='notification-preview-item'><span className='notification-preview-icon'><ClipboardList size={15} /></span><div><strong>You were assigned a task</strong><small>Alex assigned “Review launch brief” to you.</small></div><em>now</em></div>}
+							{settings.taskNotifications && <div className='notification-preview-item'><span className='notification-preview-icon'><MessageCircle size={15} /></span><div><strong>New task update</strong><small>Someone commented on “Review launch brief”.</small></div><em>2m</em></div>}
+							{settings.emailNotifications && <div className='notification-preview-item'><span className='notification-preview-icon'><Mail size={15} /></span><div><strong>Workspace activity email</strong><small>You have new updates waiting in your workspace.</small></div><em>email</em></div>}
+						</div>}
 					</section>
 					<section id='language' className='account-page-card settings-card settings-card--language'>
 						<div className='settings-card-heading'>

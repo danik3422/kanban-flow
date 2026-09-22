@@ -18,6 +18,7 @@ import Notification from '../models/notification.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import BoardActivity from '../models/boardActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
+import { notifyTaskRecipients } from '../lib/notificationDelivery.js'
 
 const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0 }) =>
 	TaskActivity.create({
@@ -68,21 +69,8 @@ const canManageBoard = async (board, userId) => {
 	)
 }
 
-const notifyTaskAssignees = async ({ userIds, task, board, type = 'task_assigned', title, message }) => {
-	const uniqueUserIds = [...new Set(userIds.map((userId) => userId.toString()))]
-	await Promise.all(
-		uniqueUserIds.map(async (userId) => {
-			const notification = await Notification.create({
-				user: userId,
-				type,
-				title: title || 'You were assigned a task',
-				message: message || `You were assigned “${task.title}” in ${board.name}.`,
-				board: board._id,
-				task: task._id,
-			})
-			emitUserEvent(userId, 'notification:new', notification.toObject())
-		}),
-	)
+const notifyTaskAssignees = async ({ userIds, task, board, actorId, type = 'task_assigned', title, message }) => {
+	await notifyTaskRecipients({ userIds, task, board, actorId, type, title, message })
 }
 
 const validateBoardAssignees = async (board, assignees) => {
@@ -861,9 +849,7 @@ export const getUserBoards = async (req, res) => {
 
 			const boards = await Board.find({ _id: { $in: boardIds } }).lean()
 
-		if (!boards || boards.length === 0) {
-			return res.status(404).json({ message: 'No boards found for this user.' })
-		}
+		if (!boards || boards.length === 0) return res.status(200).json([])
 
 		const membershipByBoard = new Map(
 			membership.map((member) => [member.board.toString(), member]),
@@ -1680,6 +1666,7 @@ export const createTask = async (req, res) => {
 			userIds: assignees,
 			task: savedTask,
 			board,
+			actorId: req.user._id,
 		})
 		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
 		return res.status(201).json(savedTask)
@@ -1832,6 +1819,7 @@ export const updateTask = async (req, res) => {
 				userIds: newlyAssignedIds,
 				task: updatedTask,
 				board,
+				actorId: req.user._id,
 			})
 		}
 		if (moved && Array.isArray(assignees ?? task.assignees)) {
@@ -1842,6 +1830,7 @@ export const updateTask = async (req, res) => {
 					userIds: notificationTargets,
 					task: updatedTask,
 					board,
+					actorId: req.user._id,
 					type: 'task_moved',
 					title: 'Task moved',
 					message: `“${updatedTask.title}” moved from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}.`,

@@ -367,7 +367,8 @@ describe('board access and invitation flow', () => {
 		const boardsResponse = await request(app)
 			.get('/api/board/boards')
 			.set('Cookie', authCookie(viewer._id))
-		assert.equal(boardsResponse.status, 404)
+		assert.equal(boardsResponse.status, 200)
+		assert.deepEqual(boardsResponse.body, [])
 
 		const columnsResponse = await request(app)
 			.get(`/api/board/boards/${board._id}/columns`)
@@ -1004,6 +1005,23 @@ describe('board access and invitation flow', () => {
 			task: response.body._id,
 			type: 'task_assigned',
 		}), 1)
+	})
+
+	it('does not create task notifications when the recipient disables them', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('quiet-member@example.com', 'Quiet Member')
+		member.taskNotifications = false
+		await member.save()
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const column = await Column.create({ board: board._id, title: 'Tasks' })
+
+		const response = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Quiet task', assignees: [member._id.toString()] })
+
+		assert.equal(response.status, 201)
+		assert.equal(await Notification.countDocuments({ user: member._id, task: response.body._id }), 0)
 	})
 
 	it('creates a task commentary notification for the assignees', async () => {
