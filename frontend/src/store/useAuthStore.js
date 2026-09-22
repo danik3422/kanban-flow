@@ -205,7 +205,10 @@ export const useAuthStore = create((set, get) => ({
 		if (!provider || !auth) return { success: false }
 		try {
 			const result = await getRedirectResult(auth)
-			if (!result?.user) return { success: false }
+			if (!result?.user) {
+				toast.error('Google sign-in did not return an account. Please try again.')
+				return { success: false }
+			}
 			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
 			sessionStorage.removeItem('pending-social-provider')

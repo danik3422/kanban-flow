@@ -38,7 +38,7 @@ export const App = () => {
 		location.pathname === '/my-tasks' ||
 		location.pathname === '/team' ||
 		location.pathname === '/calendar'
-	const { authUser, checkAuth, isCheckingAuth } = useAuthStore()
+	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
 	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
 
 	useEffect(() => {
@@ -60,6 +60,13 @@ export const App = () => {
 	useEffect(() => {
 		checkAuth()
 	}, [checkAuth])
+
+	useEffect(() => {
+		if (!authUser || !sessionStorage.getItem('pending-social-provider')) return
+		completeSocialRedirect().then((result) => {
+			if (result.success) checkAuth()
+		})
+	}, [authUser, checkAuth, completeSocialRedirect])
 
 	useEffect(() => {
 		const interceptorId = axiosInstance.interceptors.response.use(
