@@ -91,42 +91,50 @@ const validateBoardAssignees = async (board, assignees) => {
 }
 
 export const createBoard = async (req, res) => {
+	const session = await mongoose.startSession()
 	try {
 		const { name, visibility = 'private' } = req.body
-		if (!name) {
+		if (!name?.trim()) {
 			return res.status(400).json({ message: 'Board name is required' })
 		}
 		if (!['private', 'workspace', 'public'].includes(visibility)) {
 			return res.status(400).json({ message: 'Invalid board visibility' })
 		}
 
-		const newBoard = new Board({
-			name,
-			createdBy: req.user._id,
-			visibility,
+		let newBoard
+		let activity
+		await session.withTransaction(async () => {
+			newBoard = new Board({
+				name: name.trim(),
+				createdBy: req.user._id,
+				visibility,
+			})
+			await newBoard.save({ session })
+			await BoardMember.create([{
+				board: newBoard._id,
+				user: req.user._id,
+				role: 'admin',
+			}], { session })
+			activity = await recordBoardActivity({
+				boardId: newBoard._id,
+				userId: req.user._id,
+				action: 'created',
+				entityType: 'board',
+				entityId: newBoard._id,
+				entityName: newBoard.name,
+				details: 'created this board',
+				session,
+				emit: false,
+			})
 		})
-
-		await newBoard.save()
-
-		await BoardMember.create({
-			board: newBoard._id,
-			user: req.user._id,
-			role: 'admin',
-		})
-		await recordBoardActivity({
-			boardId: newBoard._id,
-			userId: req.user._id,
-			action: 'created',
-			entityType: 'board',
-			entityId: newBoard._id,
-			entityName: newBoard.name,
-			details: 'created this board',
-		})
+		emitBoardEvent(newBoard._id.toString(), 'activity:new', activity)
 
 		res.status(201).json(newBoard)
 	} catch (error) {
 		console.error('Error creating board:', error)
 		res.status(500).json({ message: 'Internal server error' })
+	} finally {
+		await session.endSession()
 	}
 }
 
@@ -845,9 +853,12 @@ export const getUserBoards = async (req, res) => {
 			.select('board role')
 			.lean()
 
-		const boardIds = membership.map((member) => member.board)
-
-			const boards = await Board.find({ _id: { $in: boardIds } }).lean()
+		const boards = await Board.find({
+			$or: [
+				{ createdBy: userId },
+				{ _id: { $in: membership.map((member) => member.board) } },
+			],
+		}).lean()
 
 		if (!boards || boards.length === 0) return res.status(200).json([])
 
