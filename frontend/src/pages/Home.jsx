@@ -65,7 +65,7 @@ const Home = () => {
 						</article>
 					))}
 				</div>
-				<div className='workflow-highlights'>
+				<div className='workflow-highlights reveal-item'>
 					{workflowHighlights.map((highlight) => <span key={highlight}>{highlight}</span>)}
 				</div>
 			</section>

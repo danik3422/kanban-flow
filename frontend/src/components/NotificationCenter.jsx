@@ -15,7 +15,10 @@ const NotificationCenter = () => {
 		const loadNotifications = async () => {
 			try {
 				const { data } = await axiosInstance.get('/notifications')
-				setNotifications(data)
+				setNotifications((current) => {
+					const nextById = new Map([...data.map((item) => [item._id, item]), ...current.map((item) => [item._id, item])])
+					return [...nextById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+				})
 			} catch (error) {
 				if ([404, 204].includes(error.response?.status)) {
 					setNotifications([])
@@ -30,7 +33,12 @@ const NotificationCenter = () => {
 
 		const socket = io(socketUrl, { withCredentials: true })
 		socket.on('notification:new', (notification) => {
-			setNotifications((current) => [notification, ...current])
+			setNotifications((current) => {
+				const merged = [notification, ...current]
+				const uniqueById = new Map()
+				merged.forEach((item) => uniqueById.set(item._id, item))
+				return [...uniqueById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+			})
 			toast.info(notification.title)
 		})
 		return () => socket.disconnect()

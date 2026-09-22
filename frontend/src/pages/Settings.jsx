@@ -8,14 +8,16 @@ import {
 	ShieldCheck,
 	Smartphone,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import ChangePasswordPanel from '../components/ChangePasswordPanel'
+import ThemeSelector from '../components/ThemeSelector'
 import { axiosInstance } from '../lib/axios'
 import { isDevAuthBypass } from '../lib/devMode'
 import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
+import { applyTheme } from '../utils/theme'
 
 const SettingToggle = ({ checked, title, description, onChange, disabled = false }) => (
 	<label className={`settings-toggle-row ${disabled ? 'is-disabled' : ''}`}>
@@ -52,22 +54,31 @@ const getInitialSettings = (authUser) => {
 const Settings = () => {
 	const { authUser, checkAuth, connectSocialAccount } = useAuthStore()
 	const [settings, setSettings] = useState(() => getInitialSettings(authUser))
+	const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
 	const [isSaving, setIsSaving] = useState(false)
 	const isLocalAccount = authUser?.provider === 'local'
 	const activeLanguage = authUser?.language || document.documentElement.lang || 'en'
 	const t = translations[activeLanguage] || translations.en
+
+	useEffect(() => {
+		applyTheme(theme)
+	}, [theme])
+
 	const updateSetting = (key, value) =>
 		setSettings((current) => ({ ...current, [key]: value }))
 	const saveSettings = async () => {
 		setIsSaving(true)
 		try {
+			const nextSettings = { ...settings }
 			if (isDevAuthBypass) {
-				localStorage.setItem('kanban-dev-settings', JSON.stringify(settings))
+				localStorage.setItem('kanban-dev-settings', JSON.stringify(nextSettings))
 			} else {
-				await axiosInstance.patch('/auth/settings', settings)
+				await axiosInstance.patch('/auth/settings', nextSettings)
 				await checkAuth()
 			}
-			document.documentElement.lang = settings.language || activeLanguage
+			localStorage.setItem('theme', theme)
+			applyTheme(theme)
+			document.documentElement.lang = nextSettings.language || activeLanguage
 			toast.success('Settings saved')
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not save settings')
@@ -101,11 +112,11 @@ const Settings = () => {
 						<div className='settings-development'>
 							<Clock3 size={18} />
 							<div>
-								<strong>Appearance settings are in development</strong>
-								<p>Theme controls will be available in a future update.</p>
+								<strong>Appearance settings are active</strong>
+								<p>Choose a theme for this browser and keep your workspace comfortable.</p>
 							</div>
-							<span>Coming soon</span>
 						</div>
+						<ThemeSelector selected={theme} onChange={setTheme} />
 					</section>
 					<section className='account-page-card settings-card settings-card--security security-settings-card'>
 						<div className='settings-card-heading security-card-head'>
@@ -200,18 +211,24 @@ const Settings = () => {
 								onChange={(event) =>
 									updateSetting('emailNotifications', event.target.checked)
 								}
-								disabled
 								title='Email notifications'
-								description='In development. Email updates will be available soon.'
+								description='Receive account and workspace updates by email.'
 							/>
 							<SettingToggle
 								checked={settings.taskNotifications}
 								onChange={(event) =>
 									updateSetting('taskNotifications', event.target.checked)
 								}
-								disabled
 								title='Task activity'
-								description='In development. Task alerts will be available soon.'
+								description='Keep a pulse on task changes, comments, and assignments.'
+							/>
+							<SettingToggle
+								checked={settings.weeklyDigest}
+								onChange={(event) =>
+									updateSetting('weeklyDigest', event.target.checked)
+								}
+								title='Weekly digest'
+								description='Get a summary of progress and pending work each week.'
 							/>
 						</div>
 					</section>

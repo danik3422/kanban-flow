@@ -1006,6 +1006,57 @@ describe('board access and invitation flow', () => {
 		}), 1)
 	})
 
+	it('creates a task commentary notification for the assignees', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('commented-member@example.com', 'Commented Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const column = await Column.create({ board: board._id, title: 'Tasks' })
+		const task = await Task.create({
+			column: column._id,
+			board: board._id,
+			title: 'Discuss this task',
+			assignees: [member._id],
+		})
+
+		const response = await request(app)
+			.post(`/api/board/tasks/${task._id}/comments`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ message: 'I left a new update on this card.' })
+
+		assert.equal(response.status, 201)
+		assert.equal(await Notification.countDocuments({
+			user: member._id,
+			task: task._id,
+			type: 'task_commented',
+		}), 1)
+	})
+
+	it('creates a task movement notification for assignees when a card changes columns', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('moved-member@example.com', 'Moved Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const fromColumn = await Column.create({ board: board._id, title: 'Backlog' })
+		const toColumn = await Column.create({ board: board._id, title: 'Doing' })
+		const task = await Task.create({
+			column: fromColumn._id,
+			board: board._id,
+			title: 'Move me',
+			assignees: [member._id],
+		})
+
+		const response = await request(app)
+			.patch(`/api/board/tasks/${task._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ column: toColumn._id, position: 0 })
+
+		assert.equal(response.status, 200)
+		assert.equal(await Notification.countDocuments({
+			user: member._id,
+			task: task._id,
+			type: 'task_moved',
+		}), 1)
+	})
+
 	it('transfers ownership and demotes the previous owner to admin', async () => {
 		const { owner, board } = await createBoardWithOwner()
 		const nextOwner = await createUser('next-owner@example.com', 'Next owner')

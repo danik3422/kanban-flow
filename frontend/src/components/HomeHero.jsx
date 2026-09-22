@@ -5,6 +5,7 @@ import {
 	Layers3,
 	Plus,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -216,17 +217,19 @@ const HomeHero = () => {
 					</span>
 				</div>
 			</div>
-			{touchDrag && (
-				<div
-					className='hero-touch-drag'
-					style={{ left: `${touchDrag.x}px`, top: `${touchDrag.y}px` }}
-					aria-hidden='true'
-				>
-					<span>{touchDrag.task.label}</span>
-					<strong>{touchDrag.task.title}</strong>
-					{touchDrag.task.meta && <small>{touchDrag.task.meta}</small>}
-				</div>
-			)}
+			{touchDrag &&
+				createPortal(
+					<div
+						className='hero-touch-drag'
+						style={{ left: `${touchDrag.x}px`, top: `${touchDrag.y}px` }}
+						aria-hidden='true'
+					>
+						<span>{touchDrag.task.label}</span>
+						<strong>{touchDrag.task.title}</strong>
+						{touchDrag.task.meta && <small>{touchDrag.task.meta}</small>}
+					</div>,
+					document.body,
+				)}
 		</section>
 	)
 }

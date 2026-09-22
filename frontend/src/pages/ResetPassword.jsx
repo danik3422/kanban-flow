@@ -25,6 +25,7 @@ const ResetPassword = () => {
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 	const [isSubmitted, setIsSubmitted] = useState(false)
 	const [isSubmitting, setIsSubmitting] = useState(false)
+	const [fieldErrors, setFieldErrors] = useState({})
 	const [isValidatingToken, setIsValidatingToken] = useState(false)
 	const [tokenError, setTokenError] = useState('')
 	const [tokenStatus, setTokenStatus] = useState('')
@@ -112,9 +113,16 @@ const ResetPassword = () => {
 	const shouldShowPasswordForm = isPasswordReset && isTokenValid && !isSubmitted
 	const shouldShowCheckingState =
 		isPasswordReset && !isTokenValid && isValidatingToken
+	const passwordChecks = {
+		length: password.length >= 8,
+		uppercase: /[A-Z]/.test(password),
+		number: /\d/.test(password),
+		special: /[^A-Za-z0-9]/.test(password),
+	}
 
 	const handleSubmit = async (e) => {
 		e.preventDefault()
+		const nextErrors = {}
 
 		if (isPasswordReset) {
 			if (!token) {
@@ -127,11 +135,25 @@ const ResetPassword = () => {
 				return
 			}
 
-			if (password !== confirmPassword) {
-				toast.error('Passwords do not match')
-				return
+			if (!password) nextErrors.password = 'Create a new password.'
+			else if (!Object.values(passwordChecks).every(Boolean)) {
+				nextErrors.password = 'Use 8 characters, uppercase, number, and symbol.'
 			}
+			if (!confirmPassword) nextErrors.confirmPassword = 'Repeat your new password.'
+			else if (password !== confirmPassword) {
+				nextErrors.confirmPassword = 'Passwords do not match.'
+			}
+		} else if (!email.trim()) {
+			nextErrors.email = 'Enter your email address.'
+		} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+			nextErrors.email = 'Enter a valid email address.'
 		}
+
+		if (Object.keys(nextErrors).length > 0) {
+			setFieldErrors(nextErrors)
+			return
+		}
+		setFieldErrors({})
 
 		setIsSubmitting(true)
 		try {
@@ -237,7 +259,7 @@ const ResetPassword = () => {
 							<p>Please wait while we verify your secure link.</p>
 						</div>
 					) : (
-						<form className='auth-form' onSubmit={handleSubmit}>
+						<form className='auth-form' onSubmit={handleSubmit} noValidate>
 							{shouldShowPasswordForm ? (
 								<>
 									<div className='auth-field'>
@@ -247,9 +269,14 @@ const ResetPassword = () => {
 												id='new-password'
 												type={showPassword ? 'text' : 'password'}
 												value={password}
-												onChange={(event) => setPassword(event.target.value)}
+														onChange={(event) => {
+															setPassword(event.target.value)
+															setFieldErrors((current) => ({ ...current, password: '' }))
+														}}
 												placeholder='At least 8 characters'
 												minLength={8}
+														aria-invalid={Boolean(fieldErrors.password)}
+														aria-describedby={fieldErrors.password ? 'reset-password-error' : undefined}
 												autoComplete='new-password'
 												required
 											/>
@@ -269,6 +296,11 @@ const ResetPassword = () => {
 												)}
 											</button>
 										</div>
+											{fieldErrors.password && (
+												<p className='auth-field-error' id='reset-password-error' role='alert'>
+													{fieldErrors.password}
+												</p>
+											)}
 									</div>
 
 									<div className='auth-field'>
@@ -280,11 +312,14 @@ const ResetPassword = () => {
 												id='confirm-reset-password'
 												type={showConfirmPassword ? 'text' : 'password'}
 												value={confirmPassword}
-												onChange={(event) =>
-													setConfirmPassword(event.target.value)
-												}
+														onChange={(event) => {
+															setConfirmPassword(event.target.value)
+															setFieldErrors((current) => ({ ...current, confirmPassword: '' }))
+														}}
 												placeholder='Repeat your password'
 												minLength={8}
+														aria-invalid={Boolean(fieldErrors.confirmPassword)}
+														aria-describedby={fieldErrors.confirmPassword ? 'reset-confirm-error' : undefined}
 												autoComplete='new-password'
 												required
 											/>
@@ -312,6 +347,11 @@ const ResetPassword = () => {
 												)}
 											</button>
 										</div>
+											{fieldErrors.confirmPassword && (
+												<p className='auth-field-error' id='reset-confirm-error' role='alert'>
+													{fieldErrors.confirmPassword}
+												</p>
+											)}
 									</div>
 
 									<button
@@ -335,6 +375,7 @@ const ResetPassword = () => {
 												value={email}
 												onChange={(event) => {
 													setEmail(event.target.value)
+															setFieldErrors((current) => ({ ...current, email: '' }))
 													sessionStorage.setItem(
 														AUTH_EMAIL_KEY,
 														event.target.value,
@@ -344,8 +385,15 @@ const ResetPassword = () => {
 												autoComplete='email'
 												autoFocus={!isPasswordReset}
 												required
+														aria-invalid={Boolean(fieldErrors.email)}
+														aria-describedby={fieldErrors.email ? 'reset-email-error' : undefined}
 											/>
 										</div>
+												{fieldErrors.email && (
+													<p className='auth-field-error' id='reset-email-error' role='alert'>
+														{fieldErrors.email}
+													</p>
+												)}
 									</div>
 
 									<button

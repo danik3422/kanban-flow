@@ -2,7 +2,6 @@ import { ChevronDown, LogOut, Palette, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { useAuthStore } from '../store/useAuthStore'
 
 const AccountDropdown = () => {
@@ -264,17 +263,14 @@ const AccountDropdown = () => {
 										</span>
 									</button>
 									<button
-										className='account-action account-disabled'
-										onClick={() =>
-											toast.info('Appearance settings are in development')
-										}
+										className='account-action'
+										onClick={() => goTo('/settings')}
 									>
 										<Palette size={17} />
 										<span>
 											<strong>Appearance</strong>
-											<small>In development</small>
+											<small>Theme and visual preferences</small>
 										</span>
-										<span className='account-coming-soon'>Soon</span>
 									</button>
 								</div>
 								<div className='account-divider' />

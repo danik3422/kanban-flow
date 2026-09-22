@@ -15,6 +15,13 @@ import AuthButton from '../ui/AuthButton'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 
+const loginPreviewStages = [
+	{ title: 'Settle into the flow.', progress: '1 of 4', task: 'Outline launch brief', action: 'Review priorities' },
+	{ title: 'Keep the team moving.', progress: '2 of 4', task: 'Polish onboarding flow', action: 'Move one card forward' },
+	{ title: 'Make the next handoff clear.', progress: '3 of 4', task: 'Write release notes', action: 'Share the update' },
+	{ title: 'See the work move forward.', progress: '4 of 4', task: 'Set up analytics', action: 'Celebrate the launch' },
+]
+
 const Login = () => {
 	const { authUser, login, handleSocialSignin, isLoggingIn } = useAuthStore()
 	const currentLanguage =
@@ -25,25 +32,49 @@ const Login = () => {
 		email: sessionStorage.getItem(AUTH_EMAIL_KEY) || '',
 		password: '',
 	}))
+	const [fieldErrors, setFieldErrors] = useState({})
 	const emailInputRef = useRef(null)
 	const [passwordVisible, setPasswordVisible] = useState(false)
 	const [emailLocked, setEmailLocked] = useState(false)
+	const [previewStage, setPreviewStage] = useState(0)
+	const activePreview = loginPreviewStages[previewStage]
+
+	useEffect(() => {
+		const interval = window.setInterval(() => {
+			setPreviewStage((current) => (current + 1) % loginPreviewStages.length)
+		}, 3200)
+		return () => window.clearInterval(interval)
+	}, [])
 
 	const handleChange = (e) => {
 		const { name, value } = e.target
 		setFormData((prev) => ({ ...prev, [name]: value }))
+		setFieldErrors((current) => ({ ...current, [name]: '' }))
 		if (name === 'email') sessionStorage.setItem(AUTH_EMAIL_KEY, value)
 	}
 
 	const handleContinue = (e) => {
 		e.preventDefault()
-		if (formData.email.trim()) {
-			setEmailLocked(true)
+		const email = formData.email.trim()
+		if (!email) {
+			setFieldErrors({ email: 'Enter your email address.' })
+			return
 		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			setFieldErrors({ email: 'Enter a valid email address.' })
+			return
+		}
+		setFieldErrors({})
+		setEmailLocked(true)
 	}
 
 	const handleLogin = async (e) => {
 		e.preventDefault()
+		if (!formData.password) {
+			setFieldErrors({ password: 'Enter your password.' })
+			return
+		}
+		setFieldErrors({})
 		await login(formData)
 		// App.jsx will handle redirect to /verify-email if email not verified
 	}
@@ -51,6 +82,7 @@ const Login = () => {
 	const handleEditEmail = () => {
 		setEmailLocked(false)
 		setFormData((prev) => ({ ...prev, password: '' }))
+		setFieldErrors({})
 		requestAnimationFrame(() => emailInputRef.current?.focus())
 	}
 
@@ -89,20 +121,20 @@ const Login = () => {
 							<span>Today</span>
 							<ShieldCheck size={16} />
 						</div>
-						<div className='auth-progress'>
-							<span />
-							<span />
-							<span />
-							<span />
+						<div className='auth-progress auth-progress--login'>
+							{loginPreviewStages.map((stage, index) => (
+								<span className={index <= previewStage ? 'is-active' : ''} key={stage.progress} />
+							))}
 						</div>
-						<strong>Make progress visible.</strong>
-						<p>4 focused tasks · 1 board</p>
+						<strong key={`login-title-${previewStage}`} className='auth-stage-swap'>
+							{activePreview.title}
+						</strong>
+						<p key={`login-progress-${previewStage}`} className='auth-stage-swap'>
+							{activePreview.progress} · {activePreview.task}
+						</p>
 						<div className='auth-check-list'>
-							<span>
-								<Check size={13} /> Review priorities
-							</span>
-							<span>
-								<Check size={13} /> Move one card forward
+							<span key={`login-action-${previewStage}`} className='auth-stage-swap'>
+								<Check size={13} /> {activePreview.action}
 							</span>
 						</div>
 					</div>
@@ -120,6 +152,7 @@ const Login = () => {
 					<form
 						className='auth-form'
 						onSubmit={emailLocked ? handleLogin : handleContinue}
+						noValidate
 						autoComplete='on'
 					>
 						<div className='auth-field'>
@@ -134,16 +167,15 @@ const Login = () => {
 									value={formData.email}
 									onChange={handleChange}
 									onKeyDown={(event) => {
-										if (
-											event.key === 'Enter' &&
-											event.currentTarget.checkValidity()
-										) {
+										if (event.key === 'Enter') {
 											event.preventDefault()
 											handleContinue(event)
 										}
 									}}
 									placeholder='you@example.com'
 									required
+									aria-invalid={Boolean(fieldErrors.email)}
+									aria-describedby={fieldErrors.email ? 'email-error' : undefined}
 									autoComplete='username'
 									inputMode='email'
 									disabled={emailLocked}
@@ -160,6 +192,11 @@ const Login = () => {
 									</button>
 								)}
 							</div>
+							{fieldErrors.email && (
+								<p className='auth-field-error' id='email-error' role='alert'>
+									{fieldErrors.email}
+								</p>
+							)}
 						</div>
 						{emailLocked && (
 							<div className='auth-field'>
@@ -178,6 +215,8 @@ const Login = () => {
 										onChange={handleChange}
 										placeholder='Enter your password'
 										required
+											aria-invalid={Boolean(fieldErrors.password)}
+											aria-describedby={fieldErrors.password ? 'password-error' : undefined}
 										autoComplete='current-password'
 									/>
 									<button
@@ -192,6 +231,11 @@ const Login = () => {
 										{passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
 									</button>
 								</div>
+								{fieldErrors.password && (
+									<p className='auth-field-error' id='password-error' role='alert'>
+										{fieldErrors.password}
+									</p>
+								)}
 							</div>
 						)}
 						<button

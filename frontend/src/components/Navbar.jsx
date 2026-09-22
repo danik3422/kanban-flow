@@ -1,13 +1,25 @@
-import { Menu, X } from 'lucide-react'
+import { Menu, Monitor, Moon, Sun, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { applyTheme } from '../utils/theme'
 import AccountDropdown from './AccountDropdown'
+
+const themeOptions = [
+	{ id: 'light', label: 'Light', Icon: Sun },
+	{ id: 'system', label: 'System', Icon: Monitor },
+	{ id: 'dark', label: 'Dark', Icon: Moon },
+]
 
 const Navbar = () => {
 	const { authUser } = useAuthStore()
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [isThemeOpen, setIsThemeOpen] = useState(false)
+	const [selectedTheme, setSelectedTheme] = useState(
+		() => localStorage.getItem('theme') || 'system',
+	)
 	const mobileMenuRef = useRef(null)
+	const themeControlRef = useRef(null)
 	const navigate = useNavigate()
 
 	useEffect(() => {
@@ -28,9 +40,31 @@ const Navbar = () => {
 		}
 	}, [isMenuOpen])
 
+	useEffect(() => {
+		if (!isThemeOpen) return undefined
+		const handlePointerDown = (event) => {
+			if (!themeControlRef.current?.contains(event.target)) setIsThemeOpen(false)
+		}
+		const handleKeyDown = (event) => {
+			if (event.key === 'Escape') setIsThemeOpen(false)
+		}
+		document.addEventListener('pointerdown', handlePointerDown)
+		document.addEventListener('keydown', handleKeyDown)
+		return () => {
+			document.removeEventListener('pointerdown', handlePointerDown)
+			document.removeEventListener('keydown', handleKeyDown)
+		}
+	}, [isThemeOpen])
+
 	const handleNavigate = (path) => {
 		setIsMenuOpen(false)
 		navigate(path)
+	}
+
+	const handleThemeChange = (theme) => {
+		setSelectedTheme(theme)
+		applyTheme(theme)
+		setIsThemeOpen(false)
 	}
 
 	return (
@@ -44,6 +78,41 @@ const Navbar = () => {
 
 				{/* Right Side */}
 				<div className='header-actions'>
+					{!authUser && (
+						<div className='guest-theme-control' ref={themeControlRef}>
+							<button
+								type='button'
+								className='guest-theme-trigger'
+								onClick={() => setIsThemeOpen((current) => !current)}
+								aria-expanded={isThemeOpen}
+								aria-label='Choose color theme'
+								title='Choose color theme'
+							>
+								{(() => {
+									const option = themeOptions.find(({ id }) => id === selectedTheme) || themeOptions[1]
+									const Icon = option.Icon
+									return <Icon size={17} />
+								})()}
+							</button>
+							{isThemeOpen && (
+								<div className='guest-theme-menu' role='menu' aria-label='Color theme'>
+									{themeOptions.map(({ id, label, Icon }) => (
+										<button
+											type='button'
+											key={id}
+											className={`guest-theme-option ${selectedTheme === id ? 'is-active' : ''}`}
+											onClick={() => handleThemeChange(id)}
+											role='menuitemradio'
+											aria-checked={selectedTheme === id}
+										>
+											<Icon size={15} />
+											<span>{label}</span>
+										</button>
+									))}
+								</div>
+							)}
+						</div>
+					)}
 					{authUser ? (
 						<AccountDropdown />
 					) : (

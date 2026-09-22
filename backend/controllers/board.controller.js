@@ -68,15 +68,15 @@ const canManageBoard = async (board, userId) => {
 	)
 }
 
-const notifyTaskAssignees = async ({ userIds, task, board }) => {
+const notifyTaskAssignees = async ({ userIds, task, board, type = 'task_assigned', title, message }) => {
 	const uniqueUserIds = [...new Set(userIds.map((userId) => userId.toString()))]
 	await Promise.all(
 		uniqueUserIds.map(async (userId) => {
 			const notification = await Notification.create({
 				user: userId,
-				type: 'task_assigned',
-				title: 'You were assigned a task',
-				message: `You were assigned “${task.title}” in ${board.name}.`,
+				type,
+				title: title || 'You were assigned a task',
+				message: message || `You were assigned “${task.title}” in ${board.name}.`,
 				board: board._id,
 				task: task._id,
 			})
@@ -1833,6 +1833,20 @@ export const updateTask = async (req, res) => {
 				task: updatedTask,
 				board,
 			})
+		}
+		if (moved && Array.isArray(assignees ?? task.assignees)) {
+			const nextAssigneeIds = [...new Set((assignees ?? task.assignees).map((assignee) => assignee.toString()))]
+			const notificationTargets = nextAssigneeIds.filter((assigneeId) => assigneeId !== req.user._id.toString())
+			if (notificationTargets.length) {
+				await notifyTaskAssignees({
+					userIds: notificationTargets,
+					task: updatedTask,
+					board,
+					type: 'task_moved',
+					title: 'Task moved',
+					message: `“${updatedTask.title}” moved from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}.`,
+				})
+			}
 		}
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
 		return res.status(200).json(updatedTask)

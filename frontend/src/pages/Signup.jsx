@@ -11,12 +11,18 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
 import AuthButton from '../ui/AuthButton'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
+
+const signupPreviewStages = [
+	{ title: 'Start with one clear step.', progress: '1 of 4', task: 'Add your first project', action: 'Start with one clear task' },
+	{ title: 'Shape your working rhythm.', progress: '2 of 4', task: 'Shape your workflow', action: 'Choose your columns' },
+	{ title: 'Bring the right people in.', progress: '3 of 4', task: 'Invite your team', action: 'Share the workspace' },
+	{ title: 'Make the workspace yours.', progress: '4 of 4', task: 'Make it yours', action: 'Keep the next step visible' },
+]
 
 const Signup = () => {
 	const { authUser } = useAuthStore()
@@ -30,9 +36,19 @@ const Signup = () => {
 	}))
 
 	const [emailLocked, setEmailLocked] = useState(false)
+	const [fieldErrors, setFieldErrors] = useState({})
 	const emailInputRef = useRef(null)
 	const [passwordVisible, setPasswordVisible] = useState(false)
 	const [confirmVisible, setConfirmVisible] = useState(false)
+	const [previewStage, setPreviewStage] = useState(0)
+	const activePreview = signupPreviewStages[previewStage]
+
+	useEffect(() => {
+		const interval = window.setInterval(() => {
+			setPreviewStage((current) => (current + 1) % signupPreviewStages.length)
+		}, 3200)
+		return () => window.clearInterval(interval)
+	}, [])
 
 	const signup = useAuthStore((state) => state.signup)
 	const handleSocialSignup = useAuthStore((state) => state.handleSocialSignup)
@@ -57,11 +73,22 @@ const Signup = () => {
 	const handleChange = (e) => {
 		const { name, value } = e.target
 		setFormData((prev) => ({ ...prev, [name]: value }))
+		setFieldErrors((current) => ({ ...current, [name]: '' }))
 		if (name === 'email') sessionStorage.setItem(AUTH_EMAIL_KEY, value)
 	}
 
 	const handleEmailContinue = () => {
-		if (formData.email.trim()) setEmailLocked(true)
+		const email = formData.email.trim()
+		if (!email) {
+			setFieldErrors({ email: 'Enter your email address.' })
+			return
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			setFieldErrors({ email: 'Enter a valid email address.' })
+			return
+		}
+		setFieldErrors({})
+		setEmailLocked(true)
 	}
 
 	const handleEditEmail = () => {
@@ -71,6 +98,7 @@ const Signup = () => {
 			password: '',
 			confirmPassword: '',
 		}))
+		setFieldErrors({})
 		requestAnimationFrame(() => emailInputRef.current?.focus())
 	}
 
@@ -93,10 +121,22 @@ const Signup = () => {
 			return
 		}
 
-		if (formData.password !== formData.confirmPassword) {
-			toast.error('Passwords do not match')
+		const nextErrors = {}
+		if (!formData.password) {
+			nextErrors.password = 'Create a password to continue.'
+		} else if (passwordScore < 4) {
+			nextErrors.password = 'Use all four password requirements below.'
+		}
+		if (!formData.confirmPassword) {
+			nextErrors.confirmPassword = 'Repeat your password.'
+		} else if (formData.password !== formData.confirmPassword) {
+			nextErrors.confirmPassword = 'Passwords do not match.'
+		}
+		if (Object.keys(nextErrors).length > 0) {
+			setFieldErrors(nextErrors)
 			return
 		}
+		setFieldErrors({})
 
 		const result = await signup({
 			email: formData.email,
@@ -133,20 +173,20 @@ const Signup = () => {
 							<span>Your first board</span>
 							<ShieldCheck size={16} />
 						</div>
-						<div className='auth-progress'>
-							<span />
-							<span />
-							<span />
-							<span />
+						<div className='auth-progress auth-progress--signup'>
+							{signupPreviewStages.map((stage, index) => (
+								<span className={index <= previewStage ? 'is-active' : ''} key={stage.progress} />
+							))}
 						</div>
-						<strong>Build your working rhythm.</strong>
-						<p>Start with a board, then make it yours.</p>
+						<strong key={`signup-title-${previewStage}`} className='auth-stage-swap'>
+							{activePreview.title}
+						</strong>
+						<p key={`signup-progress-${previewStage}`} className='auth-stage-swap'>
+							{activePreview.progress} · {activePreview.task}
+						</p>
 						<div className='auth-check-list'>
-							<span>
-								<Check size={13} /> Add your first project
-							</span>
-							<span>
-								<Check size={13} /> Invite your team when ready
+							<span key={`signup-action-${previewStage}`} className='auth-stage-swap'>
+								<Check size={13} /> {activePreview.action}
 							</span>
 						</div>
 					</div>
@@ -161,7 +201,7 @@ const Signup = () => {
 						<h2>Start with the basics.</h2>
 						<p>Use your email to create a workspace you can grow into.</p>
 					</div>
-					<form className='auth-form' onSubmit={handleSubmit} autoComplete='on'>
+					<form className='auth-form' onSubmit={handleSubmit} noValidate autoComplete='on'>
 						<div className='auth-field'>
 							<label htmlFor='email'>Email address</label>
 							<div className='auth-input-wrap'>
@@ -174,16 +214,15 @@ const Signup = () => {
 									value={formData.email}
 									onChange={handleChange}
 									onKeyDown={(event) => {
-										if (
-											event.key === 'Enter' &&
-											event.currentTarget.checkValidity()
-										) {
+										if (event.key === 'Enter') {
 											event.preventDefault()
 											handleEmailContinue()
 										}
 									}}
 									placeholder='you@example.com'
 									required
+									aria-invalid={Boolean(fieldErrors.email)}
+									aria-describedby={fieldErrors.email ? 'signup-email-error' : undefined}
 									autoComplete='username'
 									inputMode='email'
 									disabled={emailLocked}
@@ -200,6 +239,11 @@ const Signup = () => {
 									</button>
 								)}
 							</div>
+							{fieldErrors.email && (
+								<p className='auth-field-error' id='signup-email-error' role='alert'>
+									{fieldErrors.email}
+								</p>
+							)}
 						</div>
 						{!emailLocked ? (
 							<button
@@ -222,6 +266,8 @@ const Signup = () => {
 											onChange={handleChange}
 											placeholder='Create a password'
 											required
+											aria-invalid={Boolean(fieldErrors.password)}
+											aria-describedby={fieldErrors.password ? 'signup-password-error' : undefined}
 										/>
 										<button
 											type='button'
@@ -241,6 +287,11 @@ const Signup = () => {
 											)}
 										</button>
 									</div>
+									{fieldErrors.password && (
+										<p className='auth-field-error' id='signup-password-error' role='alert'>
+											{fieldErrors.password}
+										</p>
+									)}
 									{formData.password && (
 										<div className={`password-strength ${passwordStrength}`}>
 											<div className='password-strength-heading'>
@@ -306,8 +357,12 @@ const Signup = () => {
 													? 'password-input-mismatch'
 													: passwordsMatch
 														? 'password-input-match'
-														: ''
+															: fieldErrors.confirmPassword
+																? 'password-input-mismatch'
+																: ''
 											}
+											aria-invalid={Boolean(fieldErrors.confirmPassword)}
+											aria-describedby={fieldErrors.confirmPassword ? 'signup-confirm-error' : undefined}
 										/>
 										<button
 											type='button'
@@ -325,7 +380,11 @@ const Signup = () => {
 											)}
 										</button>
 									</div>
-									{passwordMismatch && (
+									{fieldErrors.confirmPassword ? (
+										<p className='auth-field-error' id='signup-confirm-error' role='alert'>
+											{fieldErrors.confirmPassword}
+										</p>
+									) : passwordMismatch && (
 										<p className='password-match-message mismatch'>
 											Passwords do not match
 										</p>
