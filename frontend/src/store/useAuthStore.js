@@ -178,13 +178,19 @@ export const useAuthStore = create((set, get) => ({
 		if (!currentPassword) return { success: false }
 		try {
 			const result = await signInWithPopup(auth, firebaseProvider)
-			const idToken = await result.user.getIdToken()
+			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider, currentPassword }, { withCredentials: true })
 			set({ authUser: response.data })
 			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
 			return { success: true, user: response.data }
 		} catch (error) {
-			toast.error(error.response?.data?.message || `Could not connect ${provider}`)
+			const firebaseMessage = {
+				'auth/unauthorized-domain': 'This production domain is not authorized in Firebase Authentication.',
+				'auth/popup-blocked': 'The sign-in popup was blocked. Allow popups and try again.',
+				'auth/popup-closed-by-user': 'Provider sign-in was cancelled.',
+				'auth/operation-not-allowed': `${provider} sign-in is not enabled in Firebase Authentication.`,
+			}[error.code]
+			toast.error(error.response?.data?.message || firebaseMessage || error.message || `Could not connect ${provider}`)
 			return { success: false, error }
 		}
 	},
@@ -201,7 +207,7 @@ export const useAuthStore = create((set, get) => ({
 		if (!firebaseProvider) return { success: false }
 		try {
 			const result = await signInWithPopup(auth, firebaseProvider)
-			const idToken = await result.user.getIdToken()
+			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/set-password', { idToken, provider, password }, { withCredentials: true })
 			set((state) => ({ authUser: { ...state.authUser, ...response.data, hasPassword: true } }))
 			toast.success('Password sign-in added')
