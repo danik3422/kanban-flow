@@ -1,4 +1,4 @@
-import { signInWithPopup } from 'firebase/auth'
+import { getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth'
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance } from '../lib/axios'
@@ -177,6 +177,11 @@ export const useAuthStore = create((set, get) => ({
 		if (!firebaseProvider) return { success: false }
 		if (!currentPassword) return { success: false }
 		try {
+			if (window.matchMedia?.('(max-width: 720px)').matches) {
+				sessionStorage.setItem('pending-social-provider', provider)
+				await signInWithRedirect(auth, firebaseProvider)
+				return { success: false, redirecting: true }
+			}
 			const result = await signInWithPopup(auth, firebaseProvider)
 			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider, currentPassword }, { withCredentials: true })
@@ -191,6 +196,25 @@ export const useAuthStore = create((set, get) => ({
 				'auth/operation-not-allowed': `${provider} sign-in is not enabled in Firebase Authentication.`,
 			}[error.code]
 			toast.error(error.response?.data?.message || firebaseMessage || error.message || `Could not connect ${provider}`)
+			return { success: false, error }
+		}
+	},
+
+	completeSocialRedirect: async () => {
+		const provider = sessionStorage.getItem('pending-social-provider')
+		if (!provider || !auth) return { success: false }
+		try {
+			const result = await getRedirectResult(auth)
+			if (!result?.user) return { success: false }
+			const idToken = await result.user.getIdToken(true)
+			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
+			sessionStorage.removeItem('pending-social-provider')
+			set({ authUser: response.data })
+			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
+			return { success: true, user: response.data }
+		} catch (error) {
+			sessionStorage.removeItem('pending-social-provider')
+			toast.error(error.response?.data?.message || error.message || `Could not connect ${provider}`)
 			return { success: false, error }
 		}
 	},

@@ -431,8 +431,15 @@ export const connectSocialAccount = async (req, res) => {
 				.status(409)
 				.json({ message: 'Only local accounts can connect a provider.' })
 
-		// re-auth BEFORE any information-revealing checks
-		await assertCurrentPassword(user, currentPassword)
+		// Re-auth before any information-revealing checks. Mobile redirect flows
+		// use the short-lived server timestamp created by /reauthenticate.
+		if (currentPassword) {
+			await assertCurrentPassword(user, currentPassword)
+		} else if (!user.lastReauthenticatedAt || Date.now() - user.lastReauthenticatedAt.getTime() > 5 * 60 * 1000) {
+			const error = new Error('Re-authentication required.')
+			error.statusCode = 401
+			throw error
+		}
 
 		if (
 			!decodedToken.email ||
@@ -1160,6 +1167,7 @@ export const reauthenticate = async (req, res) => {
 		const user = await User.findById(req.user._id).select('password')
 		if (!user || !user.password) return res.status(401).json({ message: 'Re-authentication required.' })
 		await assertCurrentPassword(user, req.body.currentPassword)
+		await User.updateOne({ _id: user._id }, { $set: { lastReauthenticatedAt: new Date() } })
 		return res.status(204).send()
 	} catch (error) {
 		return res.status(error.statusCode || 401).json({ message: 'Re-authentication failed.' })

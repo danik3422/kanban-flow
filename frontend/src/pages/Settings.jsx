@@ -59,7 +59,7 @@ const getInitialSettings = (authUser) => {
 }
 
 const Settings = () => {
-	const { authUser, checkAuth, connectSocialAccount, setSocialPassword } = useAuthStore()
+	const { authUser, checkAuth, connectSocialAccount, completeSocialRedirect, setSocialPassword } = useAuthStore()
 	const [settings, setSettings] = useState(() => getInitialSettings(authUser))
 	const [savedSettings, setSavedSettings] = useState(() => getInitialSettings(authUser))
 	const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
@@ -87,6 +87,13 @@ const Settings = () => {
 	const activeLanguage = authUser?.language || document.documentElement.lang || 'en'
 	const t = translations[activeLanguage] || translations.en
 	const hasChanges = JSON.stringify(settings) !== JSON.stringify(savedSettings)
+
+	useEffect(() => {
+		if (!authUser || !sessionStorage.getItem('pending-social-provider')) return
+		completeSocialRedirect().then((result) => {
+			if (result.success) checkAuth()
+		})
+	}, [authUser, checkAuth, completeSocialRedirect])
 
 	useEffect(() => {
 		localStorage.setItem('theme', theme)
@@ -133,6 +140,7 @@ const Settings = () => {
 		try {
 			await axiosInstance.post('/auth/reauthenticate', { currentPassword: providerPassword })
 			const result = await connectSocialAccount(providerToConnect, providerPassword)
+			if (result.redirecting) return
 			if (result.success) {
 				setProviderToConnect(null)
 				setProviderPassword('')

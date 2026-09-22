@@ -20,7 +20,7 @@ export const socialAuthSchema = z.object({
 })
 
 export const connectSocialSchema = socialAuthSchema.extend({
-	currentPassword: z.string().min(1).max(128),
+	currentPassword: z.string().min(1).max(128).optional(),
 })
 
 export const passwordResetRequestSchema = z.object({ email })

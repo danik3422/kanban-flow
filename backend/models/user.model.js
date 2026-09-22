@@ -31,6 +31,7 @@ const userSchema = new mongoose.Schema(
 		emailVerificationLastSentAt: { type: Date, default: null },
 		profileSetup: { type: Boolean, default: false },
 		sessionVersion: { type: Number, default: 0 },
+		lastReauthenticatedAt: { type: Date, default: null },
 		passkeys: [{
 			credentialID: { type: String, required: true },
 			publicKey: { type: Buffer, required: true },
