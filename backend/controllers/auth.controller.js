@@ -13,6 +13,7 @@ import admin from '../lib/firebaseAdmin.js'
 import {
 	sendAccountVerificationEmail,
 	sendPasswordAddedEmail,
+	sendProviderLinkedEmail,
 	sendPasswordResetEmail,
 } from '../lib/mailer.js'
 import { hashPassword } from '../lib/password.js'
@@ -398,6 +399,9 @@ export const socialSignup = async (req, res) => {
 				avatar: user.avatar,
 				profileSetup: user.profileSetup,
 				provider: user.provider,
+				emailVerified: user.emailVerified,
+				hasPassword: user.hasPassword,
+				linkedProviders: [],
 			})
 	} catch (error) {
 		console.error('Social Signup Error:', error)
@@ -458,6 +462,18 @@ export const connectSocialAccount = async (req, res) => {
 		user.emailVerificationTokenExpiresAt = null
 		await user.save()
 
+		if (!alreadyLinked) {
+			try {
+				await sendProviderLinkedEmail({
+					email: user.email,
+					provider,
+					settingsUrl: `${env.frontendUrl}/settings#security`,
+				})
+			} catch (mailError) {
+				console.error('Provider linking notification email failed:', mailError.message)
+			}
+		}
+
 		return res
 			.status(200)
 			.json({
@@ -481,6 +497,41 @@ export const connectSocialAccount = async (req, res) => {
 					? error.message
 					: 'Could not connect social account',
 			})
+	}
+}
+
+export const disconnectSocialAccount = async (req, res) => {
+	try {
+		const provider = String(req.params.provider || '')
+		if (!['google', 'microsoft', 'apple'].includes(provider)) return res.status(400).json({ message: 'Invalid provider' })
+		const user = await User.findById(req.user._id)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		if (user.password) await assertCurrentPassword(user, req.body.currentPassword)
+
+		const isPrimary = user.provider === provider
+		const linked = user.linkedProviders.find((item) => item.provider === provider)
+		if (!isPrimary && !linked) return res.status(404).json({ message: 'Provider is not connected' })
+		const remainingLinked = user.linkedProviders.filter((item) => item.provider !== provider)
+		if (isPrimary) {
+			const fallback = remainingLinked[0]
+			if (fallback) {
+				user.provider = fallback.provider
+				user.providerUid = fallback.providerUid
+				user.linkedProviders = remainingLinked.slice(1)
+			} else if (user.password || user.passkeys?.length) {
+				user.provider = 'local'
+				user.providerUid = undefined
+				user.linkedProviders = []
+			} else {
+				return res.status(409).json({ message: 'Add a password or another sign-in method before disconnecting this provider.' })
+			}
+		} else {
+			user.linkedProviders = remainingLinked
+		}
+		await user.save()
+		return res.json({ message: 'Provider disconnected successfully' })
+	} catch (error) {
+		return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Could not disconnect provider' })
 	}
 }
 
@@ -1104,6 +1155,17 @@ export const changePassword = async (req, res) => {
 	}
 }
 
+export const reauthenticate = async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id).select('password')
+		if (!user || !user.password) return res.status(401).json({ message: 'Re-authentication required.' })
+		await assertCurrentPassword(user, req.body.currentPassword)
+		return res.status(204).send()
+	} catch (error) {
+		return res.status(error.statusCode || 401).json({ message: 'Re-authentication failed.' })
+	}
+}
+
 export const setupProfile = async (req, res) => {
 	try {
 		const { name, jobTitle, timezone, avatar, removeAvatar } = req.body
@@ -1117,12 +1179,19 @@ export const setupProfile = async (req, res) => {
 		if (timezone) user.timezone = timezone
 		if (removeAvatar && !avatar) user.avatar = ''
 
-		// Upload base64 or data URL to Cloudinary
-		if (avatar && avatar.startsWith('data:image')) {
+		// Accept only browser-compressed raster avatars within the JSON body budget.
+		if (avatar) {
+			const avatarMatch = avatar.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/)
+			if (!avatarMatch) return res.status(400).json({ message: 'Avatar must be a JPG, PNG, or WebP image.' })
+			const avatarBytes = Buffer.from(avatarMatch[2], 'base64').byteLength
+			if (avatarBytes > 70 * 1024) return res.status(413).json({ message: 'Avatar must be 70 KB or smaller after compression.' })
+
 			const uploadRes = await cloudinary.uploader.upload(avatar, {
 				folder: 'avatars',
 				public_id: `${user._id}-avatar`,
 				overwrite: true,
+				resource_type: 'image',
+				transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
 			})
 			user.avatar = uploadRes.secure_url
 		}

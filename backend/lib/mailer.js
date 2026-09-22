@@ -109,6 +109,25 @@ export const sendPasswordAddedEmail = async ({ email, settingsUrl }) => {
 	})
 }
 
+export const sendProviderLinkedEmail = async ({ email, provider, settingsUrl }) => {
+	const providerName = provider.charAt(0).toUpperCase() + provider.slice(1)
+	await sendEmail({
+		email,
+		subject: `${providerName} sign-in was connected to your KanbanHub account`,
+		text: `${providerName} sign-in was connected to your KanbanHub account. If this was not you, review your account security: ${settingsUrl}`,
+		html: renderEmail({
+			preheader: `${providerName} sign-in was connected to your account.`,
+			eyebrow: 'Account security',
+			title: 'Sign-in method connected',
+			intro: `${providerName} sign-in was connected to your KanbanHub account.`,
+			body: 'You can now use this provider to sign in to your account alongside your email and password.',
+			ctaLabel: 'Review account security',
+			ctaUrl: settingsUrl,
+			note: 'If you did not make this change, sign in and disconnect the provider immediately, then change your password.',
+		}),
+	})
+}
+
 export const sendAccountVerificationEmail = async ({ email, verificationUrl }) => {
 	await sendEmail({
 		email,

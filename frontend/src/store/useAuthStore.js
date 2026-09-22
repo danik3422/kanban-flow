@@ -11,7 +11,7 @@ import {
 	googleProvider,
 } from '../lib/firebase'
 
-export const useAuthStore = create((set) => ({
+export const useAuthStore = create((set, get) => ({
 	authUser: null,
 	clearAuth: () => set({ authUser: null }),
 	isSigningIn: false,
@@ -167,7 +167,7 @@ export const useAuthStore = create((set) => ({
 		}
 	},
 
-	connectSocialAccount: async (provider) => {
+	connectSocialAccount: async (provider, currentPassword) => {
 		if (!firebaseEnabled) {
 			toast.error('Social sign-in is not configured yet')
 			return { success: false }
@@ -175,15 +175,39 @@ export const useAuthStore = create((set) => ({
 		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
 		const firebaseProvider = providers[provider]
 		if (!firebaseProvider) return { success: false }
+		if (!currentPassword) return { success: false }
 		try {
 			const result = await signInWithPopup(auth, firebaseProvider)
 			const idToken = await result.user.getIdToken()
-			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
+			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider, currentPassword }, { withCredentials: true })
 			set({ authUser: response.data })
 			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
 			return { success: true, user: response.data }
 		} catch (error) {
 			toast.error(error.response?.data?.message || `Could not connect ${provider}`)
+			return { success: false, error }
+		}
+	},
+
+	setSocialPassword: async (password) => {
+		if (!firebaseEnabled) {
+			toast.error('Social sign-in is not configured yet')
+			return { success: false }
+		}
+		const currentUser = get().authUser
+		const provider = currentUser?.provider
+		const providers = { google: googleProvider, microsoft: microsoftProvider, apple: appleProvider }
+		const firebaseProvider = providers[provider]
+		if (!firebaseProvider) return { success: false }
+		try {
+			const result = await signInWithPopup(auth, firebaseProvider)
+			const idToken = await result.user.getIdToken()
+			const response = await axiosInstance.post('/auth/social/set-password', { idToken, provider, password }, { withCredentials: true })
+			set((state) => ({ authUser: { ...state.authUser, ...response.data, hasPassword: true } }))
+			toast.success('Password sign-in added')
+			return { success: true, user: response.data }
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not add password sign-in')
 			return { success: false, error }
 		}
 	},

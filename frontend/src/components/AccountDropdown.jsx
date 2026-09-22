@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { handleAvatarError } from '../utils/avatar'
 
 const AccountDropdown = () => {
 	const { authUser, logout } = useAuthStore()
@@ -182,6 +183,7 @@ const AccountDropdown = () => {
 				<img
 					className={!authUser.avatar ? 'is-default-avatar' : ''}
 					src={authUser.avatar || '/avatar.png'}
+					onError={handleAvatarError}
 					alt=''
 				/>
 				<span className='account-trigger-copy'>
@@ -230,6 +232,7 @@ const AccountDropdown = () => {
 								<img
 									className={!authUser.avatar ? 'is-default-avatar' : ''}
 									src={authUser.avatar || '/avatar.png'}
+									onError={handleAvatarError}
 									alt=''
 								/>
 								<div>
@@ -248,12 +251,15 @@ const AccountDropdown = () => {
 						</div>
 
 						{needsSetup ? (
-							<button
-								className='account-action account-danger'
-								onClick={logout}
-							>
-								<LogOut size={17} /> Log out
-							</button>
+											<div className='account-actions account-actions-setup'>
+												<button className='account-action' onClick={() => goTo('/setup-profile')}>
+													<span className='account-action-icon'><UserRound size={17} /></span>
+													<span><strong>Complete profile</strong><small>Add your details to unlock the workspace.</small></span>
+												</button>
+												<button className='account-action account-danger' onClick={logout}>
+													<LogOut size={17} /> Log out
+												</button>
+											</div>
 						) : (
 							<>
 								<div className='account-status'>

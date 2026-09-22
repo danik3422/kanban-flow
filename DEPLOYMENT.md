@@ -18,9 +18,24 @@ root-domain redirect or landing configuration provided by Render.
 ## Backend variables
 
 Copy `backend/.env.production.example` into the backend service variables.
-Set real values for `MONGO_URI`, `JWT_SECRET`, `BREVO_API_KEY`, and Firebase
-Admin credentials. Keep `ALLOW_MEMORY_DB=false` and leave
-`MAIL_REDIRECT_TO` empty.
+Set real values for `MONGO_URI`, `JWT_SECRET`, `BREVO_API_KEY`, Firebase
+Admin credentials, and the three Cloudinary credentials:
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+Keep `ALLOW_MEMORY_DB=false` and leave `MAIL_REDIRECT_TO` empty.
+
+## Cloudinary avatars
+
+Create a Cloudinary account and open **Dashboard**. Copy these values into the
+Render backend environment variables:
+
+- `CLOUDINARY_CLOUD_NAME` from the Cloud name field
+- `CLOUDINARY_API_KEY` from the API Key field
+- `CLOUDINARY_API_SECRET` from the API Secret field
+
+The app accepts JPG, PNG, and WebP files up to 5 MB, compresses them in the
+browser, and sends at most 70 KB to the backend. Images are limited to 512 px
+and uploaded to the `avatars` folder. Do not put Cloudinary secrets in frontend
+variables or commit them to git.
 
 MongoDB must be Atlas or another replica set because member removal uses a
 transaction.

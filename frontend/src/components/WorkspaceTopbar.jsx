@@ -6,6 +6,8 @@ import {
 	MoreHorizontal,
 	PanelLeftClose,
 	PanelLeftOpen,
+	LogOut,
+	Trash2,
 	UsersRound,
 	Wifi,
 	WifiOff,
@@ -13,7 +15,7 @@ import {
 import AccountDropdown from './AccountDropdown'
 import ActivityFeed from './ActivityFeed'
 import NotificationCenter from './NotificationCenter'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const WorkspaceTopbar = ({
 	isSidebarOpen,
@@ -24,12 +26,35 @@ const WorkspaceTopbar = ({
 	onInvite,
 	onVisibilityChange,
 	boardVisibility,
+	onRoomAction,
+	roomActionLabel = 'Room actions',
 	activities,
 	activityLoading,
 	children,
 }) => {
 	const [isMoreOpen, setIsMoreOpen] = useState(false)
-	const hasRoomActions = Boolean(onInvite || onVisibilityChange)
+	const secondaryActionsRef = useRef(null)
+	const hasRoomActions = Boolean(onInvite || onVisibilityChange || onRoomAction)
+
+	useEffect(() => {
+		if (!isMoreOpen) return undefined
+
+		const handlePointerDown = (event) => {
+			if (!secondaryActionsRef.current?.contains(event.target)) {
+				setIsMoreOpen(false)
+			}
+		}
+		const handleKeyDown = (event) => {
+			if (event.key === 'Escape') setIsMoreOpen(false)
+		}
+
+		document.addEventListener('pointerdown', handlePointerDown)
+		document.addEventListener('keydown', handleKeyDown)
+		return () => {
+			document.removeEventListener('pointerdown', handlePointerDown)
+			document.removeEventListener('keydown', handleKeyDown)
+		}
+	}, [isMoreOpen])
 
 	return (
 	<header className='workspace-topbar'>
@@ -87,11 +112,11 @@ const WorkspaceTopbar = ({
 				</div>
 			)}
 			{hasRoomActions && (
-			<div className='workspace-secondary-actions'>
-				<button type='button' className='workspace-more-trigger' onClick={() => setIsMoreOpen((value) => !value)} aria-expanded={isMoreOpen} aria-label='More room actions' title='More room actions'>
+			<div className='workspace-secondary-actions' ref={secondaryActionsRef}>
+				<button type='button' className='workspace-more-trigger' onClick={() => setIsMoreOpen((value) => !value)} aria-expanded={isMoreOpen} aria-controls='workspace-secondary-menu' aria-label='More room actions' title='More room actions'>
 					<MoreHorizontal size={18} />
 				</button>
-				<div className={`workspace-secondary-menu ${isMoreOpen ? 'is-open' : ''}`}>
+				<div id='workspace-secondary-menu' className={`workspace-secondary-menu ${isMoreOpen ? 'is-open' : ''}`}>
 					{onInvite && <ActivityFeed activities={activities} isLoading={activityLoading} />}
 					{onInvite && (
 						<button
@@ -113,6 +138,11 @@ const WorkspaceTopbar = ({
 							title={`Room visibility: ${boardVisibility || 'private'}`}
 						>
 							<LockKeyhole size={17} />
+						</button>
+					)}
+					{onRoomAction && (
+						<button type='button' className='workspace-topbar-room-action' onClick={() => { setIsMoreOpen(false); onRoomAction() }} aria-label={roomActionLabel} title={roomActionLabel}>
+							{roomActionLabel === 'Delete room' ? <Trash2 size={17} /> : <LogOut size={17} />}
 						</button>
 					)}
 				</div>

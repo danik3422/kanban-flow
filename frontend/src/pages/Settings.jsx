@@ -59,7 +59,7 @@ const getInitialSettings = (authUser) => {
 }
 
 const Settings = () => {
-	const { authUser, checkAuth, connectSocialAccount } = useAuthStore()
+	const { authUser, checkAuth, connectSocialAccount, setSocialPassword } = useAuthStore()
 	const [settings, setSettings] = useState(() => getInitialSettings(authUser))
 	const [savedSettings, setSavedSettings] = useState(() => getInitialSettings(authUser))
 	const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
@@ -72,11 +72,18 @@ const Settings = () => {
 	const [isPasskeyManagerOpen, setIsPasskeyManagerOpen] = useState(false)
 	const [passkeyToRemove, setPasskeyToRemove] = useState(null)
 	const [passkeyRemovePassword, setPasskeyRemovePassword] = useState('')
+	const [providerToConnect, setProviderToConnect] = useState(null)
+	const [providerToDisconnect, setProviderToDisconnect] = useState(null)
+	const [providerPassword, setProviderPassword] = useState('')
+	const [providerPasswordVisible, setProviderPasswordVisible] = useState(false)
+	const [isProviderConnecting, setIsProviderConnecting] = useState(false)
 	const isLocalAccount = authUser?.provider === 'local'
 	const connectedProvider = authUser?.provider
 	const linkedProviders = authUser?.linkedProviders || []
 	const hasPasskey = Boolean(authUser?.passkeyEnabled)
+	const isSocialPasswordlessAccount = Boolean(authUser && authUser.provider !== 'local' && !authUser.hasPassword)
 	const passkeys = authUser?.passkeys || []
+	const requiresProviderPassword = isLocalAccount || Boolean(authUser?.hasPassword)
 	const activeLanguage = authUser?.language || document.documentElement.lang || 'en'
 	const t = translations[activeLanguage] || translations.en
 	const hasChanges = JSON.stringify(settings) !== JSON.stringify(savedSettings)
@@ -113,6 +120,48 @@ const Settings = () => {
 			toast.error(error.response?.data?.message || 'Could not save settings')
 		} finally {
 			setIsSaving(false)
+		}
+	}
+	const requestProviderConnection = (provider) => {
+		setProviderToConnect(provider)
+		setProviderPassword('')
+		setProviderPasswordVisible(false)
+	}
+	const connectProvider = async () => {
+		if (!providerToConnect || !providerPassword) return
+		setIsProviderConnecting(true)
+		try {
+			await axiosInstance.post('/auth/reauthenticate', { currentPassword: providerPassword })
+			const result = await connectSocialAccount(providerToConnect, providerPassword)
+			if (result.success) {
+				setProviderToConnect(null)
+				setProviderPassword('')
+				await checkAuth()
+			}
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Current password is incorrect')
+		} finally {
+			setIsProviderConnecting(false)
+		}
+	}
+	const requestProviderDisconnect = (provider) => {
+		setProviderToDisconnect(provider)
+		setProviderPassword('')
+		setProviderPasswordVisible(false)
+	}
+	const disconnectProvider = async () => {
+		if (!providerToDisconnect || (requiresProviderPassword && !providerPassword)) return
+		setIsProviderConnecting(true)
+		try {
+			await axiosInstance.delete(`/auth/social/${providerToDisconnect}`, { data: { currentPassword: providerPassword } })
+			await checkAuth()
+			setProviderToDisconnect(null)
+			setProviderPassword('')
+			toast.success('Provider disconnected')
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not disconnect provider')
+		} finally {
+			setIsProviderConnecting(false)
 		}
 	}
 	const addPasskey = async () => {
@@ -158,19 +207,21 @@ const Settings = () => {
 	const renderSocialProvider = (provider, label) => {
 		const isConnected = connectedProvider === provider || linkedProviders.some((link) => link.provider === provider)
 		const canConnect = isLocalAccount
+		const isPrimaryProvider = connectedProvider === provider
+		const canDisconnect = !isPrimaryProvider || Boolean(authUser?.hasPassword || hasPasskey || linkedProviders.length)
 		return (
 			<div className={`security-provider-row ${isConnected ? 'is-connected' : !canConnect ? 'is-disabled' : ''}`}>
 				<div>
 					<strong>{label}</strong>
-					<p>{isConnected ? `This account uses ${label} sign-in.` : `Use ${label} sign-in with the same account.`}</p>
+					<p>{isConnected ? canDisconnect ? `This account uses ${label} sign-in.` : `Add another sign-in method before disconnecting ${label}.` : `Use ${label} sign-in with the same account.`}</p>
 				</div>
 				<button
 					type='button'
 					className='quiet-button security-provider-button'
-					onClick={() => connectSocialAccount(provider)}
-					disabled={isConnected || !canConnect}
+					onClick={() => isConnected ? requestProviderDisconnect(provider) : requestProviderConnection(provider)}
+					disabled={isConnected ? !canDisconnect : !canConnect}
 				>
-					{isConnected ? `${label} connected` : canConnect ? `Connect ${label}` : 'Not connected'}
+					{isConnected ? canDisconnect ? 'Disconnect' : 'Required' : canConnect ? `Connect ${label}` : 'Not connected'}
 				</button>
 			</div>
 		)
@@ -223,7 +274,7 @@ const Settings = () => {
 							</div>
 						</div>
 						<div className='security-row security-password-row'>
-							<ChangePasswordPanel />
+							<ChangePasswordPanel isAddPassword={isSocialPasswordlessAccount} onSetSocialPassword={setSocialPassword} />
 						</div>
 						<div className='security-provider-list'>
 							<div className='security-provider-header'>
@@ -333,6 +384,16 @@ const Settings = () => {
 					<p>This device will no longer be able to sign in with this credential.</p>
 					{authUser?.hasPassword && <label className='passkey-confirm-field'><span><LockKeyhole size={14} /> Current password</span><input type='password' value={passkeyRemovePassword} onChange={(event) => setPasskeyRemovePassword(event.target.value)} autoFocus placeholder='Enter your password' /></label>}
 					<div className='passkey-confirm-actions'><button type='button' className='quiet-button' onClick={() => setPasskeyToRemove(null)}>Cancel</button><button type='button' className='passkey-confirm-danger' onClick={removePasskey} disabled={isPasskeySaving || (authUser?.hasPassword && !passkeyRemovePassword)}>{isPasskeySaving ? 'Removing...' : 'Remove passkey'}</button></div>
+				</section>
+			</div>}
+			{(providerToConnect || providerToDisconnect) && <div className='passkey-confirm-backdrop provider-connect-backdrop' role='presentation' onMouseDown={() => { setProviderToConnect(null); setProviderToDisconnect(null) }}>
+				<section className='passkey-confirm-modal provider-connect-modal' role='dialog' aria-modal='true' aria-labelledby='provider-connect-title' onMouseDown={(event) => event.stopPropagation()}>
+					<div className='passkey-confirm-icon'><ShieldCheck size={19} /></div>
+					<p className='eyebrow'>{providerToDisconnect ? 'Disconnect provider' : 'Re-authentication'}</p>
+					<h2 id='provider-connect-title'>{providerToDisconnect ? 'Disconnect' : 'Connect'} {(providerToDisconnect || providerToConnect)[0].toUpperCase() + (providerToDisconnect || providerToConnect).slice(1)}</h2>
+					<p>{providerToDisconnect ? 'This sign-in method will be removed from your account.' : 'Confirm your current password before linking this sign-in method.'}</p>
+					{(providerToConnect || requiresProviderPassword) && <label className='passkey-confirm-field'><span><LockKeyhole size={14} /> Current password</span><div className='provider-password-input'><input type={providerPasswordVisible ? 'text' : 'password'} value={providerPassword} onChange={(event) => setProviderPassword(event.target.value)} autoFocus autoComplete='current-password' placeholder='Enter your password' /><button type='button' onClick={() => setProviderPasswordVisible((value) => !value)} aria-label={providerPasswordVisible ? 'Hide password' : 'Show password'}>{providerPasswordVisible ? 'Hide' : 'Show'}</button></div></label>}
+					<div className='passkey-confirm-actions'><button type='button' className='quiet-button' onClick={() => { setProviderToConnect(null); setProviderToDisconnect(null) }}>Cancel</button><button type='button' className={providerToDisconnect ? 'passkey-confirm-danger' : 'primary-button'} onClick={providerToDisconnect ? disconnectProvider : connectProvider} disabled={isProviderConnecting || (requiresProviderPassword && !providerPassword)}>{isProviderConnecting ? providerToDisconnect ? 'Disconnecting...' : 'Connecting...' : providerToDisconnect ? 'Disconnect' : 'Continue'}</button></div>
 				</section>
 			</div>}
 			{['notifications', 'language'].includes(activeSection) && <div className='settings-save-bar'>

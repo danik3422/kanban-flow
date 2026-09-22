@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 import { getDetectedTimezone, timezoneOptions } from '../data/timezones'
+import { handleAvatarError } from '../utils/avatar'
+import { prepareAvatar } from '../utils/image'
 
 const EditProfile = () => {
 	const navigate = useNavigate()
@@ -23,13 +25,6 @@ const EditProfile = () => {
 	const [isSaving, setIsSaving] = useState(false)
 	const avatarInputRef = useRef(null)
 
-	const convertFileToBase64 = (file) => new Promise((resolve, reject) => {
-		const reader = new FileReader()
-		reader.onload = () => resolve(reader.result)
-		reader.onerror = reject
-		reader.readAsDataURL(file)
-	})
-
 	const handleSubmit = async (event) => {
 		event.preventDefault()
 		if (!name.trim()) {
@@ -38,7 +33,7 @@ const EditProfile = () => {
 		}
 		setIsSaving(true)
 		try {
-			const avatar = avatarFile ? await convertFileToBase64(avatarFile) : null
+			const avatar = avatarFile ? await prepareAvatar(avatarFile) : null
 			await axiosInstance.patch('/auth/setup-profile', {
 				name,
 				jobTitle,
@@ -50,7 +45,7 @@ const EditProfile = () => {
 			toast.success('Profile updated successfully')
 			navigate('/profile')
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Profile update failed')
+			toast.error(error.response?.data?.message || error.message || 'Profile update failed')
 		} finally {
 			setIsSaving(false)
 		}
@@ -63,10 +58,10 @@ const EditProfile = () => {
 				<form className='edit-profile-form' onSubmit={handleSubmit}>
 					<div className='edit-profile-identity'>
 						<div className='edit-avatar-frame'>
-							<img src={avatarPreview} alt='' />
+							<img src={avatarPreview} onError={handleAvatarError} alt='' />
 							{avatarPreview !== '/avatar.png' && <button type='button' className='edit-avatar-remove' onClick={() => { setAvatarFile(null); setAvatarPreview('/avatar.png'); setRemoveAvatar(true); if (avatarInputRef.current) avatarInputRef.current.value = '' }} aria-label='Remove profile photo' title='Remove profile photo'><X size={14} /></button>}
 						</div>
-						<div className='edit-profile-identity-copy'><span className='profile-status'><CheckCircle2 size={13} /> Photo preview</span><strong>{avatarPreview !== '/avatar.png' ? 'Custom profile photo' : 'Default profile photo'}</strong><small>JPG or PNG, up to 5 MB.</small><label className='edit-avatar-picker'><Camera size={15} /> Choose photo<input ref={avatarInputRef} type='file' accept='image/*' onChange={(event) => { const file = event.target.files?.[0]; if (file) { setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); setRemoveAvatar(false) } }} /></label></div>
+						<div className='edit-profile-identity-copy'><span className='profile-status'><CheckCircle2 size={13} /> Photo preview</span><strong>{avatarPreview !== '/avatar.png' ? 'Custom profile photo' : 'Default profile photo'}</strong><small>JPG, PNG, or WebP. Up to 5 MB; resized before upload.</small><label className='edit-avatar-picker'><Camera size={15} /> Choose photo<input ref={avatarInputRef} type='file' accept='image/jpeg,image/png,image/webp' onChange={(event) => { const file = event.target.files?.[0]; if (file) { if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { toast.error('Choose a JPG, PNG, or WebP image up to 5 MB'); event.target.value = ''; return } setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); setRemoveAvatar(false) } }} /></label></div>
 					</div>
 					<div className='edit-profile-fields'><div className='setup-field'><label htmlFor='edit-name'>Full name</label><div className='setup-input-wrap'><UserRound size={16} /><input id='edit-name' value={name} onChange={(event) => setName(event.target.value)} required /></div></div>
 					<div className='setup-field'><label htmlFor='edit-job'>Role or job title</label><input id='edit-job' className='plain-edit-input' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder='e.g. Product designer' /></div>

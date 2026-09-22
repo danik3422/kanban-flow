@@ -43,7 +43,7 @@ export const setupProfileSchema = z.object({
 	name: z.string().trim().min(1).max(120),
 	jobTitle: z.string().trim().max(120).optional(),
 	timezone: z.string().trim().min(1).max(64).optional(),
-	avatar: z.string().max(150000).nullable().optional(),
+	avatar: z.string().max(100000).nullable().optional(),
 	removeAvatar: z.boolean().optional(),
 }).strict()
 
@@ -51,6 +51,14 @@ export const changePasswordSchema = z.object({
 	currentPassword: z.string().min(1).max(128),
 	newPassword: passwordSchema,
 })
+
+export const reauthenticateSchema = z.object({
+	currentPassword: z.string().min(1).max(128),
+}).strict()
+
+export const disconnectSocialSchema = z.object({
+	currentPassword: z.string().max(128).optional(),
+}).strict()
 
 export const setSocialPasswordSchema = z.object({
 	idToken: z.string().min(1).max(10000),

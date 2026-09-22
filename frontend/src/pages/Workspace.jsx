@@ -24,7 +24,7 @@ import {
 	X,
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import InviteMemberModal from '../components/InviteMemberModal'
@@ -119,6 +119,7 @@ const fetchColumns = async (boardId) => {
 const Workspace = () => {
 	const { authUser } = useAuthStore()
 	const navigate = useNavigate()
+	const location = useLocation()
 	const { boardId } = useParams()
 	const {
 		isSidebarOpen,
@@ -1529,7 +1530,7 @@ const Workspace = () => {
 		}
 	}
 
-	const openTaskDetails = (task) => {
+	const openTaskDetails = useCallback((task) => {
 		const taskColumn = columns.find((column) =>
 			column.tasks.some((item) => item._id === task._id),
 		)
@@ -1558,7 +1559,18 @@ const Workspace = () => {
 			.then(({ data }) => setTaskActivities(data))
 			.catch(() => setTaskActivities([]))
 			.finally(() => setIsActivityLoading(false))
-	}
+	}, [columns])
+
+	useEffect(() => {
+		const targetTaskId = location.state?.notificationTaskId
+		if (!targetTaskId || taskDetails || !columns.length) return
+		const task = columns.flatMap((column) => column.tasks || []).find((item) => item._id === targetTaskId)
+		if (!task) return
+		queueMicrotask(() => {
+			openTaskDetails(task)
+			navigate(location.pathname, { replace: true, state: null })
+		})
+	}, [columns, location.pathname, location.state, navigate, openTaskDetails, taskDetails])
 
 	const addTaskComment = async () => {
 		const message = taskComment.trim()
@@ -1821,6 +1833,11 @@ const Workspace = () => {
 							  }
 							: null
 					}
+					onRoomAction={selectedBoard ? () => {
+						if (isBoardOwner) openDeleteBoardDialog()
+						else setIsLeaveBoardOpen(true)
+					} : null}
+					roomActionLabel={isBoardOwner ? 'Delete room' : 'Leave room'}
 					boardVisibility={selectedBoard?.visibility}
 					activities={boardActivities}
 					activityLoading={isActivityLoading}

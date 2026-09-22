@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { isDevAuthBypass } from '../lib/devMode'
 
-const ChangePasswordPanel = () => {
+const ChangePasswordPanel = ({ isAddPassword = false, onSetSocialPassword }) => {
 	const [isOpen, setIsOpen] = useState(false)
 	const [isRendered, setIsRendered] = useState(false)
 	const [isClosing, setIsClosing] = useState(false)
@@ -14,6 +14,7 @@ const ChangePasswordPanel = () => {
 		confirm: false,
 	})
 	const [form, setForm] = useState({ current: '', next: '', confirm: '' })
+	const [invalidFields, setInvalidFields] = useState({})
 	const [isSaving, setIsSaving] = useState(false)
 	const checks = {
 		length: form.next.length >= 8,
@@ -25,8 +26,10 @@ const ChangePasswordPanel = () => {
 	const strength = score <= 1 ? 'weak' : score <= 3 ? 'medium' : 'strong'
 	const passwordsMatch = form.confirm.length > 0 && form.next === form.confirm
 	const mismatch = form.confirm.length > 0 && !passwordsMatch
-	const update = (key, value) =>
+	const update = (key, value) => {
 		setForm((current) => ({ ...current, [key]: value }))
+		setInvalidFields((current) => ({ ...current, [key]: false }))
+	}
 	const toggle = (key) =>
 		setVisible((current) => ({ ...current, [key]: !current[key] }))
 	const closePanel = () => {
@@ -47,7 +50,18 @@ const ChangePasswordPanel = () => {
 
 	const submit = async (event) => {
 		event.preventDefault()
-		if (form.next === form.current && form.current.length > 0) {
+		const nextInvalidFields = {
+			current: !isAddPassword && !form.current,
+			next: !form.next,
+			confirm: !form.confirm,
+		}
+		if (Object.values(nextInvalidFields).some(Boolean)) {
+			setInvalidFields(nextInvalidFields)
+			toast.error('Complete all password fields')
+			return
+		}
+		setInvalidFields({})
+		if (!isAddPassword && form.next === form.current && form.current.length > 0) {
 			toast.error('New password must be different from your current password')
 			return
 		}
@@ -59,7 +73,12 @@ const ChangePasswordPanel = () => {
 		}
 		setIsSaving(true)
 		try {
-			if (isDevAuthBypass)
+			if (isAddPassword) {
+				const result = await onSetSocialPassword(form.next)
+				if (!result?.success) return
+				setForm({ current: '', next: '', confirm: '' })
+				closePanel()
+			} else if (isDevAuthBypass)
 				toast.success('Password change is disabled in demo mode')
 			else {
 				await axiosInstance.patch('/auth/change-password', {
@@ -80,14 +99,14 @@ const ChangePasswordPanel = () => {
 	const passwordField = (key, label, placeholder) => (
 		<div className='security-password-field'>
 			<label htmlFor={`security-${key}`}>{label}</label>
-			<div className='auth-input-wrap'>
+			<div className={`auth-input-wrap ${invalidFields[key] ? 'is-invalid' : ''}`}>
 				<input
 					id={`security-${key}`}
 					type={visible[key] ? 'text' : 'password'}
 					value={form[key]}
 					onChange={(event) => update(key, event.target.value)}
 					placeholder={placeholder}
-					required
+					aria-invalid={invalidFields[key] ? 'true' : undefined}
 					minLength={key !== 'current' ? 8 : undefined}
 					autoComplete={key === 'current' ? 'current-password' : 'new-password'}
 				/>
@@ -115,14 +134,19 @@ const ChangePasswordPanel = () => {
 				className='quiet-button change-password-trigger'
 				onClick={togglePanel}
 			>
-				<LockKeyhole size={16} /> Change password
+				<LockKeyhole size={16} /> {isAddPassword ? 'Add password' : 'Change password'}
 			</button>
 			{isRendered && (
 				<form
 					className={`security-password-form ${isClosing ? 'is-closing' : ''}`}
 					onSubmit={submit}
+					noValidate
 				>
-					{passwordField(
+					<div className='security-form-title'>
+						<LockKeyhole size={15} /> {isAddPassword ? 'Add password sign-in' : 'Update password'}
+					</div>
+					{isAddPassword && <p className='security-password-hint'>Add an email and password sign-in without removing your provider access.</p>}
+					{!isAddPassword && passwordField(
 						'current',
 						'Current password',
 						'Enter current password',
@@ -190,7 +214,7 @@ const ChangePasswordPanel = () => {
 						</p>
 					)}
 					<button type='submit' className='primary-button' disabled={isSaving}>
-						{isSaving ? 'Changing...' : 'Save new password'}
+						{isSaving ? isAddPassword ? 'Adding...' : 'Changing...' : isAddPassword ? 'Add password' : 'Save new password'}
 					</button>
 				</form>
 			)}

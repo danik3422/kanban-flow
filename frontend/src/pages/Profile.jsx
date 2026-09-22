@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, BriefcaseBusiness, CheckCircle2, Clock3, Globe2, Mail, Pencil, ShieldCheck, UserRound, UsersRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { handleAvatarError } from '../utils/avatar'
 
 const Profile = () => {
 	const authUser = useAuthStore((state) => state.authUser)
@@ -13,7 +14,7 @@ const Profile = () => {
 			<div className='profile-layout'>
 				<section className='account-page-card profile-card'>
 					<div className='profile-hero'>
-						<div className='profile-large-avatar'><img className={!authUser?.avatar ? 'is-default-avatar' : ''} src={authUser?.avatar || '/avatar.png'} alt='' /></div>
+						<div className='profile-large-avatar'><img className={!authUser?.avatar ? 'is-default-avatar' : ''} src={authUser?.avatar || '/avatar.png'} onError={handleAvatarError} alt='' /></div>
 						<div className='profile-hero-copy'><span className='profile-status'><span /> Active account</span><h2>{authUser?.name || 'Your profile'}</h2><p>{authUser?.jobTitle || 'Add a role so your team knows your focus.'}</p><span className='profile-provider'><ShieldCheck size={14} /> {authUser?.provider === 'local' ? 'Email account' : `${authUser?.provider || 'Connected'} account`}</span></div>
 					</div>
 					{completion < 100 && <div className='profile-completion'><div><span>Profile completeness</span><strong>{completion}%</strong></div><div className='profile-progress'><span style={{ width: `${completion}%` }} /></div><small>Add the missing details to complete your profile.</small></div>}

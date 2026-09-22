@@ -1,4 +1,5 @@
 import Notification from '../models/notification.model.js'
+import BoardMember from '../models/boardMember.model.js'
 import User from '../models/user.model.js'
 import { sendTaskNotificationEmail } from './mailer.js'
 import { emitUserEvent } from './realtime.js'
@@ -16,8 +17,19 @@ export const notifyTaskRecipients = async ({
 	message,
 }) => {
 	const uniqueUserIds = [...new Set(userIds.map((userId) => userId.toString()))]
+	const activeMemberIds = await BoardMember.find({
+		board: board._id,
+		user: { $in: uniqueUserIds },
+	}).distinct('user')
+	const ownerId = board.createdBy?.toString()
+	const activeRecipientIds = new Set([
+		...activeMemberIds.map((userId) => userId.toString()),
+		...(ownerId && uniqueUserIds.includes(ownerId) ? [ownerId] : []),
+	])
+	if (!activeRecipientIds.size) return
+
 	const users = await User.find({
-		_id: { $in: uniqueUserIds },
+		_id: { $in: [...activeRecipientIds] },
 		taskNotifications: { $ne: false },
 	}).select('_id email emailNotifications').lean()
 
@@ -35,6 +47,10 @@ export const notifyTaskRecipients = async ({
 		const isSelf = actorId && user._id.toString() === actorId.toString()
 		if (isSelf || user.emailNotifications === false || !EMAILABLE_TYPES.has(type)) return
 		void (async () => {
+			const stillHasAccess = ownerId === user._id.toString()
+				|| await BoardMember.exists({ board: board._id, user: user._id })
+			if (!stillHasAccess) return
+
 			const cooldownBoundary = new Date(Date.now() - EMAIL_COOLDOWN_MS)
 			const emailClaim = await User.findOneAndUpdate(
 				{

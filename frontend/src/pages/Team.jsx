@@ -7,6 +7,7 @@ import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { fetchBoardMembersWithCache } from '../lib/boardMembersCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import { handleAvatarError } from '../utils/avatar'
 
 const getInitials = (person) => {
 	const name = person.name || person.email || '?'
@@ -217,7 +218,7 @@ const Team = () => {
 							{sortedPeople.map((person, index) => (
 								<article className='team-person-card' key={person._id}>
 									{person.avatar ? (
-										<img className='team-avatar' src={person.avatar} alt='' />
+										<img className='team-avatar' src={person.avatar} onError={handleAvatarError} alt='' />
 									) : (
 										<div className='team-avatar' style={{ background: avatarColors[index % avatarColors.length] }}>
 											{getInitials(person)}

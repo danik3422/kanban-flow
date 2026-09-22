@@ -1,5 +1,6 @@
 import { ArrowRightLeft, Bell, CheckCheck, ClipboardList, MessageCircle, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
@@ -7,6 +8,7 @@ import { socketUrl } from '../lib/runtimeConfig'
 import Popover from './Popover'
 
 const NotificationCenter = () => {
+	const navigate = useNavigate()
 	const [notifications, setNotifications] = useState([])
 	const [isOpen, setIsOpen] = useState(false)
 	const [isLoading, setIsLoading] = useState(true)
@@ -71,6 +73,16 @@ const NotificationCenter = () => {
 		}
 	}
 
+	const openNotification = async (notification) => {
+		await markRead(notification)
+		if (notification.board && notification.task) {
+			setIsOpen(false)
+			navigate(`/workspaces/${notification.board}`, {
+				state: { notificationTaskId: notification.task },
+			})
+		}
+	}
+
 	const markAllRead = async () => {
 		if (!unreadCount) return
 		try {
@@ -127,8 +139,8 @@ const NotificationCenter = () => {
 								<div
 									key={notification._id}
 									className={`notification-item ${notification.readAt ? '' : 'is-unread'}`}
-									onClick={() => markRead(notification)}
-									onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); markRead(notification) } }}
+									onClick={() => openNotification(notification)}
+									onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNotification(notification) } }}
 									role='button'
 									tabIndex='0'
 									aria-label={`${notification.readAt ? '' : 'Unread: '}${notification.title}`}
