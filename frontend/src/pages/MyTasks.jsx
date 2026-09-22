@@ -6,8 +6,8 @@ import {
 	ChevronDown,
 	ChevronRight,
 	ClipboardList,
-	RotateCcw,
 	Layers3,
+	RotateCcw,
 	Search,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -15,9 +15,9 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
+import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 
 const MyTasks = () => {
 	const navigate = useNavigate()
@@ -42,7 +42,9 @@ const MyTasks = () => {
 	}
 
 	const formatPriority = (value = 'none') =>
-		value === 'none' ? 'No priority' : `${value[0].toUpperCase()}${value.slice(1)}`
+		value === 'none'
+			? 'No priority'
+			: `${value[0].toUpperCase()}${value.slice(1)}`
 
 	const getDueDateState = (task) => {
 		if (!task.dueDate) return 'none'
@@ -69,9 +71,10 @@ const MyTasks = () => {
 	useEffect(() => {
 		let isCurrent = true
 		const requestTimer = window.setTimeout(() => {
-			axiosInstance.get('/board/my-tasks', {
-				params: { search, priority, board },
-			})
+			axiosInstance
+				.get('/board/my-tasks', {
+					params: { search, priority, board },
+				})
 				.then((tasksResponse) => {
 					if (isCurrent) setTasks(tasksResponse.data)
 				})
@@ -81,7 +84,9 @@ const MyTasks = () => {
 						setTasks([])
 						return
 					}
-					toast.error(error.response?.data?.message || 'Could not load your tasks')
+					toast.error(
+						error.response?.data?.message || 'Could not load your tasks',
+					)
 				})
 				.finally(() => {
 					if (isCurrent) setIsLoading(false)
@@ -156,7 +161,8 @@ const MyTasks = () => {
 		tasks.forEach((task) => {
 			const boardData = task.column?.board
 			const boardId = boardData?._id || boardData || 'unknown-board'
-			const boardName = boardData?.name || boardNames.get(String(boardId)) || 'Room'
+			const boardName =
+				boardData?.name || boardNames.get(String(boardId)) || 'Room'
 			if (!groups.has(String(boardId))) {
 				groups.set(String(boardId), {
 					id: String(boardId),
@@ -198,77 +204,141 @@ const MyTasks = () => {
 					</div>
 				</WorkspaceTopbar>
 				<div className='workspace-content my-tasks-page'>
-					{!isLoading && <>
-					<div className='my-tasks-stats-grid'>
-						<div className='my-tasks-stat-card'>
-							<div className='my-tasks-stat-top'>
-								<span className='my-tasks-stat-title'>Assigned to you</span>
-								<span className='my-tasks-stat-icon my-tasks-stat-icon-assigned'><ClipboardList size={22} /></span>
+					{!isLoading && (
+						<>
+							<div className='my-tasks-stats-grid'>
+								<div className='my-tasks-stat-card'>
+									<div className='my-tasks-stat-top'>
+										<span className='my-tasks-stat-title'>Assigned to you</span>
+										<span className='my-tasks-stat-icon my-tasks-stat-icon-assigned'>
+											<ClipboardList size={22} />
+										</span>
+									</div>
+									<span className='my-tasks-stat-value'>
+										{stats.assignedCount}
+									</span>
+								</div>
+								<div className='my-tasks-stat-card'>
+									<div className='my-tasks-stat-top'>
+										<span className='my-tasks-stat-title'>Overdue</span>
+										<span className='my-tasks-stat-icon my-tasks-stat-icon-overdue'>
+											<AlertTriangle size={22} />
+										</span>
+									</div>
+									<span className='my-tasks-stat-value'>
+										{stats.overdueCount}
+									</span>
+								</div>
+								<div className='my-tasks-stat-card'>
+									<div className='my-tasks-stat-top'>
+										<span className='my-tasks-stat-title'>Due this week</span>
+										<span className='my-tasks-stat-icon my-tasks-stat-icon-thisweek'>
+											<CalendarDays size={22} />
+										</span>
+									</div>
+									<span className='my-tasks-stat-value'>
+										{stats.dueThisWeekCount}
+									</span>
+								</div>
+								<div className='my-tasks-stat-card'>
+									<div className='my-tasks-stat-top'>
+										<span className='my-tasks-stat-title'>Completed</span>
+										<span className='my-tasks-stat-icon my-tasks-stat-icon-completed'>
+											<CheckCircle2 size={22} />
+										</span>
+									</div>
+									<span className='my-tasks-stat-value'>
+										{stats.completedCount}
+									</span>
+								</div>
 							</div>
-							<span className='my-tasks-stat-value'>{stats.assignedCount}</span>
-						</div>
-						<div className='my-tasks-stat-card'>
-							<div className='my-tasks-stat-top'>
-								<span className='my-tasks-stat-title'>Overdue</span>
-								<span className='my-tasks-stat-icon my-tasks-stat-icon-overdue'><AlertTriangle size={22} /></span>
+							<div className='my-tasks-toolbar'>
+								<div className='my-tasks-search-wrap'>
+									<Search size={14} className='my-tasks-search-icon' />
+									<input
+										className='my-tasks-search-input'
+										placeholder='Search your tasks'
+										value={search}
+										onChange={handleSearchChange}
+									/>
+								</div>
+								<div className='my-tasks-filter-wrap'>
+									<select
+										className='my-tasks-select'
+										value={priority}
+										onChange={handlePriorityChange}
+									>
+										<option value='all'>All priorities</option>
+										<option value='none'>No priority</option>
+										<option value='low'>Low</option>
+										<option value='medium'>Medium</option>
+										<option value='high'>High</option>
+										<option value='urgent'>Urgent</option>
+									</select>
+									<ChevronDown size={14} className='my-tasks-select-icon' />
+								</div>
+								{hasFilters && (
+									<button
+										type='button'
+										className='my-tasks-clear-button'
+										onClick={clearFilters}
+									>
+										<RotateCcw size={14} /> Clear
+									</button>
+								)}
+								<div className='my-tasks-filter-wrap'>
+									<select
+										className='my-tasks-select'
+										value={board}
+										onChange={handleBoardChange}
+									>
+										<option value='all'>All boards</option>
+										{boards.map((item) => (
+											<option key={item._id} value={item._id}>
+												{item.name}
+											</option>
+										))}
+									</select>
+									<ChevronDown size={14} className='my-tasks-select-icon' />
+								</div>
 							</div>
-							<span className='my-tasks-stat-value'>{stats.overdueCount}</span>
-						</div>
-						<div className='my-tasks-stat-card'>
-							<div className='my-tasks-stat-top'>
-								<span className='my-tasks-stat-title'>Due this week</span>
-								<span className='my-tasks-stat-icon my-tasks-stat-icon-thisweek'><CalendarDays size={22} /></span>
-							</div>
-							<span className='my-tasks-stat-value'>{stats.dueThisWeekCount}</span>
-						</div>
-						<div className='my-tasks-stat-card'>
-							<div className='my-tasks-stat-top'>
-								<span className='my-tasks-stat-title'>Completed</span>
-								<span className='my-tasks-stat-icon my-tasks-stat-icon-completed'><CheckCircle2 size={22} /></span>
-							</div>
-							<span className='my-tasks-stat-value'>{stats.completedCount}</span>
-						</div>
-					</div>
-					<div className='my-tasks-toolbar'>
-						<div className='my-tasks-search-wrap'>
-							<Search size={14} className='my-tasks-search-icon' />
-							<input
-								className='my-tasks-search-input'
-								placeholder='Search your tasks'
-								value={search}
-								onChange={handleSearchChange}
-							/>
-						</div>
-						<div className='my-tasks-filter-wrap'>
-							<select className='my-tasks-select' value={priority} onChange={handlePriorityChange}>
-								<option value='all'>All priorities</option>
-								<option value='none'>No priority</option>
-								<option value='low'>Low</option>
-								<option value='medium'>Medium</option>
-								<option value='high'>High</option>
-								<option value='urgent'>Urgent</option>
-							</select>
-							<ChevronDown size={14} className='my-tasks-select-icon' />
-						</div>
-						{hasFilters && <button type='button' className='my-tasks-clear-button' onClick={clearFilters}><RotateCcw size={14} /> Clear</button>}
-						<div className='my-tasks-filter-wrap'>
-							<select className='my-tasks-select' value={board} onChange={handleBoardChange}>
-								<option value='all'>All boards</option>
-								{boards.map((item) => (
-									<option key={item._id} value={item._id}>{item.name}</option>
-								))}
-							</select>
-							<ChevronDown size={14} className='my-tasks-select-icon' />
-						</div>
-					</div>
-					</>}
+						</>
+					)}
 					{isLoading ? (
 						<div className='my-tasks-loading' role='status' aria-live='polite'>
-							<div className='my-tasks-loading-stats'>{[1, 2, 3, 4].map((item) => <div className='my-tasks-loading-stat-card' key={item}><div><span /><i /></div><b /></div>)}</div>
-							<div className='my-tasks-loading-toolbar'><span className='search' /><span className='filter' /><span className='filter' /></div>
+							<div className='my-tasks-loading-stats'>
+								{[1, 2, 3, 4].map((item) => (
+									<div className='my-tasks-loading-stat-card' key={item}>
+										<div>
+											<span />
+											<i />
+										</div>
+										<b />
+									</div>
+								))}
+							</div>
+							<div className='my-tasks-loading-toolbar'>
+								<span className='search' />
+								<span className='filter' />
+								<span className='filter' />
+							</div>
 							<div className='my-tasks-loading-group'>
-								<div className='my-tasks-loading-group-heading'><span /><div><b /><i /></div><em /></div>
-								{[1, 2, 3].map((item) => <div className='my-tasks-loading-row' key={item}><i /><span /><b /><em /></div>)}
+								<div className='my-tasks-loading-group-heading'>
+									<span />
+									<div>
+										<b />
+										<i />
+									</div>
+									<em />
+								</div>
+								{[1, 2, 3, 4].map((item) => (
+									<div className='my-tasks-loading-row' key={item}>
+										<i />
+										<span />
+										<b />
+										<em />
+									</div>
+								))}
 							</div>
 						</div>
 					) : tasks.length ? (
@@ -277,10 +347,16 @@ const MyTasks = () => {
 								<section className='my-tasks-group' key={group.id}>
 									<div className='my-tasks-group-heading'>
 										<div className='my-tasks-group-title'>
-											<span className='my-tasks-group-icon'><Layers3 size={16} /></span>
+											<span className='my-tasks-group-icon'>
+												<Layers3 size={16} />
+											</span>
 											<div>
 												<strong>{group.name}</strong>
-												<small>{group.tasks.length} {group.tasks.length === 1 ? 'task' : 'tasks'} assigned to you</small>
+												<small>
+													{group.tasks.length}{' '}
+													{group.tasks.length === 1 ? 'task' : 'tasks'} assigned
+													to you
+												</small>
 											</div>
 										</div>
 										<button
@@ -300,26 +376,43 @@ const MyTasks = () => {
 												key={task._id}
 												onClick={() => navigate(`/workspaces/${group.id}`)}
 											>
-												<span className='my-task-icon'><ClipboardList size={18} /></span>
+												<span className='my-task-icon'>
+													<ClipboardList size={18} />
+												</span>
 												<span className='my-task-copy'>
 													<strong>{task.title}</strong>
-																											<span className='my-task-meta'>
-																												<span className={`my-task-status is-${getTaskStatus(task).toLowerCase().replace(' ', '-')}`}>
-																													{getTaskStatus(task)}
-																												</span>
-																												<span>{task.column?.title || 'Column'}</span>
-																											</span>
+													<span className='my-task-meta'>
+														<span
+															className={`my-task-status is-${getTaskStatus(task).toLowerCase().replace(' ', '-')}`}
+														>
+															{getTaskStatus(task)}
+														</span>
+														<span>{task.column?.title || 'Column'}</span>
+													</span>
 												</span>
-																						<span className='my-task-actions'>
-																							{task.dueDate && (
-																								<span className={`my-task-due is-${getDueDateState(task)}`}>
-																									<CalendarDays size={13} />
-																									<span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-																										</span>
-																									)}
-																							<span className={`my-task-priority is-${task.priority || 'none'}`}>{formatPriority(task.priority)}</span>
-																							</span>
-												<span className='my-task-arrow'><ArrowUpRight size={17} /></span>
+												<span className='my-task-actions'>
+													{task.dueDate && (
+														<span
+															className={`my-task-due is-${getDueDateState(task)}`}
+														>
+															<CalendarDays size={13} />
+															<span>
+																{new Date(task.dueDate).toLocaleDateString(
+																	undefined,
+																	{ month: 'short', day: 'numeric' },
+																)}
+															</span>
+														</span>
+													)}
+													<span
+														className={`my-task-priority is-${task.priority || 'none'}`}
+													>
+														{formatPriority(task.priority)}
+													</span>
+												</span>
+												<span className='my-task-arrow'>
+													<ArrowUpRight size={17} />
+												</span>
 											</button>
 										))}
 									</div>
@@ -329,9 +422,25 @@ const MyTasks = () => {
 					) : (
 						<div className='my-tasks-empty'>
 							<CheckCircle2 size={26} />
-							<strong>{hasFilters ? 'No tasks match these filters' : 'No tasks assigned yet'}</strong>
-							<span>{hasFilters ? 'Try a different search or clear the filters.' : 'When someone assigns a task to you, it will appear here.'}</span>
-							{hasFilters && <button type='button' className='my-tasks-empty-action' onClick={clearFilters}>Clear filters</button>}
+							<strong>
+								{hasFilters
+									? 'No tasks match these filters'
+									: 'No tasks assigned yet'}
+							</strong>
+							<span>
+								{hasFilters
+									? 'Try a different search or clear the filters.'
+									: 'When someone assigns a task to you, it will appear here.'}
+							</span>
+							{hasFilters && (
+								<button
+									type='button'
+									className='my-tasks-empty-action'
+									onClick={clearFilters}
+								>
+									Clear filters
+								</button>
+							)}
 						</div>
 					)}
 				</div>

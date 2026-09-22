@@ -30,6 +30,8 @@ const ResetPassword = () => {
 	const [tokenError, setTokenError] = useState('')
 	const [tokenStatus, setTokenStatus] = useState('')
 	const [isTokenValid, setIsTokenValid] = useState(false)
+	const shouldAutoFocusEmail =
+		typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches
 	const [token] = useState(() => {
 		if (typeof window === 'undefined') return ''
 		return new URLSearchParams(window.location.search).get('token') || ''
@@ -383,7 +385,7 @@ const ResetPassword = () => {
 												}}
 												placeholder='you@example.com'
 												autoComplete='email'
-												autoFocus={!isPasswordReset}
+												autoFocus={!isPasswordReset && shouldAutoFocusEmail}
 												required
 														aria-invalid={Boolean(fieldErrors.email)}
 														aria-describedby={fieldErrors.email ? 'reset-email-error' : undefined}

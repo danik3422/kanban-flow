@@ -41,6 +41,8 @@ const Signup = () => {
 	const [passwordVisible, setPasswordVisible] = useState(false)
 	const [confirmVisible, setConfirmVisible] = useState(false)
 	const [previewStage, setPreviewStage] = useState(0)
+	const shouldAutoFocusEmail =
+		typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches
 	const activePreview = signupPreviewStages[previewStage]
 
 	useEffect(() => {
@@ -207,7 +209,7 @@ const Signup = () => {
 							<div className='auth-input-wrap'>
 								<input
 									ref={emailInputRef}
-									autoFocus={!emailLocked}
+									autoFocus={!emailLocked && shouldAutoFocusEmail}
 									id='email'
 									name='email'
 									type='email'

@@ -7,11 +7,13 @@ import {
 	Pencil,
 	ShieldCheck,
 } from 'lucide-react'
+import { startAuthentication } from '@simplewebauthn/browser'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
 import AuthButton from '../ui/AuthButton'
+import { axiosInstance } from '../lib/axios'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 
@@ -23,7 +25,7 @@ const loginPreviewStages = [
 ]
 
 const Login = () => {
-	const { authUser, login, handleSocialSignin, isLoggingIn } = useAuthStore()
+	const { authUser, login, passkeyLogin, handleSocialSignin, isLoggingIn } = useAuthStore()
 	const currentLanguage =
 		authUser?.language || document.documentElement.lang || 'en'
 	const t = translations[currentLanguage] || translations.en
@@ -37,6 +39,8 @@ const Login = () => {
 	const [passwordVisible, setPasswordVisible] = useState(false)
 	const [emailLocked, setEmailLocked] = useState(false)
 	const [previewStage, setPreviewStage] = useState(0)
+	const shouldAutoFocusEmail =
+		typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches
 	const activePreview = loginPreviewStages[previewStage]
 
 	useEffect(() => {
@@ -77,6 +81,18 @@ const Login = () => {
 		setFieldErrors({})
 		await login(formData)
 		// App.jsx will handle redirect to /verify-email if email not verified
+	}
+
+	const handlePasskeyLogin = async () => {
+		try {
+			const { data: options } = await axiosInstance.post('/auth/passkeys/auth-options', { email: formData.email.trim() })
+			const assertion = await startAuthentication({ optionsJSON: options })
+			await passkeyLogin(assertion)
+		} catch (error) {
+			if (error.name !== 'NotAllowedError') {
+				setFieldErrors({ password: error.message || 'Could not sign in with passkey' })
+			}
+		}
 	}
 
 	const handleEditEmail = () => {
@@ -160,7 +176,7 @@ const Login = () => {
 							<div className='auth-input-wrap'>
 								<input
 									ref={emailInputRef}
-									autoFocus={!emailLocked}
+									autoFocus={!emailLocked && shouldAutoFocusEmail}
 									id='email'
 									name='email'
 									type='email'
@@ -237,6 +253,11 @@ const Login = () => {
 									</p>
 								)}
 							</div>
+						)}
+						{emailLocked && (
+							<button type='button' className='quiet-button auth-passkey-button' onClick={handlePasskeyLogin} disabled={isLoggingIn}>
+								<ShieldCheck size={16} /> Use a passkey
+							</button>
 						)}
 						<button
 							type='submit'

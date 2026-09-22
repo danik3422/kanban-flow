@@ -1,6 +1,8 @@
 import express from 'express'
 import {
 	changePassword,
+	createPasskeyRegistrationOptions,
+	createPasskeyAuthenticationOptions,
 	connectSocialAccount,
 	setSocialPassword,
 	getAuthUser,
@@ -8,10 +10,13 @@ import {
 	socialSignin,
 	login,
 	logout,
+	removePasskey,
 	requestPasswordReset,
 	resetPassword,
 	resendVerificationEmail,
 	setupProfile,
+	verifyPasskeyRegistration,
+	authenticateWithPasskey,
 	signup,
 	updateSettings,
 	verifyEmail,
@@ -33,6 +38,7 @@ import { authMiddleware, verifiedAuthMiddleware } from '../middlewares/auth.midd
 import {
 	authLimiter,
 	passwordResetLimiter,
+	passwordChangeLimiter,
 	verificationEmailIpLimiter,
 	verificationEmailLimiter,
 } from '../middlewares/security.middleware.js'
@@ -102,8 +108,14 @@ router.patch(
 router.patch(
 	'/change-password',
 	verifiedAuthMiddleware,
+	passwordChangeLimiter,
 	validateBody(changePasswordSchema),
 	changePassword,
 )
+router.post('/passkeys/options', verifiedAuthMiddleware, createPasskeyRegistrationOptions)
+router.post('/passkeys/verify', verifiedAuthMiddleware, verifyPasskeyRegistration)
+router.delete('/passkeys/:credentialId', verifiedAuthMiddleware, authLimiter, removePasskey)
+router.post('/passkeys/auth-options', authLimiter, createPasskeyAuthenticationOptions)
+router.post('/passkeys/authenticate', authLimiter, authenticateWithPasskey)
 
 export default router

@@ -19,12 +19,28 @@ const userSchema = new mongoose.Schema(
 			default: 'local',
 		},
 		providerUid: { type: String, sparse: true, index: true },
+		linkedProviders: [{
+			provider: { type: String, enum: ['google', 'microsoft', 'apple'], required: true },
+			providerUid: { type: String, required: true },
+			linkedAt: { type: Date, default: Date.now },
+		}],
 		emailVerified: { type: Boolean, default: false },
 		emailVerificationTokenHash: { type: String, default: '' },
 		emailVerificationTokenExpiresAt: { type: Date, default: null },
 		emailVerificationLastSentAt: { type: Date, default: null },
 		profileSetup: { type: Boolean, default: false },
 		sessionVersion: { type: Number, default: 0 },
+		passkeys: [{
+			credentialID: { type: String, required: true },
+			publicKey: { type: Buffer, required: true },
+			counter: { type: Number, default: 0 },
+			transports: [{ type: String }],
+			createdAt: { type: Date, default: Date.now },
+		}],
+		passkeyRegistrationChallenge: { type: String, default: '' },
+		passkeyRegistrationChallengeExpiresAt: { type: Date, default: null },
+		passkeyAuthenticationChallenge: { type: String, default: '' },
+		passkeyAuthenticationChallengeExpiresAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
 )

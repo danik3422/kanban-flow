@@ -1,6 +1,12 @@
 import bcrypt from 'bcrypt'
 import { getAuth } from 'firebase-admin/auth'
 import crypto from 'node:crypto'
+import {
+	generateAuthenticationOptions,
+	generateRegistrationOptions,
+	verifyAuthenticationResponse,
+	verifyRegistrationResponse,
+} from '@simplewebauthn/server'
 import { env } from '../config/env.js'
 import cloudinary from '../lib/cloudinary.js'
 import admin from '../lib/firebaseAdmin.js'
@@ -14,6 +20,170 @@ import { publicUserFields } from '../lib/userProjection.js'
 import { generateToken } from '../lib/utils.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
+
+const getPasskeyRp = () => {
+	const frontendUrl = new URL(env.frontendUrl)
+	return {
+		rpID: frontendUrl.hostname,
+		expectedOrigin: frontendUrl.origin,
+	}
+}
+
+export const createPasskeyRegistrationOptions = async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id).select('email name passkeys')
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		const { rpID } = getPasskeyRp()
+		const options = await generateRegistrationOptions({
+			rpName: 'KanbanHub',
+			rpID,
+			userID: Buffer.from(String(user._id)),
+			userName: user.email,
+			userDisplayName: user.name || user.email,
+			attestationType: 'none',
+			excludeCredentials: user.passkeys.map((passkey) => ({
+				id: passkey.credentialID,
+				transports: passkey.transports,
+			})),
+			authenticatorSelection: {
+				residentKey: 'preferred',
+				userVerification: 'required',
+			},
+		})
+		user.passkeyRegistrationChallenge = options.challenge
+		user.passkeyRegistrationChallengeExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
+		await user.save()
+		return res.json(options)
+	} catch (error) {
+		console.error('Passkey options error:', error)
+		return res.status(500).json({ message: 'Could not start passkey setup' })
+	}
+}
+
+export const verifyPasskeyRegistration = async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		if (!user.passkeyRegistrationChallenge || !user.passkeyRegistrationChallengeExpiresAt || user.passkeyRegistrationChallengeExpiresAt < new Date()) {
+			return res.status(400).json({ message: 'Passkey setup session expired' })
+		}
+		const { rpID, expectedOrigin } = getPasskeyRp()
+		const verification = await verifyRegistrationResponse({
+			response: req.body,
+			expectedChallenge: user.passkeyRegistrationChallenge,
+			expectedOrigin,
+			expectedRPID: rpID,
+			requireUserVerification: true,
+		})
+		if (!verification.verified || !verification.registrationInfo) {
+			return res.status(400).json({ message: 'Passkey could not be verified' })
+		}
+		const { credential } = verification.registrationInfo
+		const credentialId = credential.id
+		const alreadyRegistered = user.passkeys.some((passkey) => passkey.credentialID === credentialId)
+		if (!alreadyRegistered) {
+			user.passkeys.push({
+				credentialID: credentialId,
+				publicKey: Buffer.from(credential.publicKey),
+				counter: credential.counter,
+				transports: credential.transports || [],
+				createdAt: new Date(),
+			})
+		}
+		user.passkeyRegistrationChallenge = ''
+		user.passkeyRegistrationChallengeExpiresAt = null
+		await user.save()
+		return res.json({ message: 'Passkey added successfully' })
+	} catch (error) {
+		console.error('Passkey verification error:', error)
+		return res.status(400).json({ message: 'Passkey could not be verified' })
+	}
+}
+
+export const removePasskey = async (req, res) => {
+	try {
+		const credentialId = String(req.params.credentialId || '')
+		if (!/^[A-Za-z0-9_-]+$/.test(credentialId)) {
+			return res.status(400).json({ message: 'Invalid passkey ID' })
+		}
+		const user = await User.findById(req.user._id)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		const initialCount = user.passkeys.length
+		user.passkeys = user.passkeys.filter((passkey) => passkey.credentialID !== credentialId)
+		if (user.passkeys.length === initialCount) {
+			return res.status(404).json({ message: 'Passkey not found' })
+		}
+		await user.save()
+		return res.json({ message: 'Passkey removed successfully' })
+	} catch (error) {
+		console.error('Passkey removal error:', error)
+		return res.status(500).json({ message: 'Could not remove passkey' })
+	}
+}
+
+export const createPasskeyAuthenticationOptions = async (req, res) => {
+	try {
+		const { rpID } = getPasskeyRp()
+		const options = await generateAuthenticationOptions({
+			rpID,
+			userVerification: 'preferred',
+		})
+		const user = await User.findOne({ email: req.body?.email }).select('_id')
+		if (user) {
+			user.passkeyAuthenticationChallenge = options.challenge
+			user.passkeyAuthenticationChallengeExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
+			await user.save()
+		}
+		return res.json(options)
+	} catch (error) {
+		console.error('Passkey authentication options error:', error)
+		return res.status(500).json({ message: 'Could not start passkey sign-in' })
+	}
+}
+
+export const authenticateWithPasskey = async (req, res) => {
+	try {
+		const credentialId = req.body?.id
+		const user = await User.findOne({ 'passkeys.credentialID': credentialId })
+		if (!user || !user.passkeyAuthenticationChallenge || !user.passkeyAuthenticationChallengeExpiresAt || user.passkeyAuthenticationChallengeExpiresAt < new Date()) {
+			return res.status(400).json({ message: 'Passkey sign-in session expired' })
+		}
+		const storedCredential = user.passkeys.find((passkey) => passkey.credentialID === credentialId)
+		const { rpID, expectedOrigin } = getPasskeyRp()
+		const verification = await verifyAuthenticationResponse({
+			response: req.body,
+			expectedChallenge: user.passkeyAuthenticationChallenge,
+			expectedOrigin,
+			expectedRPID: rpID,
+			credential: {
+				id: storedCredential.credentialID,
+				publicKey: storedCredential.publicKey,
+				counter: storedCredential.counter,
+				transports: storedCredential.transports,
+			},
+			requireUserVerification: true,
+		})
+		if (!verification.verified) return res.status(400).json({ message: 'Passkey is not valid' })
+		storedCredential.counter = verification.authenticationInfo.newCounter
+		user.passkeyAuthenticationChallenge = ''
+		user.passkeyAuthenticationChallengeExpiresAt = null
+		await user.save()
+		generateToken(user._id, res, user.sessionVersion)
+		return res.json({
+			_id: user._id,
+			email: user.email,
+			name: user.name,
+			avatar: user.avatar,
+			provider: user.provider,
+			profileSetup: user.profileSetup,
+			emailVerified: user.emailVerified,
+			requiresVerification: !user.emailVerified,
+		})
+	} catch (error) {
+		console.error('Passkey authentication error:', error)
+		return res.status(400).json({ message: 'Could not sign in with passkey' })
+	}
+}
 
 export const assertProviderEmailVerified = (decodedToken) => {
 	if (decodedToken.email_verified !== true) {
@@ -31,8 +201,10 @@ export const assertProviderIdentityAvailable = async ({
 	userId,
 }) => {
 	const existingProviderUser = await User.findOne({
-		provider,
-		providerUid,
+		$or: [
+			{ provider, providerUid },
+			{ 'linkedProviders.provider': provider, 'linkedProviders.providerUid': providerUid },
+		],
 	}).select('_id')
 	if (
 		existingProviderUser &&
@@ -125,25 +297,34 @@ export const socialSignin = async (req, res) => {
 		if (!email)
 			return res.status(400).json({ message: 'Invalid token: missing email' })
 
-		const user = await User.findOne({ email: email.toLowerCase() })
+		const user = await User.findOne({
+			$or: [
+				{ email: email.toLowerCase() },
+				{ provider, providerUid: decodedToken.uid },
+				{ 'linkedProviders.provider': provider, 'linkedProviders.providerUid': decodedToken.uid },
+			],
+		})
 		if (!user)
 			return res
 				.status(404)
 				.json({ message: 'User not found. Please sign up first.' })
-		if (user.provider !== 'local' && user.provider !== provider) {
+		const linkedProvider = user.linkedProviders?.some(
+			(link) => link.provider === provider && link.providerUid === decodedToken.uid,
+		)
+		if (user.provider !== 'local' && user.provider !== provider && !linkedProvider) {
 			return res
 				.status(400)
 				.json({ message: `This account is registered with ${user.provider}.` })
 		}
 
-		if (user.provider === 'local') {
+		if (user.provider === 'local' && !linkedProvider) {
 			return res
 				.status(409)
 				.json({
 					message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
 				})
 		}
-		if (user.provider !== provider) {
+		if (user.provider !== provider && !linkedProvider) {
 			return res
 				.status(409)
 				.json({
@@ -159,6 +340,7 @@ export const socialSignin = async (req, res) => {
 			avatar: user.avatar,
 			profileSetup: user.profileSetup,
 			provider: user.provider,
+			linkedProviders: user.linkedProviders?.map(({ provider: linkedProviderName, linkedAt }) => ({ provider: linkedProviderName, linkedAt })),
 		})
 	} catch (error) {
 		console.error('Social Signin Error:', error)
@@ -266,9 +448,12 @@ export const connectSocialAccount = async (req, res) => {
 			userId: req.user._id,
 		})
 
-		user.provider = provider
-		user.providerUid = decodedToken.uid
-		user.emailVerified = true
+		const alreadyLinked = user.linkedProviders.some(
+			(link) => link.provider === provider && link.providerUid === decodedToken.uid,
+		)
+		if (!alreadyLinked) {
+			user.linkedProviders.push({ provider, providerUid: decodedToken.uid })
+		}
 		user.emailVerificationTokenHash = ''
 		user.emailVerificationTokenExpiresAt = null
 		await user.save()
@@ -282,6 +467,7 @@ export const connectSocialAccount = async (req, res) => {
 				avatar: user.avatar,
 				profileSetup: user.profileSetup,
 				provider: user.provider,
+				linkedProviders: user.linkedProviders.map(({ provider: linkedProviderName, linkedAt }) => ({ provider: linkedProviderName, linkedAt })),
 			})
 	} catch (error) {
 		console.error('Connect Social Error:', error)
@@ -846,7 +1032,19 @@ export const logout = (req, res) => {
 
 export const getAuthUser = async (req, res) => {
 	try {
-		res.status(200).json(req.user)
+		const user = await User.findById(req.user._id).select(`${publicUserFields} passkeys linkedProviders`)
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		const userData = user.toObject()
+		delete userData.passkeys
+		return res.status(200).json({
+			...userData,
+			passkeyEnabled: user.passkeys.length > 0,
+			linkedProviders: user.linkedProviders?.map(({ provider, linkedAt }) => ({ provider, linkedAt })) || [],
+			passkeys: user.passkeys.map((passkey) => ({
+				id: passkey.credentialID,
+				createdAt: passkey.createdAt,
+			})),
+		})
 	} catch (error) {
 		console.log('Error in getAuthUser controller', error.message)
 		res.status(500).json({
@@ -888,7 +1086,7 @@ export const changePassword = async (req, res) => {
 				message: 'Set a local password from profile before changing it',
 			})
 		if (!(await bcrypt.compare(currentPassword, user.password)))
-			return res.status(400).json({ message: 'Current password is incorrect' })
+			return res.status(401).json({ message: 'Current password is incorrect' })
 		if (await bcrypt.compare(newPassword, user.password)) {
 			return res.status(400).json({
 				message: 'New password must be different from your current password',
@@ -908,7 +1106,7 @@ export const changePassword = async (req, res) => {
 
 export const setupProfile = async (req, res) => {
 	try {
-		const { name, jobTitle, timezone, avatar } = req.body
+		const { name, jobTitle, timezone, avatar, removeAvatar } = req.body
 		const userId = req.user._id
 
 		const user = await User.findById(userId)
@@ -917,6 +1115,7 @@ export const setupProfile = async (req, res) => {
 		if (name) user.name = name.trim()
 		if (jobTitle !== undefined) user.jobTitle = jobTitle.trim()
 		if (timezone) user.timezone = timezone
+		if (removeAvatar && !avatar) user.avatar = ''
 
 		// Upload base64 or data URL to Cloudinary
 		if (avatar && avatar.startsWith('data:image')) {

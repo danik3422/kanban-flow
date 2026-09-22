@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { fetchBoardMembersWithCache } from '../lib/boardMembersCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
@@ -199,7 +198,6 @@ const Team = () => {
 							<ChevronDown size={14} />
 							</>}
 						</div>
-						<span className={`team-results-count ${isLoading ? 'team-loading-results' : ''}`}>{isLoading ? '' : `${sortedPeople.length} shown`}</span>
 					</div>
 					{isLoading ? (
 						<div className='team-loading-grid' role='status' aria-live='polite'>

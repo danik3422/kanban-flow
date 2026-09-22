@@ -3,6 +3,7 @@ import {
 	LoaderCircle,
 	LockKeyhole,
 	Menu,
+	MoreHorizontal,
 	PanelLeftClose,
 	PanelLeftOpen,
 	UsersRound,
@@ -12,6 +13,7 @@ import {
 import AccountDropdown from './AccountDropdown'
 import ActivityFeed from './ActivityFeed'
 import NotificationCenter from './NotificationCenter'
+import { useState } from 'react'
 
 const WorkspaceTopbar = ({
 	isSidebarOpen,
@@ -25,7 +27,11 @@ const WorkspaceTopbar = ({
 	activities,
 	activityLoading,
 	children,
-}) => (
+}) => {
+	const [isMoreOpen, setIsMoreOpen] = useState(false)
+	const hasRoomActions = Boolean(onInvite || onVisibilityChange)
+
+	return (
 	<header className='workspace-topbar'>
 		<div className='workspace-topbar-leading'>
 			<button
@@ -80,33 +86,43 @@ const WorkspaceTopbar = ({
 					</span>
 				</div>
 			)}
-			{onInvite && <ActivityFeed activities={activities} isLoading={activityLoading} />}
-			{onInvite && (
-				<button
-					type='button'
-					className='workspace-topbar-invite'
-					onClick={onInvite}
-					aria-label='Open people in this room'
-					title='People'
-				>
-					<UsersRound size={17} />
+			{hasRoomActions && (
+			<div className='workspace-secondary-actions'>
+				<button type='button' className='workspace-more-trigger' onClick={() => setIsMoreOpen((value) => !value)} aria-expanded={isMoreOpen} aria-label='More room actions' title='More room actions'>
+					<MoreHorizontal size={18} />
 				</button>
+				<div className={`workspace-secondary-menu ${isMoreOpen ? 'is-open' : ''}`}>
+					{onInvite && <ActivityFeed activities={activities} isLoading={activityLoading} />}
+					{onInvite && (
+						<button
+							type='button'
+							className='workspace-topbar-invite'
+							onClick={() => { setIsMoreOpen(false); onInvite() }}
+							aria-label='Open people in this room'
+							title='People'
+						>
+							<UsersRound size={17} />
+						</button>
+					)}
+					{onVisibilityChange && (
+						<button
+							type='button'
+							className='workspace-topbar-visibility'
+							onClick={() => { setIsMoreOpen(false); onVisibilityChange() }}
+							aria-label='Change room visibility'
+							title={`Room visibility: ${boardVisibility || 'private'}`}
+						>
+							<LockKeyhole size={17} />
+						</button>
+					)}
+				</div>
+			</div>
 			)}
 			<NotificationCenter />
-			{onVisibilityChange && (
-				<button
-					type='button'
-					className='workspace-topbar-visibility'
-					onClick={onVisibilityChange}
-					aria-label='Change room visibility'
-					title={`Room visibility: ${boardVisibility || 'private'}`}
-				>
-					<LockKeyhole size={17} />
-				</button>
-			)}
 			<AccountDropdown />
 		</div>
 	</header>
 )
+}
 
 export default WorkspaceTopbar

@@ -1,5 +1,5 @@
-import { ArrowLeft, Camera, Clock3, LockKeyhole, Save, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, Camera, CheckCircle2, Clock3, LockKeyhole, Save, UserRound, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
@@ -19,8 +19,9 @@ const EditProfile = () => {
 	)
 	const [avatarFile, setAvatarFile] = useState(null)
 	const [avatarPreview, setAvatarPreview] = useState(authUser?.avatar || '/avatar.png')
+	const [removeAvatar, setRemoveAvatar] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
-	const timezones = timezoneOptions.map((option) => option.label)
+	const avatarInputRef = useRef(null)
 
 	const convertFileToBase64 = (file) => new Promise((resolve, reject) => {
 		const reader = new FileReader()
@@ -38,7 +39,13 @@ const EditProfile = () => {
 		setIsSaving(true)
 		try {
 			const avatar = avatarFile ? await convertFileToBase64(avatarFile) : null
-			await axiosInstance.patch('/auth/setup-profile', { name, jobTitle, timezone: timezoneValues[timezone], avatar })
+			await axiosInstance.patch('/auth/setup-profile', {
+				name,
+				jobTitle,
+				timezone: timezoneValues[timezone],
+				avatar,
+				removeAvatar: removeAvatar && !avatarFile,
+			})
 			await checkAuth()
 			toast.success('Profile updated successfully')
 			navigate('/profile')
@@ -51,13 +58,19 @@ const EditProfile = () => {
 
 	return (
 		<main className='account-page edit-profile-page'>
-			<div className='account-page-header'><Link to='/profile' className='account-back-link'><ArrowLeft size={15} /> Back to profile</Link><p className='eyebrow'>Profile settings</p><h1>Edit your profile.</h1><p>Keep the information your team sees up to date.</p></div>
+			<div className='account-page-header'><Link to='/profile' className='account-back-link'><ArrowLeft size={15} /> Back to profile</Link><p className='eyebrow'>Profile settings</p><h1>Shape your profile.</h1><p>Keep the information your team sees up to date.</p></div>
 			<section className='account-page-card edit-profile-card'>
 				<form className='edit-profile-form' onSubmit={handleSubmit}>
-					<label className='edit-avatar-upload'><img src={avatarPreview} alt='' /><span><Camera size={15} /> Change photo</span><input type='file' accept='image/*' onChange={(event) => { const file = event.target.files?.[0]; if (file) { setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)) } }} /></label>
-					<div className='setup-field'><label htmlFor='edit-name'>Full name</label><div className='setup-input-wrap'><UserRound size={16} /><input id='edit-name' value={name} onChange={(event) => setName(event.target.value)} required /></div></div>
+					<div className='edit-profile-identity'>
+						<div className='edit-avatar-frame'>
+							<img src={avatarPreview} alt='' />
+							{avatarPreview !== '/avatar.png' && <button type='button' className='edit-avatar-remove' onClick={() => { setAvatarFile(null); setAvatarPreview('/avatar.png'); setRemoveAvatar(true); if (avatarInputRef.current) avatarInputRef.current.value = '' }} aria-label='Remove profile photo' title='Remove profile photo'><X size={14} /></button>}
+						</div>
+						<div className='edit-profile-identity-copy'><span className='profile-status'><CheckCircle2 size={13} /> Photo preview</span><strong>{avatarPreview !== '/avatar.png' ? 'Custom profile photo' : 'Default profile photo'}</strong><small>JPG or PNG, up to 5 MB.</small><label className='edit-avatar-picker'><Camera size={15} /> Choose photo<input ref={avatarInputRef} type='file' accept='image/*' onChange={(event) => { const file = event.target.files?.[0]; if (file) { setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); setRemoveAvatar(false) } }} /></label></div>
+					</div>
+					<div className='edit-profile-fields'><div className='setup-field'><label htmlFor='edit-name'>Full name</label><div className='setup-input-wrap'><UserRound size={16} /><input id='edit-name' value={name} onChange={(event) => setName(event.target.value)} required /></div></div>
 					<div className='setup-field'><label htmlFor='edit-job'>Role or job title</label><input id='edit-job' className='plain-edit-input' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder='e.g. Product designer' /></div>
-					<div className='setup-field'><label htmlFor='edit-timezone'>Timezone</label><div className='setup-input-wrap'><Clock3 size={16} /><select id='edit-timezone' value={timezone} onChange={(event) => setTimezone(event.target.value)}>{timezones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}</select></div></div>
+					<div className='setup-field'><label htmlFor='edit-timezone'>Timezone</label><div className='setup-input-wrap'><Clock3 size={16} /><select id='edit-timezone' value={timezone} onChange={(event) => setTimezone(event.target.value)}>{timezoneOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}</select></div></div></div>
 					<div className='edit-profile-actions'><Link to='/profile' className='quiet-button'>Cancel</Link><button type='submit' className='primary-button' disabled={isSaving}>{isSaving ? 'Saving...' : <><Save size={16} /> Save changes</>}</button></div>
 				</form>
 			</section>

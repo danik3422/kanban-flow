@@ -45,6 +45,18 @@ export const passwordResetLimiter = rateLimit({
 	keyGenerator: getRateLimitKey,
 })
 
+export const passwordChangeLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 8,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: {
+		message: 'Too many password change attempts. Please try again later.',
+	},
+	skipSuccessfulRequests: false,
+	keyGenerator: getRateLimitKey,
+})
+
 export const verificationEmailIpLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	limit: 20,

@@ -159,7 +159,8 @@ const InviteMemberModal = ({
 		if (!openRoleMemberId) return undefined
 
 		const closeOnOutsideInteraction = (event) => {
-			if (!event.target.closest('.share-role-menu')) {
+			const target = event.target
+			if (!(target instanceof Element) || !target.closest('.share-role-menu')) {
 				setOpenRoleMemberId(null)
 			}
 		}
@@ -167,10 +168,10 @@ const InviteMemberModal = ({
 			if (event.key === 'Escape') setOpenRoleMemberId(null)
 		}
 
-		document.addEventListener('mousedown', closeOnOutsideInteraction)
+		document.addEventListener('pointerdown', closeOnOutsideInteraction, true)
 		document.addEventListener('keydown', closeOnEscape)
 		return () => {
-			document.removeEventListener('mousedown', closeOnOutsideInteraction)
+			document.removeEventListener('pointerdown', closeOnOutsideInteraction, true)
 			document.removeEventListener('keydown', closeOnEscape)
 		}
 	}, [openRoleMemberId])

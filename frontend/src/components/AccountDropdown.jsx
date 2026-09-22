@@ -1,5 +1,5 @@
-import { ChevronDown, LogOut, Palette, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, LogOut, Settings2, UserRound, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -14,14 +14,18 @@ const AccountDropdown = () => {
 	const [isSwipeClosing, setIsSwipeClosing] = useState(false)
 	const [isSheetExpanded, setIsSheetExpanded] = useState(false)
 	const [sheetOffset, setSheetOffset] = useState(0)
-	const [sheetDragHeight, setSheetDragHeight] = useState(null)
-	const [sheetSettle, setSheetSettle] = useState(null)
 	const [isSheetDragging, setIsSheetDragging] = useState(false)
+	const [isSheetSettling, setIsSheetSettling] = useState(false)
+	const [sheetSettleDuration, setSheetSettleDuration] = useState(360)
 	const dropdownRef = useRef(null)
 	const triggerRef = useRef(null)
 	const sheetDragStart = useRef(null)
 	const sheetDragLastY = useRef(null)
 	const sheetBaseHeight = useRef(0)
+	const sheetDraggingRef = useRef(false)
+	const sheetFrameRef = useRef(null)
+	const sheetLastTime = useRef(0)
+	const sheetVelocity = useRef(0)
 
 	useEffect(() => {
 		const handleClickOutside = (event) => {
@@ -37,13 +41,12 @@ const AccountDropdown = () => {
 					setIsClosing(false)
 					setIsSheetExpanded(false)
 					setSheetOffset(0)
-					setSheetDragHeight(null)
 				}, 300)
 			}
 		}
 
-		document.addEventListener('mousedown', handleClickOutside)
-		return () => document.removeEventListener('mousedown', handleClickOutside)
+		document.addEventListener('pointerdown', handleClickOutside)
+		return () => document.removeEventListener('pointerdown', handleClickOutside)
 	}, [])
 
 	useEffect(() => {
@@ -51,10 +54,9 @@ const AccountDropdown = () => {
 		return () => document.body.classList.remove('account-sheet-open')
 	}, [isDropdownOpen])
 
-	const closeMenu = ({ swipe = false } = {}) => {
+	const closeMenu = useCallback(({ swipe = false } = {}) => {
 		if (!isDropdownOpen || isClosing) return
 		if (swipe) {
-			setSheetDragHeight(null)
 			setIsSheetEntering(false)
 			setIsSwipeClosing(true)
 			setSheetOffset(window.innerHeight)
@@ -73,9 +75,17 @@ const AccountDropdown = () => {
 			setIsClosing(false)
 			setIsSheetExpanded(false)
 			setSheetOffset(0)
-			setSheetDragHeight(null)
 		}, 300)
-	}
+	}, [isClosing, isDropdownOpen])
+
+	useEffect(() => {
+		if (!isDropdownOpen) return undefined
+		const handleKeyDown = (event) => {
+			if (event.key === 'Escape') closeMenu()
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [closeMenu, isDropdownOpen])
 
 	const toggleMenu = () => {
 		if (isDropdownOpen) closeMenu()
@@ -101,6 +111,10 @@ const AccountDropdown = () => {
 		sheetDragLastY.current = event.clientY
 		sheetBaseHeight.current =
 			dropdownRef.current?.getBoundingClientRect().height || 0
+		sheetDraggingRef.current = false
+		sheetLastTime.current = performance.now()
+		sheetVelocity.current = 0
+		setIsSheetSettling(false)
 		setIsSheetDragging(false)
 		event.currentTarget.setPointerCapture(event.pointerId)
 	}
@@ -108,20 +122,23 @@ const AccountDropdown = () => {
 	const handleSheetPointerMove = (event) => {
 		if (sheetDragStart.current === null) return
 		if (Math.abs(event.clientY - sheetDragStart.current) < 4) return
-		setIsSheetDragging(true)
+		if (!sheetDraggingRef.current) {
+			sheetDraggingRef.current = true
+			setIsSheetDragging(true)
+		}
 		event.preventDefault()
 		const delta = event.clientY - sheetDragStart.current
+		const now = performance.now()
+		const elapsed = Math.max(8, now - sheetLastTime.current)
+		const instantVelocity = (event.clientY - (sheetDragLastY.current ?? event.clientY)) / elapsed
+		sheetVelocity.current = sheetVelocity.current * 0.65 + instantVelocity * 0.35
+		sheetLastTime.current = now
 		sheetDragLastY.current = event.clientY
-		if (delta < 0) {
-			const stretch = Math.min(132, Math.abs(delta) * 0.48)
-			setSheetOffset(0)
-			setSheetDragHeight(
-				Math.min(window.innerHeight - 12, sheetBaseHeight.current + stretch),
-			)
-		} else {
-			setSheetDragHeight(sheetBaseHeight.current)
-			setSheetOffset(Math.min(180, delta))
-		}
+		const offset = delta < 0 ? 0 : Math.min(180, delta)
+		if (sheetFrameRef.current) cancelAnimationFrame(sheetFrameRef.current)
+		sheetFrameRef.current = requestAnimationFrame(() => {
+			dropdownRef.current?.style.setProperty('--sheet-drag-offset', `${offset}px`)
+		})
 	}
 
 	const handleSheetPointerUp = (event) => {
@@ -130,24 +147,22 @@ const AccountDropdown = () => {
 			(sheetDragLastY.current ?? event.clientY) - sheetDragStart.current
 		sheetDragStart.current = null
 		sheetDragLastY.current = null
+		sheetDraggingRef.current = false
 		setIsSheetDragging(false)
-		if (delta > 96) {
+		const projectedDelta = delta + sheetVelocity.current * 140
+		if (projectedDelta > 120) {
 			closeMenu({ swipe: true })
 			return
 		}
+		const settleDuration = Math.min(
+			520,
+			Math.max(260, 360 - Math.abs(sheetVelocity.current) * 80),
+		)
+		setSheetSettleDuration(settleDuration)
+		setIsSheetSettling(true)
 		setSheetOffset(0)
 		setIsSheetExpanded(false)
-		const pullStrength = Math.min(1, Math.abs(delta) / 160)
-		const settleDuration = Math.round(380 + pullStrength * 140)
-		setSheetSettle({
-			duration: settleDuration,
-			easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-		})
-		setSheetDragHeight(sheetBaseHeight.current)
-		window.setTimeout(() => {
-			setSheetDragHeight(null)
-			setSheetSettle(null)
-		}, settleDuration + 30)
+		window.setTimeout(() => setIsSheetSettling(false), settleDuration + 30)
 	}
 
 	const goTo = (path) => {
@@ -164,7 +179,11 @@ const AccountDropdown = () => {
 				aria-expanded={isDropdownOpen}
 				aria-label='Open account menu'
 			>
-				<img src={authUser.avatar || '/avatar.png'} alt='' />
+				<img
+					className={!authUser.avatar ? 'is-default-avatar' : ''}
+					src={authUser.avatar || '/avatar.png'}
+					alt=''
+				/>
 				<span className='account-trigger-copy'>
 					<strong>{authUser.name || 'Your account'}</strong>
 					<small>Account</small>
@@ -183,14 +202,10 @@ const AccountDropdown = () => {
 					)}
 					<div
 						ref={dropdownRef}
-						className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSwipeClosing ? 'is-swipe-closing' : ''} ${isSheetEntering ? 'is-entering' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''} ${isSheetDragging ? 'is-dragging' : ''} ${sheetSettle ? 'is-settling' : ''}`}
+						className={`account-popover ${isClosing ? 'is-closing' : ''} ${isSwipeClosing ? 'is-swipe-closing' : ''} ${isSheetEntering ? 'is-entering' : ''} ${isSheetExpanded ? 'sheet-expanded' : ''} ${isSheetDragging ? 'is-dragging' : ''} ${isSheetSettling ? 'is-settling' : ''}`}
 						style={{
 							'--sheet-drag-offset': `${sheetOffset}px`,
-							'--sheet-settle-duration': sheetSettle
-								? `${sheetSettle.duration}ms`
-								: undefined,
-							'--sheet-settle-ease': sheetSettle?.easing,
-							height: sheetDragHeight ? `${sheetDragHeight}px` : undefined,
+							'--sheet-settle-duration': `${sheetSettleDuration}ms`,
 						}}
 					>
 						<button
@@ -212,7 +227,11 @@ const AccountDropdown = () => {
 							onPointerCancel={handleSheetPointerUp}
 						>
 							<div className='account-profile'>
-								<img src={authUser.avatar || '/avatar.png'} alt='' />
+								<img
+									className={!authUser.avatar ? 'is-default-avatar' : ''}
+									src={authUser.avatar || '/avatar.png'}
+									alt=''
+								/>
 								<div>
 									<strong>{authUser.name || 'Your account'}</strong>
 									<span>{authUser.email}</span>
@@ -246,7 +265,9 @@ const AccountDropdown = () => {
 										className='account-action'
 										onClick={() => goTo('/profile')}
 									>
-										<span className='account-action-icon'>P</span>
+										<span className='account-action-icon'>
+											<UserRound size={17} strokeWidth={2} />
+										</span>
 										<span>
 											<strong>Profile</strong>
 											<small>Personal details</small>
@@ -256,20 +277,12 @@ const AccountDropdown = () => {
 										className='account-action'
 										onClick={() => goTo('/settings')}
 									>
-										<span className='account-action-icon'>S</span>
+										<span className='account-action-icon'>
+											<Settings2 size={17} strokeWidth={2} />
+										</span>
 										<span>
 											<strong>Settings</strong>
 											<small>Preferences and access</small>
-										</span>
-									</button>
-									<button
-										className='account-action'
-										onClick={() => goTo('/settings')}
-									>
-										<Palette size={17} />
-										<span>
-											<strong>Appearance</strong>
-											<small>Theme and visual preferences</small>
 										</span>
 									</button>
 								</div>

@@ -126,6 +126,15 @@ const Workspace = () => {
 		isSidebarCollapsed,
 		setIsSidebarCollapsed,
 	} = useWorkspaceNavigation()
+
+	useEffect(() => {
+		if (!isSidebarOpen) return undefined
+		const handleKeyDown = (event) => {
+			if (event.key === 'Escape') setIsSidebarOpen(false)
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [isSidebarOpen, setIsSidebarOpen])
 	const [boards, setBoards] = useState([])
 	const [selectedBoard, setSelectedBoard] = useState(null)
 	const [columns, setColumns] = useState([])

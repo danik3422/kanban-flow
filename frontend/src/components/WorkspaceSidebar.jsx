@@ -92,6 +92,10 @@ const WorkspaceSidebar = ({
 	const [isResizing, setIsResizing] = useState(false)
 	const location = useLocation()
 	const effectiveWidth = Math.min(width, MAX_WIDTH)
+	const handleBoardSelect = (board) => {
+		onBoardSelect(board)
+		onClose?.()
+	}
 
 	useEffect(() => {
 		window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(effectiveWidth))
@@ -208,7 +212,7 @@ const WorkspaceSidebar = ({
 						onToggle={() => setIsOwnedOpen((value) => !value)}
 						search={roomSearch}
 						selectedBoardId={selectedBoardId}
-						onBoardSelect={onBoardSelect}
+						onBoardSelect={handleBoardSelect}
 					/>
 					<RoomGroup
 						title='Shared with me'
@@ -217,7 +221,7 @@ const WorkspaceSidebar = ({
 						onToggle={() => setIsSharedOpen((value) => !value)}
 						search={roomSearch}
 						selectedBoardId={selectedBoardId}
-						onBoardSelect={onBoardSelect}
+						onBoardSelect={handleBoardSelect}
 					/>
 					<button className='workspace-create-room' onClick={onCreateBoard}>
 						<Plus size={16} /> New room

@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, ClipboardList, X } from 'lucide-react'
+import { ArrowRightLeft, Bell, CheckCheck, ClipboardList, MessageCircle, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
@@ -45,6 +45,11 @@ const NotificationCenter = () => {
 	}, [])
 
 	const unreadCount = notifications.filter((notification) => !notification.readAt).length
+	const notificationIcon = (type) => {
+		if (type === 'task_commented') return MessageCircle
+		if (type === 'task_moved') return ArrowRightLeft
+		return ClipboardList
+	}
 
 	const markRead = async (notification) => {
 		if (notification.readAt) return
@@ -90,7 +95,7 @@ const NotificationCenter = () => {
 				{unreadCount > 0 && <span className='notification-badge'>{unreadCount > 9 ? '9+' : unreadCount}</span>}
 			</button>
 			{isOpen && (
-				<div className='popover-shell notification-popover'>
+				<div className='popover-shell notification-popover' role='dialog' aria-label='Notifications'>
 					<div className='popover-header notification-popover-header'>
 						<div>
 							<strong>Notifications</strong>
@@ -110,8 +115,9 @@ const NotificationCenter = () => {
 									type='button'
 									className={`notification-item ${notification.readAt ? '' : 'is-unread'}`}
 									onClick={() => markRead(notification)}
+									aria-label={`${notification.readAt ? '' : 'Unread: '}${notification.title}`}
 								>
-									<span className='notification-item-icon'><ClipboardList size={16} /></span>
+									<span className='notification-item-icon'>{(() => { const Icon = notificationIcon(notification.type); return <Icon size={16} /> })()}</span>
 									<span>
 										<strong>{notification.title}</strong>
 										<small>{notification.message}</small>

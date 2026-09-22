@@ -89,6 +89,7 @@ const ChangePasswordPanel = () => {
 					placeholder={placeholder}
 					required
 					minLength={key !== 'current' ? 8 : undefined}
+					autoComplete={key === 'current' ? 'current-password' : 'new-password'}
 				/>
 				<button
 					type='button'

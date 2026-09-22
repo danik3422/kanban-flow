@@ -85,6 +85,21 @@ export const useAuthStore = create((set) => ({
 		}
 	},
 
+	passkeyLogin: async (response) => {
+		set({ isLoggingIn: true })
+		try {
+			const res = await axiosInstance.post('/auth/passkeys/authenticate', response)
+			set({ authUser: res.data })
+			toast.success('Signed in with passkey')
+			return { success: true, requiresVerification: Boolean(res.data.requiresVerification) }
+		} catch (error) {
+			toast.error(error.response?.data?.message || 'Could not sign in with passkey')
+			return { success: false }
+		} finally {
+			set({ isLoggingIn: false })
+		}
+	},
+
 	logout: async () => {
 		if (isDevAuthBypass) {
 			set({ authUser: null })

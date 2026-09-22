@@ -13,10 +13,10 @@ const Popover = ({ isOpen, onClose, className = '', children, ...props }) => {
 			if (event.key === 'Escape') onClose()
 		}
 
-		document.addEventListener('mousedown', handlePointerDown)
+		document.addEventListener('pointerdown', handlePointerDown)
 		document.addEventListener('keydown', handleKeyDown)
 		return () => {
-			document.removeEventListener('mousedown', handlePointerDown)
+			document.removeEventListener('pointerdown', handlePointerDown)
 			document.removeEventListener('keydown', handleKeyDown)
 		}
 	}, [isOpen, onClose])

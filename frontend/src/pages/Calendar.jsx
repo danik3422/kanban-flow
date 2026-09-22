@@ -7,7 +7,7 @@ import {
   ClipboardList,
   Globe2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -21,9 +21,10 @@ const CalendarPage = () => {
   const navigate = useNavigate()
   const hoverTimerRef = useRef(null)
   const touchStartYRef = useRef(0)
+  const sheetPointerActiveRef = useRef(false)
   const [boards, setBoards] = useState([])
   const [tasks, setTasks] = useState([])
-  const [search, setSearch] = useState('')
+  const [search] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState(null)
@@ -72,7 +73,7 @@ const CalendarPage = () => {
     }
   }, [])
 
-  const today = new Date()
+  const today = useMemo(() => new Date(), [])
   const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 10)
   const monthName = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursorMonth)
 
@@ -98,14 +99,28 @@ const CalendarPage = () => {
 
   const selectedDayKey = selectedDay ? toDateKey(selectedDay) : null
 
+  const handleCloseSheet = useCallback(() => {
+    if (!selectedDay || isClosing) return
+
+    setIsClosing(true)
+    setSheetDragOffset(0)
+    if (closeSheetTimeoutRef.current) {
+      clearTimeout(closeSheetTimeoutRef.current)
+    }
+
+    closeSheetTimeoutRef.current = setTimeout(() => {
+      setSelectedDay(null)
+      setIsClosing(false)
+      setSheetDragOffset(0)
+      closeSheetTimeoutRef.current = null
+    }, 300)
+  }, [isClosing, selectedDay])
+
   useEffect(() => {
     const hoverQuery = window.matchMedia('(hover: hover) and (pointer: fine)')
     const mobileQuery = window.matchMedia('(max-width: 767px)')
     const handleHoverChange = (event) => setIsDesktopHover(event.matches)
     const handleMobileChange = (event) => setIsMobileView(event.matches)
-
-    setIsDesktopHover(hoverQuery.matches)
-    setIsMobileView(mobileQuery.matches)
 
     if (typeof hoverQuery.addEventListener === 'function') {
       hoverQuery.addEventListener('change', handleHoverChange)
@@ -138,7 +153,7 @@ const CalendarPage = () => {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedDay])
+  }, [handleCloseSheet, selectedDay])
 
   useEffect(() => {
     document.body.style.overflow = selectedDay || isClosing ? 'hidden' : ''
@@ -302,15 +317,6 @@ const CalendarPage = () => {
     },
   ], [boards.length, filteredTasks.length, navigate, overdueTasks.length, upcomingTasks.length])
 
-  const handleAddTask = () => {
-    const boardId = selectedDayTasks[0]?.column?.board?._id || boards[0]?._id
-    if (boardId) {
-      navigate(`/workspaces/${boardId}`)
-      return
-    }
-    navigate('/workspaces')
-  }
-
   const showTaskPreview = (task, event) => {
     if (!task || !event || !isDesktopHover || isMobileView) return
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
@@ -343,18 +349,6 @@ const CalendarPage = () => {
     setHoveredTask(null)
   }
 
-  const handleSheetTouchStart = (event) => {
-    touchStartYRef.current = event.touches[0]?.clientY ?? 0
-  }
-
-  const handleSheetTouchMove = (event) => {
-    if (!selectedDay || isClosing) return
-
-    const currentY = event.touches[0]?.clientY ?? touchStartYRef.current
-    const delta = Math.max(0, currentY - touchStartYRef.current)
-    setSheetDragOffset(delta)
-  }
-
   const handleSheetTouchEnd = () => {
     if (sheetDragOffset > 100) {
       handleCloseSheet()
@@ -365,25 +359,27 @@ const CalendarPage = () => {
     touchStartYRef.current = 0
   }
 
-  const handleCloseSheet = () => {
-    if (!selectedDay || isClosing) return
+  const handleSheetPointerDown = (event) => {
+    sheetPointerActiveRef.current = true
+    touchStartYRef.current = event.clientY
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
 
-    setIsClosing(true)
-    setSheetDragOffset(0)
-    if (closeSheetTimeoutRef.current) {
-      clearTimeout(closeSheetTimeoutRef.current)
-    }
+  const handleSheetPointerMove = (event) => {
+    if (!sheetPointerActiveRef.current) return
+    event.preventDefault()
+    const delta = Math.max(0, event.clientY - touchStartYRef.current)
+    setSheetDragOffset(delta)
+  }
 
-    closeSheetTimeoutRef.current = setTimeout(() => {
-      setSelectedDay(null)
-      setIsClosing(false)
-      setSheetDragOffset(0)
-      closeSheetTimeoutRef.current = null
-    }, 300)
+  const handleSheetPointerUp = () => {
+    if (!sheetPointerActiveRef.current) return
+    sheetPointerActiveRef.current = false
+    handleSheetTouchEnd()
   }
 
   return (
-    <div className='workspace-shell h-[100dvh] max-h-[100dvh] flex flex-col overflow-hidden md:flex-row'>
+    <div className='workspace-shell h-dvh max-h-dvh flex flex-col overflow-hidden md:flex-row'>
       <WorkspaceSidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -435,7 +431,7 @@ const CalendarPage = () => {
 
           {isMobileView ? (
             isLoading ? (
-              <div className='md:hidden min-h-[100dvh] h-auto flex flex-col bg-[#F6F7F9] p-3 space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'>
+              <div className='md:hidden min-h-dvh h-auto flex flex-col p-3 space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none'>
                 <div className='calendar-skeleton-shell w-full shrink-0 rounded-3xl bg-white p-4 shadow-sm flex flex-col'>
                   <div className='flex items-center justify-between gap-3'>
                     <div className='calendar-skeleton-line h-6 w-32 rounded-full' />
@@ -463,9 +459,22 @@ const CalendarPage = () => {
                     ))}
                   </div>
                 </div>
+                <div className='calendar-mobile-overview-skeleton'>
+                  <div className='calendar-skeleton-line calendar-mobile-overview-skeleton-title' />
+                  {[1, 2, 3].map((item) => (
+                    <div className='calendar-mobile-overview-skeleton-card' key={item}>
+                      <div className='calendar-skeleton-dot calendar-mobile-overview-skeleton-icon' />
+                      <div className='calendar-mobile-overview-skeleton-copy'>
+                        <div className='calendar-skeleton-line' />
+                        <div className='calendar-skeleton-line' />
+                        <div className='calendar-skeleton-line' />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className='md:hidden min-h-[100dvh] h-auto flex flex-col bg-[#F6F7F9] p-3 space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'>
+              <div className='md:hidden min-h-dvh h-auto flex flex-col p-3 space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none'>
                 <div className='w-full shrink-0 rounded-3xl bg-white p-4 shadow-sm flex flex-col'>
                   <div className='flex items-center justify-between gap-3'>
                     <div className='text-base font-bold text-slate-900'>{monthName}</div>
@@ -514,7 +523,7 @@ const CalendarPage = () => {
                           </span>
 
                           {isCurrentMonth && (
-                            <div className='mt-1 flex min-h-[4px] items-center justify-center gap-0.5'>
+                            <div className='mt-1 flex min-h-1 items-center justify-center gap-0.5'>
                               {dayTasks.slice(0, 3).map((task) => (
                                 <span
                                   key={task._id || `${task.title}-${key}`}
@@ -592,7 +601,7 @@ const CalendarPage = () => {
 
                 <div className='calendar-days-grid grid w-full grid-cols-7 flex-1 min-h-0 gap-1 md:gap-2.5'>
                   {calendarSkeletonDays.map((item) => (
-                    <div key={item} className='calendar-skeleton-cell relative flex h-full min-h-[95px] flex-col rounded-2xl border border-slate-200 bg-slate-50 p-2'>
+                    <div key={item} className='calendar-skeleton-cell relative flex h-full min-h-23.75 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-2'>
                       <div className='mb-1.5 flex items-center justify-between'>
                         <div className='calendar-skeleton-dot h-6 w-6 rounded-full' />
                       </div>
@@ -634,14 +643,14 @@ const CalendarPage = () => {
                     const dayTasks = isCurrentMonth ? tasksByDate.get(key) || [] : []
                     const visibleTasks = dayTasks.slice(0, 2)
                     const hiddenTaskCount = Math.max(dayTasks.length - visibleTasks.length, 0)
-                    const taskCountLabel = dayTasks.length > 2 ? '2+' : String(dayTasks.length)
+                    const taskCountLabel = String(dayTasks.length)
 
                     return (
                       <div
                         key={key}
                         className={[
                           'calendar-day-cell',
-                          'relative flex h-full min-h-[95px] flex-col rounded-2xl border p-2 transition-all duration-200',
+                          'relative flex h-full min-h-23.75 flex-col rounded-2xl border p-2 transition-all duration-200',
                           isCurrentMonth ? 'border-slate-200/80 bg-white hover:border-emerald-300' : 'border-slate-100 bg-slate-50/40 opacity-40',
                           isToday && isCurrentMonth ? 'border-emerald-300 bg-emerald-50/30 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.08)]' : '',
                         ].filter(Boolean).join(' ')}
@@ -655,7 +664,7 @@ const CalendarPage = () => {
                       >
                         <div className='mb-1.5 flex shrink-0 items-center justify-between'>
                           <span className={[
-                            'flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold',
+                            'flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-semibold',
                             isCurrentMonth ? 'text-slate-700' : 'text-slate-300',
                             isToday && isCurrentMonth ? 'bg-emerald-700 text-white shadow-sm' : '',
                           ].filter(Boolean).join(' ')}>
@@ -663,7 +672,7 @@ const CalendarPage = () => {
                           </span>
 
                           {isCurrentMonth && dayTasks.length > 0 && (
-                            <span className='hidden md:inline-flex rounded-full border border-slate-200 bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.02em] text-slate-500'>
+                            <span className='hidden md:inline-flex rounded-full border border-slate-200 bg-white/80 px-2 py-1 text-[11px] font-semibold tracking-[0.02em] text-slate-500'>
                               {taskCountLabel}
                             </span>
                           )}
@@ -710,7 +719,7 @@ const CalendarPage = () => {
                         )}
 
                         {isCurrentMonth && (
-                          <div className='mt-auto flex min-h-[4px] items-center justify-center gap-0.5 md:hidden'>
+                          <div className='mt-auto flex min-h-1 items-center justify-center gap-0.5 md:hidden'>
                             {dayTasks.slice(0, 3).map((task) => (
                               <span
                                 key={task._id || `${task.title}-${key}`}
@@ -802,7 +811,7 @@ const CalendarPage = () => {
               onClick={handleCloseSheet}
             >
               <div
-                className='calendar-mobile-sheet fixed inset-x-0 bottom-0 z-50 max-h-[85vh] rounded-t-3xl bg-white shadow-2xl overflow-hidden touch-none'
+                className='calendar-mobile-sheet fixed inset-x-0 bottom-0 z-50 max-h-[85vh] rounded-t-3xl bg-white shadow-2xl overflow-hidden'
                 style={{
                   transform: `translateY(${isClosing ? '100%' : `${sheetDragOffset}px`})`,
                   transition: isClosing ? 'transform 300ms ease-in-out' : sheetDragOffset === 0 ? 'transform 220ms ease-out' : 'none',
@@ -810,11 +819,15 @@ const CalendarPage = () => {
                 role='dialog'
                 aria-modal='true'
                 onClick={(event) => event.stopPropagation()}
-                onTouchStart={handleSheetTouchStart}
-                onTouchMove={handleSheetTouchMove}
-                onTouchEnd={handleSheetTouchEnd}
               >
-                <div className='calendar-mobile-sheet-handle' />
+                <div
+                  className='calendar-mobile-sheet-handle'
+                  onPointerDown={handleSheetPointerDown}
+                  onPointerMove={handleSheetPointerMove}
+                  onPointerUp={handleSheetPointerUp}
+                  onPointerCancel={handleSheetPointerUp}
+                  role='presentation'
+                />
                 <div className='calendar-mobile-sheet-header'>
                   <div>
                     <div className='calendar-mobile-sheet-label'>Tasks</div>
