@@ -10,7 +10,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import { axiosInstance } from '../lib/axios'
@@ -28,6 +27,7 @@ const CalendarPage = () => {
   const [tasks, setTasks] = useState([])
   const [search] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState(null)
   const [isClosing, setIsClosing] = useState(false)
@@ -65,7 +65,7 @@ const CalendarPage = () => {
         setTasks(tasksResponse.data.filter((task) => task.dueDate))
       })
       .catch((error) => {
-        if (isCurrent) toast.error(error.response?.data?.message || 'Could not load calendar')
+        if (isCurrent) setLoadError(error.response?.data?.message || 'Could not load calendar')
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false)
@@ -742,8 +742,13 @@ const CalendarPage = () => {
                 {!isLoading && filteredTasks.length === 0 && (
                   <div className='calendar-empty-state'>
                     <CalendarDays size={20} />
-                    <strong>{search ? 'No matching tasks' : 'No scheduled tasks'}</strong>
-                    <span>{search ? 'Try another search.' : 'Tasks with due dates will appear here.'}</span>
+                    <strong>{loadError ? 'Calendar could not be loaded' : search ? 'No matching tasks' : 'No scheduled tasks'}</strong>
+                    <span>{loadError || (search ? 'Try another search.' : 'Tasks with due dates will appear here.')}</span>
+                    {loadError && (
+                      <button type='button' className='quiet-button' onClick={() => window.location.reload()}>
+                        Try again
+                      </button>
+                    )}
                   </div>
                 )}
               </section>

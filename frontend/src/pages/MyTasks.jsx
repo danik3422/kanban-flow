@@ -29,6 +29,8 @@ const MyTasks = () => {
 	const [priority, setPriority] = useState('all')
 	const [board, setBoard] = useState('all')
 	const [isLoading, setIsLoading] = useState(true)
+	const [loadError, setLoadError] = useState('')
+	const [reloadKey, setReloadKey] = useState(0)
 	const {
 		isSidebarOpen,
 		setIsSidebarOpen,
@@ -78,7 +80,9 @@ const MyTasks = () => {
 					params: { search, priority, board },
 				})
 				.then((tasksResponse) => {
-					if (isCurrent) setTasks(tasksResponse.data)
+					if (!isCurrent) return
+					setTasks(tasksResponse.data)
+					setLoadError('')
 				})
 				.catch((error) => {
 					if (!isCurrent) return
@@ -86,7 +90,7 @@ const MyTasks = () => {
 						setTasks([])
 						return
 					}
-					toast.error(
+					setLoadError(
 						error.response?.data?.message || 'Could not load your tasks',
 					)
 				})
@@ -98,7 +102,13 @@ const MyTasks = () => {
 			isCurrent = false
 			window.clearTimeout(requestTimer)
 		}
-	}, [search, priority, board])
+	}, [search, priority, board, reloadKey])
+
+	const retryLoad = () => {
+		setIsLoading(true)
+		setLoadError('')
+		setReloadKey((key) => key + 1)
+	}
 
 	const handleSearchChange = (event) => {
 		setIsLoading(true)
@@ -420,6 +430,19 @@ const MyTasks = () => {
 									</div>
 								</section>
 							))}
+						</div>
+					) : loadError ? (
+						<div className='my-tasks-empty' role='alert'>
+							<AlertTriangle size={26} />
+							<strong>Your tasks could not be loaded</strong>
+							<span>{loadError}</span>
+							<button
+								type='button'
+								className='my-tasks-empty-action'
+								onClick={retryLoad}
+							>
+								<RotateCcw size={14} /> Try again
+							</button>
 						</div>
 					) : (
 						<div className='my-tasks-empty'>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
+import { isDevAuthBypass } from '../lib/devMode'
 import { socketUrl } from '../lib/runtimeConfig'
 import Popover from './Popover'
 
@@ -11,13 +12,15 @@ const NotificationCenter = () => {
 	const navigate = useNavigate()
 	const [notifications, setNotifications] = useState([])
 	const [isOpen, setIsOpen] = useState(false)
-	const [isLoading, setIsLoading] = useState(true)
+	const [isLoading, setIsLoading] = useState(!isDevAuthBypass)
 	const [filter, setFilter] = useState('all')
 
 	useEffect(() => {
+		if (isDevAuthBypass) return
 		const loadNotifications = async () => {
 			try {
 				const { data } = await axiosInstance.get('/notifications')
+				if (!Array.isArray(data)) throw new Error('Unexpected notifications response')
 				setNotifications((current) => {
 					const nextById = new Map([...data.map((item) => [item._id, item]), ...current.map((item) => [item._id, item])])
 					return [...nextById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))

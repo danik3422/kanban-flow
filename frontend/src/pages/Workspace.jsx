@@ -1,12 +1,10 @@
 import {
-	Archive,
 	ArrowUpRight,
 	CalendarDays,
 	CheckCircle2,
 	ChevronDown,
 	ChevronRight,
 	CirclePlus,
-	ClipboardList,
 	Clock3,
 	ListChecks,
 	LogOut,
@@ -16,6 +14,7 @@ import {
 	Pin,
 	Plus,
 	Play,
+	RefreshCw,
 	Sparkles,
 	Square,
 	Trash2,
@@ -48,6 +47,39 @@ import {
 	isDevAuthBypass,
 } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
+
+const PRIORITY_LABELS = {
+	none: 'No priority',
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High',
+	urgent: 'Urgent',
+}
+
+// Replace an edited task in place; only a column change moves it to the end of the target column.
+const applyTaskUpdate = (columns, updatedTask, targetColumnId) => {
+	const isInTarget = columns.some(
+		(column) =>
+			column._id === targetColumnId &&
+			column.tasks.some((task) => task._id === updatedTask._id),
+	)
+	return columns.map((column) => {
+		if (isInTarget) {
+			return column._id === targetColumnId
+				? {
+						...column,
+						tasks: column.tasks.map((task) =>
+							task._id === updatedTask._id ? updatedTask : task,
+						),
+					}
+				: column
+		}
+		const tasks = column.tasks.filter((task) => task._id !== updatedTask._id)
+		return column._id === targetColumnId
+			? { ...column, tasks: [...tasks, updatedTask] }
+			: { ...column, tasks }
+	})
+}
 
 const getChecklistProgress = (checklist = []) => {
 	const completed = checklist.filter((item) => item.completed).length
@@ -189,6 +221,7 @@ const Workspace = () => {
 		assignees: [],
 		labels: [],
 		checklist: [],
+		priority: 'none',
 		columnId: '',
 	})
 	const [isInviteOpen, setIsInviteOpen] = useState(false)
@@ -589,8 +622,9 @@ const Workspace = () => {
 		}
 	}, [columns, moveColumn])
 
+	const selectedBoardId = selectedBoard?._id
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) return
+		if (!selectedBoardId || isDevAuthBypass) return
 		const socket = io(socketUrl, {
 			withCredentials: true,
 			reconnection: true,
@@ -602,7 +636,7 @@ const Workspace = () => {
 		const heartbeat = () => socket.emit('presence-heartbeat')
 		socket.on('connect', () => {
 			setRealtimeStatus('connected')
-			socket.emit('join-board', selectedBoard._id)
+			socket.emit('join-board', selectedBoardId)
 			heartbeat()
 		})
 		socket.on('disconnect', () => setRealtimeStatus('reconnecting'))
@@ -614,8 +648,9 @@ const Workspace = () => {
 				Object.fromEntries(presence.map((item) => [item.userId, item.status])),
 			)
 		})
-		socket.on('board:access-revoked', ({ boardId: revokedBoardId }) => {
-			if (revokedBoardId !== selectedBoard._id) return
+		socket.on('board:access-revoked', ({ boardId: revokedBoardId, reason, boardName }) => {
+			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
+			if (revokedBoardId !== selectedBoardId) return
 			socket.io.opts.reconnection = false
 			setRealtimeStatus('offline')
 			setPresenceByUserId({})
@@ -624,10 +659,13 @@ const Workspace = () => {
 			setBoardMemberRecords([])
 			setBoardInvites([])
 			setBoardActivities([])
-			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
 			setSelectedBoard(null)
 			navigate('/workspaces')
-			toast.error('You no longer have access to this room')
+			toast.error(
+				reason === 'board-deleted'
+					? `${boardName || 'This board'} was deleted by its owner`
+					: 'You no longer have access to this room',
+			)
 			socket.disconnect()
 		})
 		socket.on('activity:new', (activity) => {
@@ -637,7 +675,7 @@ const Workspace = () => {
 			].slice(0, 200))
 		})
 		socket.on('board:updated', (updatedBoard) => {
-			if (updatedBoard._id !== selectedBoard._id) return
+			if (updatedBoard._id !== selectedBoardId) return
 			setSelectedBoard((current) =>
 				current ? { ...current, ...updatedBoard } : current,
 			)
@@ -727,6 +765,15 @@ const Workspace = () => {
 				),
 			)
 		})
+		socket.on('column:created', (createdColumn) => {
+			setColumns((current) =>
+				current.some((column) => column._id === createdColumn._id)
+					? current
+					: [...current, { ...createdColumn, tasks: [] }].sort(
+							(a, b) => a.position - b.position,
+						),
+			)
+		})
 		socket.on('column:deleted', ({ columnId }) => {
 			setColumns((current) => current.filter((column) => column._id !== columnId))
 			setActiveTaskColumn((current) => (current === columnId ? null : current))
@@ -749,7 +796,7 @@ const Workspace = () => {
 			window.clearInterval(heartbeatTimer)
 			socket.disconnect()
 		}
-	}, [selectedBoard, authUser?._id, navigate])
+	}, [selectedBoardId, navigate])
 
 	useEffect(() => {
 		if (!selectedBoard) return
@@ -1450,7 +1497,11 @@ const Workspace = () => {
 				`/board/boards/${selectedBoard._id}/columns`,
 				{ title: newColumnTitle.trim(), position: columns.length },
 			)
-			setColumns((current) => [...current, { ...data, tasks: [] }])
+			setColumns((current) =>
+				current.some((column) => column._id === data._id)
+					? current
+					: [...current, { ...data, tasks: [] }],
+			)
 			setNewColumnTitle('')
 			setIsCreatingColumn(false)
 			toast.success('Column added')
@@ -1546,6 +1597,7 @@ const Workspace = () => {
 			),
 			labels: task.labels || [],
 			checklist: task.checklist || [],
+			priority: task.priority || 'none',
 			columnId: taskColumn?._id || '',
 		})
 		setIsAssigneePickerOpen(false)
@@ -1654,6 +1706,7 @@ const Workspace = () => {
 			assignees: taskDetailsForm.assignees,
 			labels: taskDetailsForm.labels,
 			checklist: taskDetailsForm.checklist,
+			priority: taskDetailsForm.priority,
 			column: taskDetailsForm.columnId,
 		}
 		const sourceColumn = columns.find((column) =>
@@ -1666,18 +1719,13 @@ const Workspace = () => {
 		if (isMovingColumns) changes.position = targetColumn.tasks.length
 
 		if (isDevAuthBypass) {
-			setColumns((current) => {
-				const updatedTask = { ...taskDetails, ...changes }
-				const withoutTask = current.map((column) => ({
-					...column,
-					tasks: column.tasks.filter((task) => task._id !== taskDetails._id),
-				}))
-				return withoutTask.map((column) =>
-					column._id === (targetColumn?._id || sourceColumn?._id)
-						? { ...column, tasks: [...column.tasks, updatedTask] }
-						: column,
-				)
-			})
+			setColumns((current) =>
+				applyTaskUpdate(
+					current,
+					{ ...taskDetails, ...changes },
+					targetColumn?._id || sourceColumn?._id,
+				),
+			)
 			setTaskDetails(null)
 			return
 		}
@@ -1687,17 +1735,9 @@ const Workspace = () => {
 				`/board/tasks/${taskDetails._id}`,
 				changes,
 			)
-			setColumns((current) => {
-				const withoutTask = current.map((column) => ({
-					...column,
-					tasks: column.tasks.filter((task) => task._id !== data._id),
-				}))
-				return withoutTask.map((column) =>
-					column._id === (targetColumn?._id || sourceColumn?._id)
-						? { ...column, tasks: [...column.tasks, data] }
-						: column,
-				)
-			})
+			setColumns((current) =>
+				applyTaskUpdate(current, data, targetColumn?._id || sourceColumn?._id),
+			)
 			setTaskDetails(null)
 			toast.success('Task updated')
 		} catch (error) {
@@ -1992,7 +2032,7 @@ const Workspace = () => {
 											onClick={() => refreshBoard(selectedBoard)}
 											disabled={isRefreshing}
 										>
-											<Archive size={16} />{' '}
+											<RefreshCw size={16} className={isRefreshing ? 'is-spinning' : ''} />{' '}
 											{isRefreshing ? 'Refreshing...' : 'Refresh'}
 										</button>
 									</div>
@@ -2310,6 +2350,7 @@ const Workspace = () => {
 																	)}
 															<article
 															className={`task-card ${draggedTask?._id === task._id ? 'is-dragging' : ''}`}
+															title='Click to open · drag to move'
 													data-task-id={task._id}
 																draggable={editingTask?._id !== task._id}
 															onDragStart={(event) => {
@@ -2334,7 +2375,13 @@ const Workspace = () => {
 																}}
 															>
 																<div className='task-label'>
-																	<span>Task · drag to move</span>
+																	{task.priority && task.priority !== 'none' ? (
+																		<span className={`task-priority-badge priority-${task.priority}`}>
+																			{PRIORITY_LABELS[task.priority]}
+																		</span>
+																	) : (
+																		<span />
+																	)}
 																	<button
 																		type='button'
 																		className='icon-button subtle'
@@ -2405,12 +2452,7 @@ const Workspace = () => {
 																							task.dueDate,
 																						).toLocaleDateString()}
 																					</>
-																				) : (
-																					<>
-																						<ClipboardList size={14} /> Work
-																						item
-																					</>
-																				)}
+																				) : null}
 																				{task.assignees?.length > 0 && (
 																					<>
 																						<UserRound size={14} />{' '}
@@ -3043,16 +3085,49 @@ const Workspace = () => {
 												</select>
 											</div>
 											<div className='task-summary-block'>
+												<label className='task-summary-label' htmlFor='task-priority'>Priority</label>
+												<select
+													id='task-priority'
+													className='task-status-select'
+													value={taskDetailsForm.priority}
+													onChange={(event) =>
+														setTaskDetailsForm((current) => ({
+															...current,
+															priority: event.target.value,
+														}))
+													}
+												>
+													{Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+														<option key={value} value={value}>
+															{label}
+														</option>
+													))}
+												</select>
+											</div>
+											<div className='task-summary-block'>
 												<span className='task-summary-label'>Checklist</span>
 												<strong>{getChecklistProgress(taskDetailsForm.checklist).completed} / {getChecklistProgress(taskDetailsForm.checklist).total} complete</strong>
 											</div>
 											<div className='task-summary-block'>
 												<span className='task-summary-label'>Assignees</span>
-												<strong>{taskDetailsForm.assignees.length || 'Unassigned'}</strong>
+												<strong>
+													{taskDetailsForm.assignees.length
+														? taskDetailsForm.assignees
+																.map((memberId) => {
+																	const member = boardMembers.find((item) => item._id === memberId)
+																	return member?.name || member?.email || 'Member'
+																})
+																.join(', ')
+														: 'Unassigned'}
+												</strong>
 											</div>
 											<div className='task-summary-block'>
 												<span className='task-summary-label'>Deadline</span>
-												<strong>{taskDetailsForm.dueDate || 'No deadline'}</strong>
+												<strong>
+													{taskDetailsForm.dueDate
+														? new Date(`${taskDetailsForm.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+														: 'No deadline'}
+												</strong>
 											</div>
 										</aside>
 									</div>
@@ -3066,7 +3141,19 @@ const Workspace = () => {
 										</div>
 										<div className='task-time-summary'><Clock3 size={15} /> Tracked {formatTrackedTime(trackedSeconds)}</div>
 										<div className='task-comment-composer'>
-											<input value={taskComment} onChange={(event) => setTaskComment(event.target.value)} placeholder='Write a comment...' aria-label='Write a comment' />
+											<input
+												value={taskComment}
+												onChange={(event) => setTaskComment(event.target.value)}
+												onKeyDown={(event) => {
+													// The composer sits inside the task form; Enter must post the comment, not save and close the task.
+													if (event.key !== 'Enter') return
+													event.preventDefault()
+													if (taskComment.trim()) addTaskComment()
+												}}
+												placeholder='Write a comment...'
+												aria-label='Write a comment'
+												maxLength={2000}
+											/>
 											<button type='button' className='mini-primary' onClick={addTaskComment} disabled={!taskComment.trim()}>Comment</button>
 										</div>
 										<div className='task-activity-list'>
