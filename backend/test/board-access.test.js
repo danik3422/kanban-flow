@@ -1292,3 +1292,113 @@ describe('board access and invitation flow', () => {
 		assert.equal(movedTask.position, 1)
 	})
 })
+
+describe('input hardening', () => {
+	it('rejects query operators in the member email instead of matching arbitrary users', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const victim = await createUser('victim@example.com', 'Victim')
+
+		const response = await request(app)
+			.post(`/api/board/boards/${board._id}/members`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ email: { $regex: '^victim' } })
+
+		assert.equal(response.status, 400)
+		assert.equal(await BoardMember.exists({ board: board._id, user: victim._id }), null)
+	})
+
+	it('returns 400 for malformed route IDs instead of a server error', async () => {
+		const { owner } = await createBoardWithOwner()
+
+		const [boardResponse, taskResponse] = await Promise.all([
+			request(app).get('/api/board/boards/not-an-id').set('Cookie', authCookie(owner._id)),
+			request(app).patch('/api/board/tasks/not-an-id').set('Cookie', authCookie(owner._id)).send({ title: 'x' }),
+		])
+
+		assert.equal(boardResponse.status, 400)
+		assert.equal(taskResponse.status, 400)
+	})
+
+	it('validates task payloads and persists priority', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const column = await Column.create({ board: board._id, title: 'To do' })
+
+		const invalid = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 123, labels: 'not-an-array' })
+		assert.equal(invalid.status, 400)
+
+		const created = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: '  Ship it  ' })
+		assert.equal(created.status, 201)
+		assert.equal(created.body.title, 'Ship it')
+
+		const updated = await request(app)
+			.patch(`/api/board/tasks/${created.body._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ priority: 'urgent', dueDate: '2026-11-01' })
+		assert.equal(updated.status, 200)
+		assert.equal(updated.body.priority, 'urgent')
+
+		const badDate = await request(app)
+			.patch(`/api/board/tasks/${created.body._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ dueDate: 'tomorrow' })
+		assert.equal(badDate.status, 400)
+	})
+
+	it('lets a social-only account reset its password without losing its provider', async () => {
+		const user = await User.create({
+			email: 'social-reset@example.com',
+			provider: 'google',
+			providerUid: 'google-uid-reset',
+			password: null,
+			emailVerified: true,
+			profileSetup: true,
+		})
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		await PasswordResetToken.create({
+			user: user._id,
+			tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+			expiresAt: new Date(Date.now() + 60_000),
+		})
+
+		const response = await request(app)
+			.post('/api/auth/password-reset/confirm')
+			.send({ token: rawToken, password: 'BrandNewPassword1!' })
+
+		assert.equal(response.status, 200)
+		const updated = await User.findById(user._id)
+		assert.equal(updated.provider, 'google')
+		assert.equal(updated.hasPassword, true)
+		assert.ok(await bcrypt.compare('BrandNewPassword1!', updated.password))
+	})
+
+	it('requires the current password to remove a passkey', async () => {
+		const user = await User.create({
+			email: 'passkey-owner@example.com',
+			password: await bcrypt.hash('Password123!', 10),
+			hasPassword: true,
+			emailVerified: true,
+			profileSetup: true,
+			passkeys: [{ credentialID: 'cred_abc', publicKey: Buffer.from('key') }],
+		})
+
+		const rejected = await request(app)
+			.delete('/api/auth/passkeys/cred_abc')
+			.set('Cookie', authCookie(user._id))
+			.send({ currentPassword: 'wrong-password' })
+		assert.equal(rejected.status, 401)
+		assert.equal((await User.findById(user._id)).passkeys.length, 1)
+
+		const accepted = await request(app)
+			.delete('/api/auth/passkeys/cred_abc')
+			.set('Cookie', authCookie(user._id))
+			.send({ currentPassword: 'Password123!' })
+		assert.equal(accepted.status, 200)
+		assert.equal((await User.findById(user._id)).passkeys.length, 0)
+	})
+})

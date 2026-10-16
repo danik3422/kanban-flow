@@ -5,14 +5,15 @@ import { env } from '../config/env.js'
 let memoryServer = null
 
 const connectToMemoryDatabase = async () => {
-	const { MongoMemoryServer } = await import('mongodb-memory-server')
-	memoryServer = await MongoMemoryServer.create()
+	// Board creation and member removal use transactions, which need a replica set.
+	const { MongoMemoryReplSet } = await import('mongodb-memory-server')
+	memoryServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })
 	const mongoUri = memoryServer.getUri()
 	const connect = await mongoose.connect(mongoUri, {
 		serverSelectionTimeoutMS: 5000,
 	})
 	console.warn(
-		`MongoMemoryServer connected ${connect.connection.host}. Data will not persist after shutdown.`,
+		`MongoMemoryReplSet connected ${connect.connection.host}. Data will not persist after shutdown.`,
 	)
 }
 

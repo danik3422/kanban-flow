@@ -28,5 +28,7 @@ const columnSchema = new mongoose.Schema(
 	{ timestamps: true }
 )
 
+columnSchema.index({ board: 1, position: 1 })
+
 const Column = mongoose.model('Column', columnSchema)
 export default Column

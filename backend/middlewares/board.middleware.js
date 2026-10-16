@@ -1,3 +1,5 @@
+import mongoose from 'mongoose'
+
 import Board from '../models/board.model.js'
 import Column from '../models/column.model.js'
 
@@ -32,4 +34,11 @@ export const columnMiddleware = async (req, res, next) => {
 		console.error('Column middleware error:', error)
 		res.status(500).json({ message: 'Internal Server Error' })
 	}
+}
+
+export const validateObjectIdParam = (req, res, next, value) => {
+	if (!mongoose.Types.ObjectId.isValid(value)) {
+		return res.status(400).json({ message: 'Invalid ID' })
+	}
+	next()
 }

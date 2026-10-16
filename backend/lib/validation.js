@@ -66,3 +66,100 @@ export const setSocialPasswordSchema = z.object({
 	password: passwordSchema,
 	currentPassword: z.string().max(128).optional(),
 })
+
+const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid ID')
+const boardName = z.string().trim().min(1, 'Board name is required').max(100, 'Board name is too long')
+const boardVisibility = z.enum(['private', 'workspace', 'public'])
+const columnTitle = z.string().trim().min(1, 'Column title is required').max(60, 'Column title must be 60 characters or fewer')
+const position = z.number().int().min(0)
+const taskPriority = z.enum(['none', 'low', 'medium', 'high', 'urgent'])
+const taskFields = {
+	title: z.string().trim().min(1, 'Task title is required').max(200, 'Task title must be 200 characters or fewer'),
+	description: z.string().max(20000, 'Description is too long'),
+	dueDate: z.union([z.iso.date(), z.iso.datetime({ offset: true }), z.literal(''), z.null()])
+		.transform((value) => value || null),
+	assignees: z.array(objectId).max(50),
+	labels: z.array(z.string().trim().min(1).max(40)).max(20),
+	checklist: z.array(z.object({
+		_id: objectId.optional(),
+		text: z.string().trim().min(1).max(300),
+		completed: z.boolean().default(false),
+	})).max(100),
+	position,
+	priority: taskPriority,
+}
+
+export const createBoardSchema = z.object({
+	name: boardName,
+	visibility: boardVisibility.default('private'),
+})
+
+export const updateBoardSchema = z.object({
+	name: boardName.optional(),
+	visibility: boardVisibility.optional(),
+})
+
+export const addMemberSchema = z.object({
+	email,
+	role: z.enum(['admin', 'member']).default('member'),
+})
+
+export const createInviteSchema = z.object({
+	email: z.union([email, z.literal('')]).default(''),
+	role: z.enum(['admin', 'member']).default('member'),
+})
+
+export const memberRoleSchema = z.object({
+	role: z.enum(['owner', 'admin', 'member']),
+})
+
+export const createColumnSchema = z.object({
+	title: columnTitle,
+	position: position.default(0),
+})
+
+export const updateColumnSchema = z.object({
+	title: columnTitle.optional(),
+	pinned: z.boolean().optional(),
+})
+
+export const columnPositionSchema = z.object({ position })
+
+export const columnSortSchema = z.object({
+	sortBy: z.enum(['date-newest', 'date-oldest', 'name-alpha', 'custom']).nullable(),
+})
+
+export const reorderTasksSchema = z.object({
+	columns: z.array(z.object({
+		columnId: objectId,
+		taskIds: z.array(objectId).max(2000),
+	})).min(1, 'Task order is required').max(100),
+})
+
+export const createTaskSchema = z.object({
+	title: taskFields.title,
+	description: taskFields.description.default(''),
+	dueDate: taskFields.dueDate.optional(),
+	assignees: taskFields.assignees.default([]),
+	labels: taskFields.labels.default([]),
+	checklist: taskFields.checklist.default([]),
+	position: position.default(0),
+	priority: taskPriority.default('none'),
+})
+
+export const updateTaskSchema = z.object({
+	...Object.fromEntries(Object.entries(taskFields).map(([key, schema]) => [key, schema.optional()])),
+	column: objectId.optional(),
+})
+
+export const taskCommentSchema = z.object({
+	message: z.string().trim().min(1, 'Comment is required').max(2000, 'Comment is too long'),
+})
+
+export const passkeyAuthOptionsSchema = z.object({
+	email: z.union([email, z.literal('')]).optional(),
+})
+
+export const removePasskeySchema = z.object({
+	currentPassword: z.string().max(128).optional(),
+})

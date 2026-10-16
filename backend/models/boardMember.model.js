@@ -25,5 +25,7 @@ const boardMemberSchema = new mongoose.Schema(
 
 boardMemberSchema.index({ board: 1, user: 1 }, { unique: true })
 
+boardMemberSchema.index({ user: 1 })
+
 const BoardMember = mongoose.model('BoardMember', boardMemberSchema)
 export default BoardMember

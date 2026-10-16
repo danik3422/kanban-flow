@@ -70,9 +70,9 @@ io.on('connection', (socket) => {
 		const previousBoardId = socket.boardId
 		const previousUsers = boardPresence.get(previousBoardId)
 		if (previousUsers) {
-			const count = previousUsers.get(socket.userId) || 0
-			if (count <= 1) previousUsers.delete(socket.userId)
-			else previousUsers.set(socket.userId, count - 1)
+			const presence = previousUsers.get(socket.userId)
+			if (presence && presence.connections > 1) presence.connections -= 1
+			else previousUsers.delete(socket.userId)
 			broadcastBoardPresence(previousBoardId)
 			if (previousUsers.size === 0) boardPresence.delete(previousBoardId)
 		}
@@ -130,6 +130,9 @@ io.on('connection', (socket) => {
 
 // Middleware
 app.disable('x-powered-by')
+// Render and similar hosts terminate TLS at a proxy; without this every client
+// shares the proxy IP and rate limits become global.
+app.set('trust proxy', env.trustProxy)
 app.use(helmet())
 // Avatar payloads are compressed client-side, but base64 adds overhead.
 app.use(express.json({ limit: '200kb' }))
@@ -144,7 +147,7 @@ app.use(
 app.get('/health', (_req, res) => {
 	res.status(200).json({ status: 'ok' })
 })
-	app.use('/api', csrfProtection)
+app.use('/api', csrfProtection)
 app.use('/api', apiLimiter)
 
 // Routes

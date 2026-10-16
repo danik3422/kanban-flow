@@ -774,24 +774,32 @@ export const removeBoard = async (req, res) => {
 			})
 		}
 
-		// Get all columns linked to this board
-		const columns = await Column.find({ board: boardId })
-		const columnIds = columns.map((col) => col._id)
-		const taskIds = await Task.find({ column: { $in: columnIds } }).distinct('_id')
+		const memberIds = await BoardMember.find({ board: boardId }).distinct('user')
+		const session = await mongoose.startSession()
+		try {
+			// Delete everything in one transaction so a failure never leaves orphans.
+			await session.withTransaction(async () => {
+				const columnIds = await Column.find({ board: boardId }).distinct('_id').session(session)
+				const taskIds = await Task.find({ column: { $in: columnIds } }).distinct('_id').session(session)
+				await TaskActivity.deleteMany({ board: boardId }, { session })
+				await Notification.deleteMany({
+					$or: [{ board: boardId }, { task: { $in: taskIds } }],
+				}, { session })
+				await Task.deleteMany({ column: { $in: columnIds } }, { session })
+				await Column.deleteMany({ board: boardId }, { session })
+				await BoardMember.deleteMany({ board: boardId }, { session })
+				await BoardInvite.deleteMany({ board: boardId }, { session })
+				await BoardActivity.deleteMany({ board: boardId }, { session })
+				await Board.deleteOne({ _id: boardId }, { session })
+			})
+		} finally {
+			await session.endSession()
+		}
 
-		// Delete all board-scoped records before deleting their referenced entities.
-		await TaskActivity.deleteMany({ board: boardId })
-		await Notification.deleteMany({
-			$or: [{ board: boardId }, { task: { $in: taskIds } }],
-		})
-		await Task.deleteMany({ column: { $in: columnIds } })
-
-		// Delete columns, board members, and board
-		await Column.deleteMany({ board: boardId })
-		await BoardMember.deleteMany({ board: boardId })
-		await BoardInvite.deleteMany({ board: boardId })
-		await BoardActivity.deleteMany({ board: boardId })
-		await Board.deleteOne({ _id: boardId })
+		for (const memberId of memberIds) {
+			if (memberId.toString() === userId.toString()) continue
+			revokeUserBoardAccess(memberId, boardId, { reason: 'board-deleted', boardName: board.name })
+		}
 
 		return res
 			.status(200)
@@ -1300,6 +1308,7 @@ export const createColumn = async (req, res) => {
 			entityName: savedColumn.title,
 			details: `created the ${savedColumn.title} column`,
 		})
+		emitBoardEvent(board._id.toString(), 'column:created', savedColumn.toObject())
 		res.status(201).json(savedColumn)
 	} catch (error) {
 		console.error('Error creating column:', error)
@@ -1950,8 +1959,9 @@ export const deleteTask = async (req, res) => {
 			details: `deleted ${task.title} from ${columnTitle}`,
 		})
 
-		// Delete all activities related to this task
+		// Delete all activities and notifications related to this task
 		await TaskActivity.deleteMany({ task: taskId })
+		await Notification.deleteMany({ task: taskId })
 
 		// Delete the task
 		await Task.deleteOne({ _id: taskId })

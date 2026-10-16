@@ -30,6 +30,8 @@ export const env = {
 	jwtSecret,
 	mongoUri: process.env.MONGO_URI || '',
 	corsOrigin: parseCorsOrigins(),
+	// Number of proxy hops in front of the app (1 on Render). 0 disables trust.
+	trustProxy: Number(process.env.TRUST_PROXY ?? (isProduction ? 1 : 0)),
 	frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 	mailFrom: process.env.MAIL_FROM || '',
 	mailReplyTo: process.env.MAIL_REPLY_TO || '',

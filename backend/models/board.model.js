@@ -39,5 +39,7 @@ const boardModel = new mongoose.Schema(
 	{ timestamps: true }
 )
 
+boardModel.index({ createdBy: 1 })
+
 const Board = mongoose.model('Board', boardModel)
 export default Board

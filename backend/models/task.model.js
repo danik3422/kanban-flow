@@ -50,5 +50,8 @@ const taskSchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
+taskSchema.index({ column: 1, position: 1 })
+taskSchema.index({ assignees: 1 })
+
 const Task = mongoose.model('Task', taskSchema)
 export default Task

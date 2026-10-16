@@ -109,6 +109,7 @@ export const removePasskey = async (req, res) => {
 		}
 		const user = await User.findById(req.user._id)
 		if (!user) return res.status(404).json({ message: 'User not found' })
+		if (user.password) await assertCurrentPassword(user, req.body?.currentPassword)
 		const initialCount = user.passkeys.length
 		user.passkeys = user.passkeys.filter((passkey) => passkey.credentialID !== credentialId)
 		if (user.passkeys.length === initialCount) {
@@ -117,6 +118,7 @@ export const removePasskey = async (req, res) => {
 		await user.save()
 		return res.json({ message: 'Passkey removed successfully' })
 	} catch (error) {
+		if (error.statusCode) return res.status(error.statusCode).json({ message: 'Current password is incorrect' })
 		console.error('Passkey removal error:', error)
 		return res.status(500).json({ message: 'Could not remove passkey' })
 	}
@@ -129,7 +131,7 @@ export const createPasskeyAuthenticationOptions = async (req, res) => {
 			rpID,
 			userVerification: 'preferred',
 		})
-		const user = await User.findOne({ email: req.body?.email }).select('_id')
+		const user = req.body?.email ? await User.findOne({ email: req.body.email }).select('_id') : null
 		if (user) {
 			user.passkeyAuthenticationChallenge = options.challenge
 			user.passkeyAuthenticationChallengeExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
@@ -144,7 +146,7 @@ export const createPasskeyAuthenticationOptions = async (req, res) => {
 
 export const authenticateWithPasskey = async (req, res) => {
 	try {
-		const credentialId = req.body?.id
+		const credentialId = typeof req.body?.id === 'string' ? req.body.id : ''
 		const user = await User.findOne({ 'passkeys.credentialID': credentialId })
 		if (!user || !user.passkeyAuthenticationChallenge || !user.passkeyAuthenticationChallengeExpiresAt || user.passkeyAuthenticationChallengeExpiresAt < new Date()) {
 			return res.status(400).json({ message: 'Passkey sign-in session expired' })
@@ -681,6 +683,7 @@ export const signup = async (req, res) => {
 		const newUser = new User({
 			email: normalizedEmail,
 			password: hashedPassword,
+			hasPassword: Boolean(hashedPassword),
 			provider,
 			emailVerified: provider !== 'local',
 			emailVerificationTokenHash:
@@ -750,7 +753,7 @@ export const login = async (req, res) => {
 			})
 		}
 
-		const isPasswordCorrect = await bcrypt.compare(password, user.password)
+		const isPasswordCorrect = Boolean(user.password) && await bcrypt.compare(password, user.password)
 		if (!isPasswordCorrect) {
 			return res.status(400).json({ message: 'Credentials are not valid' })
 		}
@@ -898,7 +901,7 @@ export const resetPassword = async (req, res) => {
 		const user = await User.findById(resetToken.user)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
-		const isSameAsCurrentPassword = await bcrypt.compare(
+		const isSameAsCurrentPassword = Boolean(user.password) && await bcrypt.compare(
 			password,
 			user.password,
 		)
@@ -926,7 +929,7 @@ export const resetPassword = async (req, res) => {
 
 		const salt = await bcrypt.genSalt(10)
 		user.password = await bcrypt.hash(password, salt)
-		user.provider = 'local'
+		user.hasPassword = true
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
 		await PasswordResetToken.deleteMany({
@@ -1090,12 +1093,14 @@ export const logout = (req, res) => {
 
 export const getAuthUser = async (req, res) => {
 	try {
-		const user = await User.findById(req.user._id).select(`${publicUserFields} passkeys linkedProviders`)
+		const user = await User.findById(req.user._id).select(`${publicUserFields} password passkeys linkedProviders`)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 		const userData = user.toObject()
 		delete userData.passkeys
+		delete userData.password
 		return res.status(200).json({
 			...userData,
+			hasPassword: Boolean(user.password),
 			passkeyEnabled: user.passkeys.length > 0,
 			linkedProviders: user.linkedProviders?.map(({ provider, linkedAt }) => ({ provider, linkedAt })) || [],
 			passkeys: user.passkeys.map((passkey) => ({

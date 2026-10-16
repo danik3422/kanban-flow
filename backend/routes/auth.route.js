@@ -36,6 +36,8 @@ import {
 	settingsSchema,
 	reauthenticateSchema,
 	disconnectSocialSchema,
+	passkeyAuthOptionsSchema,
+	removePasskeySchema,
 	signupSchema,
 } from '../lib/validation.js'
 import { authMiddleware, verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
@@ -94,9 +96,9 @@ router.post('/social/signup', authLimiter, validateBody(socialAuthSchema), socia
 
 // Protected routes
 router.post('/logout', logout)
-	router.post('/social/connect', verifiedAuthMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
-	router.delete('/social/:provider', verifiedAuthMiddleware, authLimiter, validateBody(disconnectSocialSchema), disconnectSocialAccount)
-	router.post('/social/set-password', verifiedAuthMiddleware, authLimiter, validateBody(setSocialPasswordSchema), setSocialPassword)
+router.post('/social/connect', verifiedAuthMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
+router.delete('/social/:provider', verifiedAuthMiddleware, authLimiter, validateBody(disconnectSocialSchema), disconnectSocialAccount)
+router.post('/social/set-password', verifiedAuthMiddleware, authLimiter, validateBody(setSocialPasswordSchema), setSocialPassword)
 router.get('/get-user', authMiddleware, getAuthUser)
 router.patch(
 	'/setup-profile',
@@ -120,8 +122,8 @@ router.patch(
 router.post('/reauthenticate', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(reauthenticateSchema), reauthenticate)
 router.post('/passkeys/options', verifiedAuthMiddleware, createPasskeyRegistrationOptions)
 router.post('/passkeys/verify', verifiedAuthMiddleware, verifyPasskeyRegistration)
-router.delete('/passkeys/:credentialId', verifiedAuthMiddleware, authLimiter, removePasskey)
-router.post('/passkeys/auth-options', authLimiter, createPasskeyAuthenticationOptions)
+router.delete('/passkeys/:credentialId', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(removePasskeySchema), removePasskey)
+router.post('/passkeys/auth-options', authLimiter, validateBody(passkeyAuthOptionsSchema), createPasskeyAuthenticationOptions)
 router.post('/passkeys/authenticate', authLimiter, authenticateWithPasskey)
 
 export default router
