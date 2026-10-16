@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, MailWarning, ShieldCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 
 const RESEND_COOLDOWN_KEY = 'kanban-email-resend-cooldown'
+const PENDING_TOKEN_KEY = 'kanban-pending-verification-token'
 
 const readStoredResendCooldown = () => {
 	const storedValue = window.sessionStorage.getItem(RESEND_COOLDOWN_KEY)
@@ -49,7 +50,14 @@ const VerifyEmail = () => {
 	const navigate = useNavigate()
 	const [token] = useState(() => {
 		if (typeof window === 'undefined') return ''
-		return new URLSearchParams(window.location.search).get('token') || ''
+		const urlToken = new URLSearchParams(window.location.search).get('token')
+		// The link is often opened before signing in; keep the token across the login detour.
+		try {
+			if (urlToken) window.sessionStorage.setItem(PENDING_TOKEN_KEY, urlToken)
+			return urlToken || window.sessionStorage.getItem(PENDING_TOKEN_KEY) || ''
+		} catch {
+			return urlToken || ''
+		}
 	})
 	const { authUser, checkAuth, logout } = useAuthStore()
 	const [status, setStatus] = useState(token ? 'pending' : 'idle')
@@ -66,11 +74,14 @@ const VerifyEmail = () => {
 		}
 	}, [authUser, navigate])
 
-	// Auto-verify if token is present
+	// Auto-verify if token is present. checkAuth() below changes authUser and re-runs
+	// this effect, so guard against submitting the one-time token twice.
+	const verificationStartedRef = useRef(false)
 	useEffect(() => {
-		if (!token || !authUser) {
+		if (!token || !authUser || verificationStartedRef.current) {
 			return
 		}
+		verificationStartedRef.current = true
 
 		const cleanUrl = new URL(window.location.href)
 		cleanUrl.searchParams.delete('token')
@@ -79,6 +90,12 @@ const VerifyEmail = () => {
 			document.title,
 			`${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
 		)
+
+		try {
+			window.sessionStorage.removeItem(PENDING_TOKEN_KEY)
+		} catch {
+			// Storage can be unavailable in private mode.
+		}
 
 		const verify = async () => {
 			try {

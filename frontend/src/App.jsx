@@ -32,7 +32,6 @@ import { useAuthStore } from './store/useAuthStore'
 export const App = () => {
 	const location = useLocation()
 	const navigate = useNavigate()
-	const handledInviteRef = useRef(null)
 	const handledSocialRedirectRef = useRef(false)
 	const isWorkspace =
 		location.pathname.startsWith('/workspaces') ||
@@ -41,6 +40,9 @@ export const App = () => {
 		location.pathname === '/calendar'
 	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
 	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
+	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
+	// so the board, sidebar and socket are not torn down and loaded twice.
+	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
 
 	useEffect(() => {
 		const publicRoute = location.pathname === '/' || location.pathname.startsWith('/public/') || location.pathname.startsWith('/invite/')
@@ -93,30 +95,18 @@ export const App = () => {
 		return () => axiosInstance.interceptors.response.eject(interceptorId)
 	}, [navigate])
 
+	// An invite opened before signing in is remembered; once the account is ready,
+	// bring the user back to the invite so they can confirm joining.
 	useEffect(() => {
-		const inviteMatch = location.pathname.match(/^\/invite\/([^/?]+)/)
-		const pendingInvite =
-			localStorage.getItem('kanban-pending-invite') || inviteMatch?.[1]
-		if (!authUser || !pendingInvite) return
-		if (handledInviteRef.current === pendingInvite) return
-		handledInviteRef.current = pendingInvite
-		axiosInstance
-			.post(`/board/invites/${pendingInvite}/accept`)
-			.then(({ data }) => {
-				localStorage.removeItem('kanban-pending-invite')
-				navigate(`/workspaces/${data.boardId}`, { replace: true })
-			})
-			.catch((error) => {
-				localStorage.removeItem('kanban-pending-invite')
-				const message =
-					error.response?.data?.message || 'This invite is no longer available'
-				navigate(
-					`/invite/${pendingInvite}?error=${encodeURIComponent(message)}`,
-					{
-						replace: true,
-					},
-				)
-			})
+		if (!authUser || authUser.emailVerified === false || authUser.profileSetup === false) return
+		let pendingInvite
+		try {
+			pendingInvite = localStorage.getItem('kanban-pending-invite')
+		} catch {
+			return
+		}
+		if (!pendingInvite || location.pathname === `/invite/${pendingInvite}`) return
+		navigate(`/invite/${pendingInvite}`, { replace: true })
 	}, [authUser, location.pathname, navigate])
 
 	const needsVerification = authUser && authUser.emailVerified === false
@@ -124,7 +114,8 @@ export const App = () => {
 	const requestedRedirect = new URLSearchParams(location.search).get('redirect')
 	const accountGateBlocked = shouldBlockAccountGateRoute(location.pathname, authUser)
 	const loginRedirect =
-		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+		// Same-origin paths only: "//host" and "/\host" both resolve to another site.
+		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//') && !requestedRedirect.includes('\\')
 			? requestedRedirect
 			: '/'
 
@@ -153,7 +144,7 @@ export const App = () => {
 			<Toaster position='bottom-right' richColors />
 			{!isWorkspace && <Navbar />}
 			<Suspense fallback={<div className='loading-screen' role='status' aria-live='polite'><div className='loading-shell' aria-label='Loading page'><div className='loading-brand'><span className='brand-mark'>K</span><span>KanbanHub</span></div><div className='loading-pill'><span className='loading-spinner' aria-hidden='true' /><p className='loading-label'>Loading<span className='loading-dots'>...</span></p></div></div></div>}>
-			<Routes key={location.pathname}>
+			<Routes key={routesKey}>
 				{needsVerification ? (
 					<>
 						<Route path='/verify-email' element={<VerifyEmail />} />

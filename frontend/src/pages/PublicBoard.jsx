@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
+import { formatDueDate } from '../utils/dueDate'
+import { toPlainText } from '../lib/richText'
 
 const PublicBoard = () => {
 	const { token } = useParams()
@@ -59,10 +61,6 @@ const PublicBoard = () => {
 
 	const orderedColumns = [...boardData.columns].sort((left, right) => Number(right.pinned) - Number(left.pinned))
 	const taskCount = orderedColumns.reduce((total, column) => total + column.tasks.length, 0)
-	const formatDueDate = (dueDate) => {
-		if (!dueDate) return ''
-		return new Date(dueDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
-	}
 
 	return (
 		<main className='public-board-page'>
@@ -99,7 +97,7 @@ const PublicBoard = () => {
 							{column.tasks.map((task) => (
 								<article className='public-board-task' key={task._id}>
 									<strong>{task.title}</strong>
-									{task.description && <p>{task.description.replace(/<[^>]*>/g, '')}</p>}
+									{toPlainText(task.description) && <p>{toPlainText(task.description)}</p>}
 									{task.labels?.length > 0 && <div className='public-board-labels'>{task.labels.map((label) => <span key={label}>{label}</span>)}</div>}
 									{(task.priority || task.dueDate || task.checklist?.length > 0) && (
 										<div className='public-board-task-meta'>

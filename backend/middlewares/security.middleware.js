@@ -76,3 +76,46 @@ export const verificationEmailLimiter = rateLimit({
 	keyGenerator: (req) => req.body.email,
 	handler: verificationRateLimitHandler,
 })
+
+const emailKey = (req) => `email:${String(req.body?.email || '').toLowerCase()}`
+
+// The reset request always answers 200 so it cannot reveal accounts; count every
+// request, otherwise the limit never applies and a mailbox can be flooded.
+export const passwordResetRequestLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 20,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: rateLimitResponse,
+	keyGenerator: getRateLimitKey,
+})
+
+export const passwordResetEmailLimiter = rateLimit({
+	windowMs: 60 * 60 * 1000,
+	limit: 3,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: rateLimitResponse,
+	keyGenerator: emailKey,
+})
+
+// Per-account brute-force guard that holds even when guesses come from many IPs.
+export const loginEmailLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 10,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: { message: 'Too many failed sign-in attempts for this account. Please wait 15 minutes or reset your password.' },
+	skipSuccessfulRequests: true,
+	keyGenerator: emailKey,
+})
+
+// Invites send email from our domain, so cap how many one person can send.
+export const inviteLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 30,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: { message: 'Too many invitations. Please wait a few minutes and try again.' },
+	keyGenerator: (req) => `user:${req.user?._id}`,
+})

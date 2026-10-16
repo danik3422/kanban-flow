@@ -1,7 +1,6 @@
 import express from 'express'
 import {
 	acceptBoardInvite,
-	addMemberToBoard,
 	copyBoardInviteLink,
 	createBoard,
 	createBoardInvite,
@@ -16,11 +15,13 @@ import {
 	getBoardActivities,
 	getBoardInviteDetails,
 	getBoardColumns,
+	getBoardContent,
 	getBoardInvites,
 	getBoardInviteLink,
 	getBoardMembers,
 	getColumnTasks,
 	getMyTasks,
+	getTeam,
 	getUserBoards,
 	leaveBoard,
 	removeBoard,
@@ -47,9 +48,9 @@ import {
 	columnMiddleware,
 	validateObjectIdParam,
 } from '../middlewares/board.middleware.js'
+import { inviteLimiter } from '../middlewares/security.middleware.js'
 import { validateBody } from '../middlewares/validation.middleware.js'
 import {
-	addMemberSchema,
 	columnPositionSchema,
 	columnSortSchema,
 	createBoardSchema,
@@ -74,6 +75,7 @@ for (const param of ['id', 'memberId', 'inviteId']) {
 // Boards
 router.get('/boards', verifiedAuthMiddleware, getUserBoards)
 router.get('/my-tasks', verifiedAuthMiddleware, getMyTasks)
+router.get('/team', verifiedAuthMiddleware, getTeam)
 router.get('/public/:token', getPublicBoard)
 router.post('/boards', verifiedAuthMiddleware, validateBody(createBoardSchema), createBoard)
 router.get('/boards/:id', verifiedAuthMiddleware, boardMiddleware, getBoardById)
@@ -119,15 +121,9 @@ router.delete(
 	revokeBoardInvite,
 )
 router.post(
-	'/boards/:id/members',
-	verifiedAuthMiddleware,
-	boardMiddleware,
-	validateBody(addMemberSchema),
-	addMemberToBoard,
-)
-router.post(
 	'/boards/:id/invites',
 	verifiedAuthMiddleware,
+	inviteLimiter,
 	boardMiddleware,
 	validateBody(createInviteSchema),
 	createBoardInvite,
@@ -142,6 +138,7 @@ router.get('/invites/:token/details', getBoardInviteDetails)
 router.post('/invites/:token/accept', authMiddleware, acceptBoardInvite)
 
 // Columns
+router.get('/boards/:id/content', authMiddleware, boardMiddleware, getBoardContent)
 router.get(
 	'/boards/:id/columns',
 	authMiddleware,

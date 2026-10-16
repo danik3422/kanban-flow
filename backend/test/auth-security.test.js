@@ -159,6 +159,36 @@ describe('social auth security helpers', () => {
 		assert.equal(results.filter((result) => result.status === 'rejected' && result.reason?.code === 11000).length, 1)
 	})
 
+	it('never signs in a different provider account that claims the same email', async () => {
+		await User.create({ email: 'uid-victim@example.com', provider: 'microsoft', providerUid: 'victim-uid', emailVerified: true })
+		await withFirebaseVerifier(async () => ({
+			uid: 'attacker-uid',
+			email: 'uid-victim@example.com',
+			email_verified: true,
+			firebase: { sign_in_provider: 'microsoft.com' },
+		}), async () => {
+			const response = await request(app).post('/api/auth/social/login').send({ idToken: 'token', provider: 'microsoft' })
+			assert.equal(response.status, 409)
+			assert.equal(response.headers['set-cookie'], undefined)
+		})
+	})
+
+	it('signs in the matching provider identity and binds legacy accounts on first sign-in', async () => {
+		const legacy = await User.create({ email: 'uid-legacy@example.com', provider: 'google', providerUid: null, emailVerified: true })
+		await withFirebaseVerifier(async () => ({
+			uid: 'legacy-google-uid',
+			email: 'uid-legacy@example.com',
+			email_verified: true,
+			firebase: { sign_in_provider: 'google.com' },
+		}), async () => {
+			const first = await request(app).post('/api/auth/social/login').send({ idToken: 'token', provider: 'google' })
+			assert.equal(first.status, 200)
+			assert.equal((await User.findById(legacy._id)).providerUid, 'legacy-google-uid')
+			const again = await request(app).post('/api/auth/social/login').send({ idToken: 'token', provider: 'google' })
+			assert.equal(again.status, 200)
+		})
+	})
+
 	it('rejects provider linking without a session', async () => {
 		const response = await request(app)
 			.post('/api/auth/social/connect')

@@ -37,13 +37,18 @@ import {
 	reauthenticateSchema,
 	disconnectSocialSchema,
 	passkeyAuthOptionsSchema,
+	passkeyAuthenticateSchema,
+	verifyEmailSchema,
 	removePasskeySchema,
 	signupSchema,
 } from '../lib/validation.js'
 import { authMiddleware, verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
 import {
 	authLimiter,
+	loginEmailLimiter,
+	passwordResetEmailLimiter,
 	passwordResetLimiter,
+	passwordResetRequestLimiter,
 	passwordChangeLimiter,
 	verificationEmailIpLimiter,
 	verificationEmailLimiter,
@@ -54,10 +59,10 @@ const router = express.Router()
 
 // Public routes
 router.post('/signup', authLimiter, validateBody(signupSchema), signup)
-router.post('/login', authLimiter, validateBody(loginSchema), login)
+router.post('/login', authLimiter, validateBody(loginSchema), loginEmailLimiter, login)
 
 // Protected routes for email verification (require authentication)
-router.post('/verify-email', authMiddleware, verifyEmail)
+router.post('/verify-email', authLimiter, authMiddleware, validateBody(verifyEmailSchema), verifyEmail)
 router.post(
 	'/verify-email/resend',
 	authMiddleware,
@@ -76,8 +81,9 @@ router.get('/password-reset/validate', (req, res) => {
 })
 router.post(
 	'/password-reset/request',
-	passwordResetLimiter,
+	passwordResetRequestLimiter,
 	validateBody(passwordResetRequestSchema),
+	passwordResetEmailLimiter,
 	requestPasswordReset,
 )
 router.post(
@@ -120,10 +126,10 @@ router.patch(
 	changePassword,
 )
 router.post('/reauthenticate', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(reauthenticateSchema), reauthenticate)
-router.post('/passkeys/options', verifiedAuthMiddleware, createPasskeyRegistrationOptions)
-router.post('/passkeys/verify', verifiedAuthMiddleware, verifyPasskeyRegistration)
+router.post('/passkeys/options', verifiedAuthMiddleware, authLimiter, createPasskeyRegistrationOptions)
+router.post('/passkeys/verify', verifiedAuthMiddleware, authLimiter, verifyPasskeyRegistration)
 router.delete('/passkeys/:credentialId', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(removePasskeySchema), removePasskey)
 router.post('/passkeys/auth-options', authLimiter, validateBody(passkeyAuthOptionsSchema), createPasskeyAuthenticationOptions)
-router.post('/passkeys/authenticate', authLimiter, authenticateWithPasskey)
+router.post('/passkeys/authenticate', authLimiter, validateBody(passkeyAuthenticateSchema), authenticateWithPasskey)
 
 export default router

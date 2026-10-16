@@ -69,13 +69,18 @@ export const clearBoardsCache = () => {
 	inMemoryBoards = null
 	inMemoryCachedAt = 0
 	inMemoryUserId = null
-	if (typeof window !== 'undefined') {
-		Object.keys(window.sessionStorage).filter((key) => key.startsWith(`${BOARDS_CACHE_KEY}:`)).forEach((key) => window.sessionStorage.removeItem(key))
+	if (typeof window === 'undefined') return
+	try {
+		Object.keys(window.sessionStorage)
+			.filter((key) => key.startsWith(`${BOARDS_CACHE_KEY}:`))
+			.forEach((key) => window.sessionStorage.removeItem(key))
+	} catch {
+		// ignore storage issues
 	}
 }
 
-export const fetchBoardsWithCache = async (userId) => {
-	const cached = getCachedBoards(userId)
+export const fetchBoardsWithCache = async (userId, { fresh = false } = {}) => {
+	const cached = fresh ? null : getCachedBoards(userId)
 	if (cached) return cached
 
 	const { data } = await axiosInstance.get('/board/boards')

@@ -25,6 +25,7 @@ import { isDevAuthBypass } from '../lib/devMode'
 import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
 import { applyTheme } from '../utils/theme'
+import { loadFirebase } from '../lib/firebase'
 
 const SettingToggle = ({ checked, title, description, onChange, disabled = false }) => (
 	<label className={`settings-toggle-row ${disabled ? 'is-disabled' : ''}`}>
@@ -59,6 +60,10 @@ const getInitialSettings = (authUser) => {
 }
 
 const Settings = () => {
+	// Preload social sign-in so the provider popup opens straight from the click.
+	useEffect(() => {
+		loadFirebase().catch(() => {})
+	}, [])
 	const { authUser, checkAuth, connectSocialAccount, setSocialPassword } = useAuthStore()
 	const [settings, setSettings] = useState(() => getInitialSettings(authUser))
 	const [savedSettings, setSavedSettings] = useState(() => getInitialSettings(authUser))
@@ -72,6 +77,7 @@ const Settings = () => {
 	const [isPasskeyManagerOpen, setIsPasskeyManagerOpen] = useState(false)
 	const [passkeyToRemove, setPasskeyToRemove] = useState(null)
 	const [passkeyRemovePassword, setPasskeyRemovePassword] = useState('')
+	const [passkeyAddPassword, setPasskeyAddPassword] = useState('')
 	const [providerToConnect, setProviderToConnect] = useState(null)
 	const [providerToDisconnect, setProviderToDisconnect] = useState(null)
 	const [providerPassword, setProviderPassword] = useState('')
@@ -170,8 +176,13 @@ const Settings = () => {
 			toast.error('Passkeys are not supported in this browser')
 			return
 		}
+		if (authUser?.hasPassword && !passkeyAddPassword) return
 		setIsPasskeySaving(true)
 		try {
+			if (authUser?.hasPassword) {
+				await axiosInstance.post('/auth/reauthenticate', { currentPassword: passkeyAddPassword })
+				setPasskeyAddPassword('')
+			}
 			const { data: options } = await axiosInstance.post('/auth/passkeys/options')
 			const registration = await startRegistration({ optionsJSON: options })
 			await axiosInstance.post('/auth/passkeys/verify', registration)
@@ -180,6 +191,8 @@ const Settings = () => {
 		} catch (error) {
 			if (error.name === 'NotAllowedError') {
 				toast.error('Passkey setup was cancelled')
+			} else if (error.config?.url?.endsWith('/auth/reauthenticate')) {
+				toast.error('Current password is incorrect')
 			} else {
 				toast.error(error.response?.data?.message || 'Could not add passkey')
 			}
@@ -374,7 +387,8 @@ const Settings = () => {
 				<section className='passkey-manager' role='dialog' aria-modal='true' aria-labelledby='passkey-manager-title' onMouseDown={(event) => event.stopPropagation()}>
 					<div className='passkey-manager-header'><div><p className='eyebrow'>Security</p><h2 id='passkey-manager-title'>Manage passkeys</h2><p>Use a device credential for faster, safer sign-in.</p></div><button type='button' className='icon-button' onClick={() => setIsPasskeyManagerOpen(false)} aria-label='Close passkey manager' title='Close'><X size={17} /></button></div>
 					<div className='passkey-manager-list'>{passkeys.length ? passkeys.map((passkey, index) => <div className='passkey-manager-row' key={passkey.id}><div className='passkey-manager-icon'><KeyRound size={17} /></div><div><strong>Passkey {index + 1}</strong><small>Added {passkey.createdAt ? new Date(passkey.createdAt).toLocaleDateString() : 'recently'}</small></div><button type='button' className='passkey-remove-button' onClick={() => requestRemovePasskey(passkey)} disabled={isPasskeySaving}><Trash2 size={14} /> Remove</button></div>) : <div className='passkey-manager-empty'><KeyRound size={20} /><p>No passkeys connected yet.</p></div>}</div>
-					<button type='button' className='primary-button passkey-manager-add' onClick={addPasskey} disabled={isPasskeySaving}><KeyRound size={16} /> {isPasskeySaving ? 'Adding...' : 'Add new passkey'}</button>
+					{authUser?.hasPassword && <label className='passkey-confirm-field'><span><LockKeyhole size={14} /> Current password</span><input type='password' value={passkeyAddPassword} onChange={(event) => setPasskeyAddPassword(event.target.value)} autoComplete='current-password' placeholder='Confirm your password to add a passkey' /></label>}
+					<button type='button' className='primary-button passkey-manager-add' onClick={addPasskey} disabled={isPasskeySaving || (authUser?.hasPassword && !passkeyAddPassword)}><KeyRound size={16} /> {isPasskeySaving ? 'Adding...' : 'Add new passkey'}</button>
 				</section>
 			</div>}
 			{passkeyToRemove && <div className='passkey-confirm-backdrop' role='presentation' onMouseDown={() => setPasskeyToRemove(null)}>

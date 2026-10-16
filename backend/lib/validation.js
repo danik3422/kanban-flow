@@ -27,6 +27,8 @@ export const passwordResetRequestSchema = z.object({ email })
 
 export const resendVerificationSchema = z.object({ email })
 
+export const verifyEmailSchema = z.object({ token: z.string().length(64) })
+
 export const passwordResetConfirmSchema = z.object({
 	token: z.string().length(64),
 	password: passwordSchema,
@@ -99,11 +101,6 @@ export const updateBoardSchema = z.object({
 	visibility: boardVisibility.optional(),
 })
 
-export const addMemberSchema = z.object({
-	email,
-	role: z.enum(['admin', 'member']).default('member'),
-})
-
 export const createInviteSchema = z.object({
 	email: z.union([email, z.literal('')]).default(''),
 	role: z.enum(['admin', 'member']).default('member'),
@@ -158,6 +155,14 @@ export const taskCommentSchema = z.object({
 
 export const passkeyAuthOptionsSchema = z.object({
 	email: z.union([email, z.literal('')]).optional(),
+})
+
+// The full WebAuthn assertion is passed through to the verifier untouched.
+export const passkeyAuthenticateSchema = z.looseObject({
+	id: z.string().min(1).max(1024),
+	response: z.looseObject({
+		clientDataJSON: z.string().min(1).max(10000),
+	}),
 })
 
 export const removePasskeySchema = z.object({

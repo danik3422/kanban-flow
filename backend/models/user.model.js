@@ -41,8 +41,6 @@ const userSchema = new mongoose.Schema(
 		}],
 		passkeyRegistrationChallenge: { type: String, default: '' },
 		passkeyRegistrationChallengeExpiresAt: { type: Date, default: null },
-		passkeyAuthenticationChallenge: { type: String, default: '' },
-		passkeyAuthenticationChallengeExpiresAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
 )
@@ -66,6 +64,9 @@ userSchema.index(
 		},
 	},
 )
+
+// Passkey sign-in looks the account up by credential.
+userSchema.index({ 'passkeys.credentialID': 1 }, { sparse: true })
 
 const User = mongoose.model('User', userSchema)
 export default User

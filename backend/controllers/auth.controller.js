@@ -18,7 +18,8 @@ import {
 } from '../lib/mailer.js'
 import { hashPassword } from '../lib/password.js'
 import { publicUserFields } from '../lib/userProjection.js'
-import { generateToken } from '../lib/utils.js'
+import { clearAuthCookie, generateToken } from '../lib/utils.js'
+import PasskeyChallenge from '../models/passkeyChallenge.model.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
 
@@ -30,10 +31,18 @@ const getPasskeyRp = () => {
 	}
 }
 
+const REAUTH_WINDOW_MS = 5 * 60 * 1000
+const hasRecentReauthentication = (user) =>
+	Boolean(user.lastReauthenticatedAt) && Date.now() - user.lastReauthenticatedAt.getTime() <= REAUTH_WINDOW_MS
+
 export const createPasskeyRegistrationOptions = async (req, res) => {
 	try {
-		const user = await User.findById(req.user._id).select('email name passkeys')
+		const user = await User.findById(req.user._id).select('email name passkeys password lastReauthenticatedAt')
 		if (!user) return res.status(404).json({ message: 'User not found' })
+		// A passkey outlives password changes, so a stolen session alone must not be able to add one.
+		if (user.password && !hasRecentReauthentication(user)) {
+			return res.status(401).json({ message: 'Confirm your password to add a passkey.', code: 'reauth_required' })
+		}
 		const { rpID } = getPasskeyRp()
 		const options = await generateRegistrationOptions({
 			rpName: 'KanbanHub',
@@ -129,14 +138,12 @@ export const createPasskeyAuthenticationOptions = async (req, res) => {
 		const { rpID } = getPasskeyRp()
 		const options = await generateAuthenticationOptions({
 			rpID,
-			userVerification: 'preferred',
+			userVerification: 'required',
 		})
-		const user = req.body?.email ? await User.findOne({ email: req.body.email }).select('_id') : null
-		if (user) {
-			user.passkeyAuthenticationChallenge = options.challenge
-			user.passkeyAuthenticationChallengeExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
-			await user.save()
-		}
+		await PasskeyChallenge.create({
+			challenge: options.challenge,
+			expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+		})
 		return res.json(options)
 	} catch (error) {
 		console.error('Passkey authentication options error:', error)
@@ -144,18 +151,33 @@ export const createPasskeyAuthenticationOptions = async (req, res) => {
 	}
 }
 
+const readClientChallenge = (clientDataJSON) => {
+	try {
+		const clientData = JSON.parse(Buffer.from(clientDataJSON, 'base64url').toString('utf8'))
+		return typeof clientData.challenge === 'string' ? clientData.challenge : ''
+	} catch {
+		return ''
+	}
+}
+
 export const authenticateWithPasskey = async (req, res) => {
 	try {
-		const credentialId = typeof req.body?.id === 'string' ? req.body.id : ''
-		const user = await User.findOne({ 'passkeys.credentialID': credentialId })
-		if (!user || !user.passkeyAuthenticationChallenge || !user.passkeyAuthenticationChallengeExpiresAt || user.passkeyAuthenticationChallengeExpiresAt < new Date()) {
+		const credentialId = req.body.id
+		const challenge = readClientChallenge(req.body.response.clientDataJSON)
+		// Claim the challenge before verifying so an assertion can never be replayed.
+		const claimedChallenge = challenge
+			? await PasskeyChallenge.findOneAndDelete({ challenge, expiresAt: { $gt: new Date() } })
+			: null
+		if (!claimedChallenge) {
 			return res.status(400).json({ message: 'Passkey sign-in session expired' })
 		}
+		const user = await User.findOne({ 'passkeys.credentialID': credentialId })
+		if (!user) return res.status(400).json({ message: 'Passkey is not valid' })
 		const storedCredential = user.passkeys.find((passkey) => passkey.credentialID === credentialId)
 		const { rpID, expectedOrigin } = getPasskeyRp()
 		const verification = await verifyAuthenticationResponse({
 			response: req.body,
-			expectedChallenge: user.passkeyAuthenticationChallenge,
+			expectedChallenge: claimedChallenge.challenge,
 			expectedOrigin,
 			expectedRPID: rpID,
 			credential: {
@@ -168,8 +190,6 @@ export const authenticateWithPasskey = async (req, res) => {
 		})
 		if (!verification.verified) return res.status(400).json({ message: 'Passkey is not valid' })
 		storedCredential.counter = verification.authenticationInfo.newCounter
-		user.passkeyAuthenticationChallenge = ''
-		user.passkeyAuthenticationChallengeExpiresAt = null
 		await user.save()
 		generateToken(user._id, res, user.sessionVersion)
 		return res.json({
@@ -300,13 +320,15 @@ export const socialSignin = async (req, res) => {
 		if (!email)
 			return res.status(400).json({ message: 'Invalid token: missing email' })
 
-		const user = await User.findOne({
-			$or: [
-				{ email: email.toLowerCase() },
-				{ provider, providerUid: decodedToken.uid },
-				{ 'linkedProviders.provider': provider, 'linkedProviders.providerUid': decodedToken.uid },
-			],
-		})
+		// Match the provider identity first: an email alone must never sign someone in,
+		// because a different account at the same provider can claim the same address.
+		const user =
+			(await User.findOne({
+				$or: [
+					{ provider, providerUid: decodedToken.uid },
+					{ 'linkedProviders.provider': provider, 'linkedProviders.providerUid': decodedToken.uid },
+				],
+			})) || (await User.findOne({ email: email.toLowerCase() }))
 		if (!user)
 			return res
 				.status(404)
@@ -314,25 +336,31 @@ export const socialSignin = async (req, res) => {
 		const linkedProvider = user.linkedProviders?.some(
 			(link) => link.provider === provider && link.providerUid === decodedToken.uid,
 		)
-		if (user.provider !== 'local' && user.provider !== provider && !linkedProvider) {
-			return res
-				.status(400)
-				.json({ message: `This account is registered with ${user.provider}.` })
-		}
-
-		if (user.provider === 'local' && !linkedProvider) {
-			return res
-				.status(409)
-				.json({
+		const isPrimaryIdentity = user.provider === provider && user.providerUid === decodedToken.uid
+		if (!isPrimaryIdentity && !linkedProvider) {
+			if (user.provider === 'local') {
+				return res.status(409).json({
 					message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
 				})
-		}
-		if (user.provider !== provider && !linkedProvider) {
-			return res
-				.status(409)
-				.json({
+			}
+			if (user.provider !== provider) {
+				return res.status(409).json({
 					message: `This email is already registered with ${user.provider}.`,
 				})
+			}
+			if (user.providerUid) {
+				return res.status(409).json({
+					message: `This email is linked to a different ${provider} account.`,
+				})
+			}
+			// Accounts created before provider UIDs were stored adopt the first verified identity.
+			const bound = await User.updateOne(
+				{ _id: user._id, provider, $or: [{ providerUid: null }, { providerUid: { $exists: false } }] },
+				{ $set: { providerUid: decodedToken.uid } },
+			)
+			if (!bound.modifiedCount) {
+				return res.status(409).json({ message: 'Provider identity changed. Please try again.' })
+			}
 		}
 		generateToken(user._id, res, user.sessionVersion)
 
@@ -437,7 +465,7 @@ export const connectSocialAccount = async (req, res) => {
 		// use the short-lived server timestamp created by /reauthenticate.
 		if (currentPassword) {
 			await assertCurrentPassword(user, currentPassword)
-		} else if (!user.lastReauthenticatedAt || Date.now() - user.lastReauthenticatedAt.getTime() > 5 * 60 * 1000) {
+		} else if (!hasRecentReauthentication(user)) {
 			const error = new Error('Re-authentication required.')
 			error.statusCode = 401
 			throw error
@@ -644,11 +672,6 @@ export const signup = async (req, res) => {
 					.status(400)
 					.json({ message: 'Password is required for local signup.' })
 			}
-			if (password.length < 6) {
-				return res
-					.status(400)
-					.json({ message: 'Password must be at least 6 characters long.' })
-			}
 		}
 
 		const normalizedEmail = email.trim().toLowerCase()
@@ -697,7 +720,7 @@ export const signup = async (req, res) => {
 		await newUser.save()
 
 		if (provider === 'local') {
-			const verificationUrl = `${env.frontendUrl}/login/verify-email?token=${rawVerificationToken}`
+			const verificationUrl = `${env.frontendUrl}/verify-email?token=${rawVerificationToken}`
 			try {
 				await sendAccountVerificationEmail({
 					email: newUser.email,
@@ -733,6 +756,8 @@ export const signup = async (req, res) => {
 	}
 }
 
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('timing-equalizer-password', 10)
+
 export const login = async (req, res) => {
 	const { email, password } = req.body
 
@@ -740,6 +765,8 @@ export const login = async (req, res) => {
 		const user = await User.findOne({ email })
 
 		if (!user) {
+			// Spend the same bcrypt time as a real check so response timing does not reveal accounts.
+			await bcrypt.compare(password, DUMMY_PASSWORD_HASH)
 			return res.status(400).json({ message: 'Credentials are not valid' })
 		}
 
@@ -792,7 +819,7 @@ export const login = async (req, res) => {
 export const validatePasswordResetToken = async (req, res) => {
 	try {
 		const token = req.query?.token
-		if (!token) {
+		if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
 			return res.status(400).json({ message: 'Reset token is required' })
 		}
 
@@ -1041,7 +1068,7 @@ export const resendVerificationEmail = async (req, res) => {
 		const rawToken = crypto.randomBytes(32).toString('hex')
 		const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
 		const expiresAt = new Date(Date.now() + env.emailVerificationMinutes * 60 * 1000)
-		const verificationUrl = `${env.frontendUrl}/verify-email?token=${rawToken}&email=${encodeURIComponent(email)}`
+		const verificationUrl = `${env.frontendUrl}/verify-email?token=${rawToken}`
 
 		try {
 			await sendAccountVerificationEmail({ email: user.email, verificationUrl })
@@ -1079,7 +1106,7 @@ export const resendVerificationEmail = async (req, res) => {
 
 export const logout = (req, res) => {
 	try {
-		res.cookie('jwt', '', { maxAge: 0 })
+		clearAuthCookie(res)
 		res.status(200).json({
 			message: 'Logged out successfully',
 		})
@@ -1160,6 +1187,8 @@ export const changePassword = async (req, res) => {
 		user.password = await bcrypt.hash(newPassword, salt)
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
+		// Other sessions are revoked by the version bump; keep this one signed in.
+		generateToken(user._id, res, user.sessionVersion)
 		return res.status(200).json({ message: 'Password changed successfully' })
 	} catch (error) {
 		console.error('Password change failed:', error)

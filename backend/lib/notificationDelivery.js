@@ -1,3 +1,4 @@
+import { env } from '../config/env.js'
 import Notification from '../models/notification.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import User from '../models/user.model.js'
@@ -73,7 +74,7 @@ export const notifyTaskRecipients = async ({
 					taskTitle: task.title,
 					boardName: board.name,
 					message: notification.message,
-					boardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/workspaces/${board._id}`,
+					boardUrl: `${env.frontendUrl}/workspaces/${board._id}`,
 				})
 				await Notification.updateOne({ _id: notification._id }, { $set: { emailSentAt: new Date() } })
 			} catch (error) {

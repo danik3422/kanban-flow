@@ -4,11 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import { fetchBoardsWithCache } from '../lib/boardsCache'
-import { fetchBoardMembersWithCache } from '../lib/boardMembersCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { handleAvatarError } from '../utils/avatar'
 import { useAuthStore } from '../store/useAuthStore'
+import { axiosInstance } from '../lib/axios'
 
 const getInitials = (person) => {
 	const name = person.name || person.email || '?'
@@ -46,20 +45,16 @@ const Team = () => {
 		let isCurrent = true
 		const loadTeam = async () => {
 			try {
-				const boardList = await fetchBoardsWithCache(authUser?._id)
-				if (!Array.isArray(boardList) || boardList.length === 0) {
+				// One request returns every board with its members.
+				const { data: results } = await axiosInstance.get('/board/team')
+				const boardList = results.map(({ board }) => board)
+				if (boardList.length === 0) {
 					if (isCurrent) {
 						setBoards([])
 						setPeople([])
 					}
 					return
 				}
-				const results = await Promise.all(
-					boardList.map(async (board) => {
-						const members = await fetchBoardMembersWithCache(authUser?._id, board._id)
-						return { board, members: Array.isArray(members) ? members : [] }
-					}),
-				)
 				const peopleById = new Map()
 				results.forEach(({ board, members }) => {
 					members.forEach((member) => {
@@ -132,7 +127,7 @@ const Team = () => {
 	}
 
 	return (
-		<div className='workspace-shell flex h-screen'>
+		<div className='workspace-shell flex h-dvh'>
 			<WorkspaceSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}

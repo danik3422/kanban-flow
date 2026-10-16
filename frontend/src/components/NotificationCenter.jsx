@@ -1,11 +1,10 @@
 import { ArrowRightLeft, Bell, CheckCheck, ClipboardList, MessageCircle, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import { axiosInstance } from '../lib/axios'
 import { isDevAuthBypass } from '../lib/devMode'
-import { socketUrl } from '../lib/runtimeConfig'
+import { acquireSocket, releaseSocket } from '../lib/socket'
 import Popover from './Popover'
 
 const NotificationCenter = () => {
@@ -37,8 +36,14 @@ const NotificationCenter = () => {
 		}
 		loadNotifications()
 
-		const socket = io(socketUrl, { withCredentials: true })
-		socket.on('notification:new', (notification) => {
+		const socket = acquireSocket()
+		let hasConnected = socket.connected
+		// Notifications created while the connection was down never arrive as events.
+		const handleConnect = () => {
+			if (hasConnected) loadNotifications()
+			hasConnected = true
+		}
+		const handleNotification = (notification) => {
 			setNotifications((current) => {
 				const merged = [notification, ...current]
 				const uniqueById = new Map()
@@ -46,8 +51,14 @@ const NotificationCenter = () => {
 				return [...uniqueById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
 			})
 			toast.info(notification.title)
-		})
-		return () => socket.disconnect()
+		}
+		socket.on('connect', handleConnect)
+		socket.on('notification:new', handleNotification)
+		return () => {
+			socket.off('connect', handleConnect)
+			socket.off('notification:new', handleNotification)
+			releaseSocket()
+		}
 	}, [])
 
 	const unreadCount = notifications.filter((notification) => !notification.readAt).length

@@ -24,7 +24,6 @@ import {
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { io } from 'socket.io-client'
 import { toast } from 'sonner'
 import InviteMemberModal from '../components/InviteMemberModal'
 import WorkspaceOverview from '../components/WorkspaceOverview'
@@ -34,11 +33,24 @@ import RichTextEditor from '../components/RichTextEditor'
 import Popover from '../components/Popover'
 import { sanitizeDescription } from '../lib/richText'
 import { axiosInstance } from '../lib/axios'
-import { fetchBoardsWithCache } from '../lib/boardsCache'
-import { socketUrl } from '../lib/runtimeConfig'
+import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../utils/taskSorting'
+import { formatDueDate, getDueDateKey, getDueDateState } from '../utils/dueDate'
 import { getColumnInsertionIndex, reorderColumns } from '../utils/columnOrdering'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import useBoardRealtime from '../hooks/useBoardRealtime'
+import {
+	addColumn,
+	addTask,
+	applyColumnOrder,
+	applyColumnSort,
+	applyTaskUpdate,
+	mergeColumn,
+	removeColumn,
+	removeTask,
+	replaceTask,
+	setColumnTasks,
+} from '../utils/boardColumns'
 import {
 	devBoard,
 	devBoardInvites,
@@ -56,43 +68,9 @@ const PRIORITY_LABELS = {
 	urgent: 'Urgent',
 }
 
-// Replace an edited task in place; only a column change moves it to the end of the target column.
-const applyTaskUpdate = (columns, updatedTask, targetColumnId) => {
-	const isInTarget = columns.some(
-		(column) =>
-			column._id === targetColumnId &&
-			column.tasks.some((task) => task._id === updatedTask._id),
-	)
-	return columns.map((column) => {
-		if (isInTarget) {
-			return column._id === targetColumnId
-				? {
-						...column,
-						tasks: column.tasks.map((task) =>
-							task._id === updatedTask._id ? updatedTask : task,
-						),
-					}
-				: column
-		}
-		const tasks = column.tasks.filter((task) => task._id !== updatedTask._id)
-		return column._id === targetColumnId
-			? { ...column, tasks: [...tasks, updatedTask] }
-			: { ...column, tasks }
-	})
-}
-
 const getChecklistProgress = (checklist = []) => {
 	const completed = checklist.filter((item) => item.completed).length
 	return { completed, total: checklist.length }
-}
-
-const getDueDateState = (dueDate) => {
-	if (!dueDate) return null
-	const due = new Date(dueDate)
-	const today = new Date()
-	today.setHours(0, 0, 0, 0)
-	due.setHours(0, 0, 0, 0)
-	return due < today ? 'overdue' : due.getTime() === today.getTime() ? 'today' : 'upcoming'
 }
 
 const getSortStorageKey = (boardId, userId = 'anonymous') =>
@@ -134,18 +112,8 @@ const setNativeDragImage = (event, element) => {
 }
 
 const fetchColumns = async (boardId) => {
-	const { data: columns } = await axiosInstance.get(
-		`/board/boards/${boardId}/columns`,
-	)
-	return Promise.all(
-		columns.map(async (column) => {
-			const { data: tasks } = await axiosInstance.get(
-				`/board/columns/${column._id}/tasks`,
-			)
-
-			return { ...column, tasks }
-		}),
-	)
+	const { data } = await axiosInstance.get(`/board/boards/${boardId}/content`)
+	return data
 }
 
 const Workspace = () => {
@@ -193,10 +161,6 @@ const Workspace = () => {
 	const [publicBoardLink, setPublicBoardLink] = useState('')
 	const [boardActivities, setBoardActivities] = useState([])
 	const [isActivityLoading, setIsActivityLoading] = useState(false)
-	const [presenceByUserId, setPresenceByUserId] = useState({})
-	const [realtimeStatus, setRealtimeStatus] = useState(
-		isDevAuthBypass ? 'connected' : 'connecting',
-	)
 	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
@@ -214,6 +178,8 @@ const Workspace = () => {
 	const [trackedSeconds, setTrackedSeconds] = useState(0)
 	const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false)
 	const [newChecklistItem, setNewChecklistItem] = useState('')
+	const taskDetailsInitialRef = useRef(null)
+	const hasRevalidatedBoardsRef = useRef(false)
 	const [taskDetailsForm, setTaskDetailsForm] = useState({
 		title: '',
 		description: '',
@@ -270,6 +236,20 @@ const Workspace = () => {
 		}
 	}
 
+	const applyLoadedColumns = useCallback((loadedColumns) => {
+		setColumns(
+			loadedColumns.map((column) => ({
+				...column,
+				tasks: sortTasks(column.tasks, column.sortBy || 'custom'),
+			})),
+		)
+		setColumnSortBy(
+			Object.fromEntries(
+				loadedColumns.map((column) => [column._id, column.sortBy || 'custom']),
+			),
+		)
+	}, [])
+
 	const refreshBoard = async (board) => {
 		if (!board) return
 		setIsRefreshing(true)
@@ -279,18 +259,7 @@ const Workspace = () => {
 			return
 		}
 		try {
-			const loadedColumns = await fetchColumns(board._id)
-			setColumns(
-				loadedColumns.map((column) => ({
-					...column,
-					tasks: sortTasks(column.tasks, column.sortBy || 'custom'),
-				})),
-			)
-			setColumnSortBy(
-				Object.fromEntries(
-					loadedColumns.map((column) => [column._id, column.sortBy || 'custom']),
-				),
-			)
+			applyLoadedColumns(await fetchColumns(board._id))
 		} catch (error) {
 			toast.error(error.response?.data?.message || 'Could not load this board')
 		} finally {
@@ -361,7 +330,12 @@ const Workspace = () => {
 				return
 			}
 			try {
-				const data = await fetchBoardsWithCache(authUser?._id)
+				const usedCache = Boolean(getCachedBoards(authUser?._id))
+				let data = await fetchBoardsWithCache(authUser?._id)
+				// A board created, joined or shared since the list was cached is missing from it.
+				if (boardId && !data.some((board) => board._id === boardId)) {
+					data = await fetchBoardsWithCache(authUser?._id, { fresh: true })
+				}
 				setBoards(data)
 				const nextBoard = boardId
 					? data.find((board) => board._id === boardId)
@@ -371,6 +345,21 @@ const Workspace = () => {
 				setBoardNameDraft(nextBoard?.name || '')
 				setIsEditingBoardName(false)
 				if (boardId && !nextBoard) navigate('/workspaces', { replace: true })
+				// The cache survives reloads; refresh it once per visit so boards created or
+				// shared elsewhere show up without waiting for the cache to expire.
+				if (usedCache && !hasRevalidatedBoardsRef.current) {
+					hasRevalidatedBoardsRef.current = true
+					fetchBoardsWithCache(authUser?._id, { fresh: true })
+						.then((freshBoards) => {
+							setBoards(freshBoards)
+							setSelectedBoard((current) => {
+								if (!current) return current
+								const freshBoard = freshBoards.find((board) => board._id === current._id)
+								return freshBoard ? { ...current, ...freshBoard } : current
+							})
+						})
+						.catch(() => {})
+				}
 			} catch (error) {
 				if (error.response?.status !== 404) {
 					toast.error(error.response?.data?.message || 'Could not load boards')
@@ -382,29 +371,52 @@ const Workspace = () => {
 		loadBoards()
 	}, [authUser?._id, boardId, navigate])
 
+	// Keyed by id: renames and realtime board updates replace the object but not the content.
+	// Creating, renaming, leaving or deleting boards edits this list; keep other pages' cache in step.
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) return
+		if (isLoading || isDevAuthBypass || !authUser?._id) return
+		setCachedBoards(authUser._id, boards)
+	}, [boards, isLoading, authUser?._id])
+
+	const selectedBoardId = selectedBoard?._id
+	const selectedBoardRole = selectedBoard?.role
+	// Every way of switching boards (sidebar, back button, notification link) lands here.
+	// Reset during render (not in an effect) so the old board never paints under the new one.
+	const [renderedBoardId, setRenderedBoardId] = useState(selectedBoardId)
+	if (renderedBoardId !== selectedBoardId) {
+		setRenderedBoardId(selectedBoardId)
+		if (!isDevAuthBypass) setColumns([])
+		setColumnSortBy({})
+		setBoardMembers([])
+		setBoardMemberRecords([])
+		setBoardInvites([])
+		setBoardActivities([])
+		setInviteLink(null)
+		setPublicBoardLink('')
+		setTaskDetails(null)
+		setEditingTask(null)
+		setActiveTaskColumn(null)
+		setOpenColumnMenuId(null)
+		setEditingColumn(null)
+		setDeleteColumnTarget(null)
+		setDeleteTaskTarget(null)
+		setRemoveMemberTarget(null)
+		setOwnershipTransferTarget(null)
+		setIsInviteOpen(false)
+		setIsDeleteBoardOpen(false)
+		setIsLeaveBoardOpen(false)
+		setIsVisibilityOpen(false)
+		setIsRoomActionsOpen(false)
+	}
+
+	useEffect(() => {
+		if (!selectedBoardId || isDevAuthBypass) return
 		let isCurrent = true
 		const loadSelectedBoard = async () => {
 			setIsRefreshing(true)
 			try {
-				const nextColumns = await fetchColumns(selectedBoard._id)
-					if (isCurrent) {
-						setColumns(
-							nextColumns.map((column) => ({
-								...column,
-								tasks: sortTasks(
-									column.tasks,
-									column.sortBy || 'custom',
-								),
-							})),
-						)
-						setColumnSortBy(
-							Object.fromEntries(
-								nextColumns.map((column) => [column._id, column.sortBy || 'custom']),
-							),
-						)
-					}
+				const nextColumns = await fetchColumns(selectedBoardId)
+				if (isCurrent) applyLoadedColumns(nextColumns)
 			} catch (error) {
 				if (isCurrent) {
 					toast.error(
@@ -419,10 +431,15 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [selectedBoard, authUser?._id, navigate])
+	}, [selectedBoardId, applyLoadedColumns])
 
 	useEffect(() => {
 		if (!draggedTask) return undefined
+		// dragover fires constantly; only re-render when the insertion point moves.
+		const updateDropIndicator = (next) =>
+			setDropIndicator((current) =>
+				current?.columnId === next.columnId && current?.index === next.index ? current : next,
+			)
 		const handleDragOver = (event) => {
 			event.dataTransfer.dropEffect = 'move'
 			const targetElement =
@@ -463,7 +480,7 @@ const Workspace = () => {
 				const rect = currentCard.getBoundingClientRect()
 				const isBefore = event.clientY < rect.top + rect.height / 2
 				currentCard.classList.add(isBefore ? 'drop-before' : 'drop-after')
-				setDropIndicator({
+				updateDropIndicator({
 					columnId: targetColumn._id,
 					index: taskIndex + (isBefore ? 0 : 1),
 				})
@@ -471,7 +488,7 @@ const Workspace = () => {
 			}
 
 			if (cards.length === 0) {
-				setDropIndicator({
+				updateDropIndicator({
 					columnId: targetColumn._id,
 					index: 0,
 				})
@@ -490,14 +507,14 @@ const Workspace = () => {
 			}
 			if (beforeCard) {
 				beforeCard.classList.add('drop-before')
-				setDropIndicator({
+				updateDropIndicator({
 					columnId: targetColumn._id,
 					index: insertionIndex,
 				})
 				return
 			}
 
-			setDropIndicator({
+			updateDropIndicator({
 				columnId: targetColumn._id,
 				index: cards.length,
 			})
@@ -622,38 +639,13 @@ const Workspace = () => {
 		}
 	}, [columns, moveColumn])
 
-	const selectedBoardId = selectedBoard?._id
-	useEffect(() => {
-		if (!selectedBoardId || isDevAuthBypass) return
-		const socket = io(socketUrl, {
-			withCredentials: true,
-			reconnection: true,
-			reconnectionAttempts: Infinity,
-			reconnectionDelay: 500,
-			reconnectionDelayMax: 5000,
-			timeout: 8000,
-		})
-		const heartbeat = () => socket.emit('presence-heartbeat')
-		socket.on('connect', () => {
-			setRealtimeStatus('connected')
-			socket.emit('join-board', selectedBoardId)
-			heartbeat()
-		})
-		socket.on('disconnect', () => setRealtimeStatus('reconnecting'))
-		socket.on('connect_error', () => setRealtimeStatus('reconnecting'))
-		socket.io.on('reconnect_attempt', () => setRealtimeStatus('reconnecting'))
-		socket.io.on('reconnect_failed', () => setRealtimeStatus('offline'))
-		socket.on('board:presence', (presence) => {
-			setPresenceByUserId(
-				Object.fromEntries(presence.map((item) => [item.userId, item.status])),
-			)
-		})
-		socket.on('board:access-revoked', ({ boardId: revokedBoardId, reason, boardName }) => {
+	const { status: realtimeStatus, presence: presenceByUserId } = useBoardRealtime(selectedBoardId, {
+		onResync: () => {
+			fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+		},
+		'board:access-revoked': ({ boardId: revokedBoardId, reason, boardName }) => {
 			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
 			if (revokedBoardId !== selectedBoardId) return
-			socket.io.opts.reconnection = false
-			setRealtimeStatus('offline')
-			setPresenceByUserId({})
 			setColumns([])
 			setBoardMembers([])
 			setBoardMemberRecords([])
@@ -666,145 +658,59 @@ const Workspace = () => {
 					? `${boardName || 'This board'} was deleted by its owner`
 					: 'You no longer have access to this room',
 			)
-			socket.disconnect()
-		})
-		socket.on('activity:new', (activity) => {
+		},
+		'activity:new': (activity) => {
 			setBoardActivities((current) => [
 				activity,
 				...current.filter((item) => item._id !== activity._id),
 			].slice(0, 200))
-		})
-		socket.on('board:updated', (updatedBoard) => {
+		},
+		'board:updated': (updatedBoard) => {
 			if (updatedBoard._id !== selectedBoardId) return
-			setSelectedBoard((current) =>
-				current ? { ...current, ...updatedBoard } : current,
-			)
+			setSelectedBoard((current) => (current ? { ...current, ...updatedBoard } : current))
 			setBoards((current) =>
-				current.map((board) =>
-					board._id === updatedBoard._id
-						? { ...board, ...updatedBoard }
-						: board,
-				),
+				current.map((board) => (board._id === updatedBoard._id ? { ...board, ...updatedBoard } : board)),
 			)
 			setBoardNameDraft(updatedBoard.name || '')
-		})
-		const heartbeatTimer = window.setInterval(heartbeat, 20_000)
-		socket.on('task:created', (task) => {
-			setColumns((current) =>
-				current.map((column) =>
-					column._id === task.column
-						? {
-								...column,
-								tasks: sortTasks(
-									column.tasks.some((item) => item._id === task._id)
-										? column.tasks
-										: [...column.tasks, task],
-									column.sortBy || 'custom',
-									),
-							}
-						: column,
-				),
-			)
-		})
-		socket.on('task:updated', (task) => {
-			setColumns((current) =>
-				current.map((column) => {
-					const withoutTask = column.tasks.filter(
-						(item) => item._id !== task._id,
-					)
-					return column._id === task.column
-						? {
-								...column,
-								tasks: sortTasks(
-									[...withoutTask, task],
-									column.sortBy || 'custom',
-								),
-							}
-						: { ...column, tasks: withoutTask }
-				}),
-			)
-		})
-		socket.on('task:deleted', ({ taskId }) => {
-			setColumns((current) =>
-				current.map((column) => ({
-					...column,
-					tasks: column.tasks.filter((task) => task._id !== taskId),
-				})),
-			)
+		},
+		'task:created': (task) => setColumns((current) => addTask(current, task)),
+		'task:updated': (task) => setColumns((current) => replaceTask(current, task)),
+		'task:deleted': ({ taskId }) => {
+			setColumns((current) => removeTask(current, taskId))
 			setTaskDetails((current) => (current?._id === taskId ? null : current))
-			setDeleteTaskTarget((current) =>
-				current?._id === taskId ? null : current,
-			)
-		})
-		socket.on('column:tasks-reordered', ({ columnId, tasks }) => {
-			setColumns((current) =>
-				current.map((column) =>
-					column._id === columnId
-						? { ...column, tasks: sortTasks(tasks, column.sortBy || 'custom') }
-						: column,
-				),
-			)
-		})
-		socket.on('column:updated', (updatedColumn) => {
-			setColumns((current) =>
-				current.map((column) =>
-					column._id === updatedColumn._id
-						? { ...column, ...updatedColumn }
-						: column,
-				),
-			)
-		})
-		socket.on('column:sort-updated', (updatedColumn) => {
-			const sortType = updatedColumn.sortBy || 'custom'
-			setColumnSortBy((current) => ({ ...current, [updatedColumn._id]: sortType }))
-			setColumns((current) =>
-				current.map((column) =>
-					column._id === updatedColumn._id
-						? { ...column, ...updatedColumn, tasks: sortTasks(column.tasks, sortType) }
-						: column,
-				),
-			)
-		})
-		socket.on('column:created', (createdColumn) => {
-			setColumns((current) =>
-				current.some((column) => column._id === createdColumn._id)
-					? current
-					: [...current, { ...createdColumn, tasks: [] }].sort(
-							(a, b) => a.position - b.position,
-						),
-			)
-		})
-		socket.on('column:deleted', ({ columnId }) => {
-			setColumns((current) => current.filter((column) => column._id !== columnId))
+			setDeleteTaskTarget((current) => (current?._id === taskId ? null : current))
+		},
+		'column:tasks-reordered': ({ columnId, tasks }) =>
+			setColumns((current) => setColumnTasks(current, columnId, tasks)),
+		'column:updated': (updatedColumn) => setColumns((current) => mergeColumn(current, updatedColumn)),
+		'column:sort-updated': (updatedColumn) => {
+			setColumnSortBy((current) => ({ ...current, [updatedColumn._id]: updatedColumn.sortBy || 'custom' }))
+			setColumns((current) => applyColumnSort(current, updatedColumn))
+		},
+		'column:created': (createdColumn) => setColumns((current) => addColumn(current, createdColumn)),
+		'column:deleted': ({ columnId }) => {
+			setColumns((current) => removeColumn(current, columnId))
 			setActiveTaskColumn((current) => (current === columnId ? null : current))
 			setOpenColumnMenuId((current) => (current === columnId ? null : current))
-			setEditingColumn((current) =>
-				current?._id === columnId ? null : current,
-			)
-		})
-		socket.on('columns:reordered', ({ columns: reorderedColumns }) => {
-			setColumns((current) =>
-				reorderedColumns.map((column) => ({
-					...column,
-					tasks: current.find((item) => item._id === column._id)?.tasks || [],
-				})),
-			)
-		})
-		return () => {
-			setPresenceByUserId({})
-			setRealtimeStatus('offline')
-			window.clearInterval(heartbeatTimer)
-			socket.disconnect()
-		}
-	}, [selectedBoardId, navigate])
+			setEditingColumn((current) => (current?._id === columnId ? null : current))
+			// A card that was open in the deleted column no longer exists.
+			setTaskDetails((current) => (current?.column === columnId ? null : current))
+		},
+		'columns:reordered': ({ columns: reorderedColumns }) =>
+			setColumns((current) => applyColumnOrder(current, reorderedColumns)),
+	})
 
 	useEffect(() => {
-		if (!selectedBoard) return
+		if (!selectedBoardId) return
 		if (isDevAuthBypass) return
+		// Plain members cannot list invites; skip a request that can only be refused.
+		const canSeeInvites = selectedBoardRole !== 'member'
 		Promise.allSettled([
-			axiosInstance.get(`/board/boards/${selectedBoard._id}/members`),
-			axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`),
-			axiosInstance.get(`/board/boards/${selectedBoard._id}/activity`),
+			axiosInstance.get(`/board/boards/${selectedBoardId}/members`),
+			canSeeInvites
+				? axiosInstance.get(`/board/boards/${selectedBoardId}/invites`)
+				: Promise.resolve({ data: [] }),
+			axiosInstance.get(`/board/boards/${selectedBoardId}/activity`),
 		])
 			.then(([membersResult, invitesResult, activitiesResult]) => {
 				if (membersResult.status === 'fulfilled') {
@@ -819,7 +725,7 @@ const Workspace = () => {
 				}
 			})
 			.finally(() => setIsActivityLoading(false))
-	}, [selectedBoard])
+	}, [selectedBoardId, selectedBoardRole])
 
 	const renameBoard = async () => {
 		if (!selectedBoard || !boardNameDraft.trim()) {
@@ -1586,12 +1492,10 @@ const Workspace = () => {
 			column.tasks.some((item) => item._id === task._id),
 		)
 		setTaskDetails(task)
-		setTaskDetailsForm({
+		const initialForm = {
 			title: task.title || '',
 			description: task.description || '',
-			dueDate: task.dueDate
-				? new Date(task.dueDate).toISOString().slice(0, 10)
-				: '',
+			dueDate: getDueDateKey(task.dueDate),
 			assignees: (task.assignees || []).map(
 				(assignee) => assignee._id || assignee,
 			),
@@ -1599,7 +1503,9 @@ const Workspace = () => {
 			checklist: task.checklist || [],
 			priority: task.priority || 'none',
 			columnId: taskColumn?._id || '',
-		})
+		}
+		taskDetailsInitialRef.current = initialForm
+		setTaskDetailsForm(initialForm)
 		setIsAssigneePickerOpen(false)
 		setNewChecklistItem('')
 		setTaskComment('')
@@ -1699,15 +1605,21 @@ const Workspace = () => {
 		event.preventDefault()
 		if (!taskDetails || !taskDetailsForm.title.trim()) return
 
-		const changes = {
-			title: taskDetailsForm.title.trim(),
-			description: taskDetailsForm.description,
-			dueDate: taskDetailsForm.dueDate || null,
-			assignees: taskDetailsForm.assignees,
-			labels: taskDetailsForm.labels,
-			checklist: taskDetailsForm.checklist,
-			priority: taskDetailsForm.priority,
-			column: taskDetailsForm.columnId,
+		// Send only what this user edited so concurrent edits by others are not overwritten.
+		const initialForm = taskDetailsInitialRef.current || {}
+		const isEdited = (field) =>
+			JSON.stringify(taskDetailsForm[field]) !== JSON.stringify(initialForm[field])
+		const changes = {}
+		if (taskDetailsForm.title.trim() !== initialForm.title) changes.title = taskDetailsForm.title.trim()
+		if (isEdited('description')) changes.description = taskDetailsForm.description
+		if (isEdited('dueDate')) changes.dueDate = taskDetailsForm.dueDate || null
+		for (const field of ['assignees', 'labels', 'checklist', 'priority']) {
+			if (isEdited(field)) changes[field] = taskDetailsForm[field]
+		}
+		if (isEdited('columnId')) changes.column = taskDetailsForm.columnId
+		if (Object.keys(changes).length === 0) {
+			setTaskDetails(null)
+			return
 		}
 		const sourceColumn = columns.find((column) =>
 			column.tasks.some((task) => task._id === taskDetails._id),
@@ -1846,7 +1758,7 @@ const Workspace = () => {
 	const canEditBoardName = isBoardOwner || selectedBoard?.role === 'admin'
 
 	return (
-		<div className='workspace-shell flex h-screen'>
+		<div className='workspace-shell flex h-dvh'>
 			<WorkspaceSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
@@ -2448,9 +2360,7 @@ const Workspace = () => {
 																				{task.dueDate ? (
 																					<>
 																						<CalendarDays className={`task-due-icon ${getDueDateState(task.dueDate)}`} size={14} />{' '}
-																						{new Date(
-																							task.dueDate,
-																						).toLocaleDateString()}
+																						{formatDueDate(task.dueDate)}
 																					</>
 																				) : null}
 																				{task.assignees?.length > 0 && (
@@ -3125,7 +3035,7 @@ const Workspace = () => {
 												<span className='task-summary-label'>Deadline</span>
 												<strong>
 													{taskDetailsForm.dueDate
-														? new Date(`${taskDetailsForm.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+														? formatDueDate(taskDetailsForm.dueDate, { day: 'numeric', month: 'short', year: 'numeric' })
 														: 'No deadline'}
 												</strong>
 											</div>

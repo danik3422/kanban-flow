@@ -81,19 +81,23 @@ export const startTaskTimer = async (req, res) => {
 	try {
 		const access = await getAccessibleTask(req.params.id, req.user._id)
 		if (!access) return res.status(404).json({ message: 'Task not found' })
-		if (access.task.timerStartedAt) return res.status(400).json({ message: 'Timer is already running' })
-		access.task.timerStartedAt = new Date()
-		await access.task.save()
+		// Conditional updates make double clicks and concurrent users safe.
+		const task = await Task.findOneAndUpdate(
+			{ _id: access.task._id, timerStartedAt: null },
+			{ $set: { timerStartedAt: new Date() } },
+			{ returnDocument: 'after' },
+		)
+		if (!task) return res.status(400).json({ message: 'Timer is already running' })
 		await recordBoardActivity({
 			boardId: access.board._id,
 			userId: req.user._id,
 			action: 'started timer',
 			entityType: 'task',
-			entityId: access.task._id,
-			entityName: access.task.title,
-			details: `started a timer on ${access.task.title}`,
+			entityId: task._id,
+			entityName: task.title,
+			details: `started a timer on ${task.title}`,
 		})
-		return res.status(200).json({ timerStartedAt: access.task.timerStartedAt, trackedSeconds: access.task.trackedSeconds })
+		return res.status(200).json({ timerStartedAt: task.timerStartedAt, trackedSeconds: task.trackedSeconds })
 	} catch (error) {
 		console.error('Task timer start failed:', error)
 		return res.status(500).json({ message: 'Could not start task timer' })
@@ -104,17 +108,23 @@ export const stopTaskTimer = async (req, res) => {
 	try {
 		const access = await getAccessibleTask(req.params.id, req.user._id)
 		if (!access) return res.status(404).json({ message: 'Task not found' })
-		if (!access.task.timerStartedAt) return res.status(400).json({ message: 'Timer is not running' })
-		const durationSeconds = Math.max(1, Math.round((Date.now() - access.task.timerStartedAt.getTime()) / 1000))
-		access.task.trackedSeconds += durationSeconds
-		access.task.timerStartedAt = null
-		await access.task.save()
+		const startedAt = access.task.timerStartedAt
+		if (!startedAt) return res.status(400).json({ message: 'Timer is not running' })
+		const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 1000))
+		// Only the request that still sees this start time may log it.
+		const task = await Task.findOneAndUpdate(
+			{ _id: access.task._id, timerStartedAt: startedAt },
+			{ $set: { timerStartedAt: null }, $inc: { trackedSeconds: durationSeconds } },
+			{ returnDocument: 'after' },
+		)
+		if (!task) return res.status(400).json({ message: 'Timer is not running' })
+		const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
 		const activity = await TaskActivity.create({
-			task: access.task._id,
+			task: task._id,
 			board: access.board._id,
 			user: req.user._id,
 			type: 'time_logged',
-			durationMinutes: Math.max(1, Math.round(durationSeconds / 60)),
+			durationMinutes,
 			message: 'logged time on this card',
 		})
 		await recordBoardActivity({
@@ -122,11 +132,11 @@ export const stopTaskTimer = async (req, res) => {
 			userId: req.user._id,
 			action: 'logged time',
 			entityType: 'task',
-			entityId: access.task._id,
-			entityName: access.task.title,
-			details: `logged ${Math.max(1, Math.round(durationSeconds / 60))} minutes on ${access.task.title}`,
+			entityId: task._id,
+			entityName: task.title,
+			details: `logged ${durationMinutes} minutes on ${task.title}`,
 		})
-		return res.status(200).json({ trackedSeconds: access.task.trackedSeconds, activity })
+		return res.status(200).json({ trackedSeconds: task.trackedSeconds, activity })
 	} catch (error) {
 		console.error('Task timer stop failed:', error)
 		return res.status(500).json({ message: 'Could not stop task timer' })

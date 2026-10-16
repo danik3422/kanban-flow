@@ -28,5 +28,8 @@ const boardInviteSchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
+// Invite listings, link lookups and revocation all filter by board (and inviter).
+boardInviteSchema.index({ board: 1, createdBy: 1 })
+
 const BoardInvite = mongoose.model('BoardInvite', boardInviteSchema)
 export default BoardInvite

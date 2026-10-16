@@ -1,28 +1,29 @@
 import { useEffect, useState } from 'react'
 
-const SIDEBAR_OPEN_KEY = 'kanban-sidebar-open'
 const SIDEBAR_COLLAPSED_KEY = 'kanban-sidebar-collapsed'
 
 const readStoredBoolean = (key, fallback) => {
-	if (typeof window === 'undefined') return fallback
-	const value = window.localStorage.getItem(key)
-	return value === null ? fallback : value === 'true'
+	try {
+		const value = window.localStorage.getItem(key)
+		return value === null ? fallback : value === 'true'
+	} catch {
+		return fallback
+	}
 }
 
 const useWorkspaceNavigation = () => {
-	const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
-		readStoredBoolean(SIDEBAR_OPEN_KEY, false),
-	)
+	// The mobile drawer always starts closed; only the desktop collapse preference persists.
+	const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
 		readStoredBoolean(SIDEBAR_COLLAPSED_KEY, false),
 	)
 
 	useEffect(() => {
-		window.localStorage.setItem(SIDEBAR_OPEN_KEY, String(isSidebarOpen))
-	}, [isSidebarOpen])
-
-	useEffect(() => {
-		window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(isSidebarCollapsed))
+		try {
+			window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(isSidebarCollapsed))
+		} catch {
+			// Storage can be unavailable in private mode.
+		}
 	}, [isSidebarCollapsed])
 
 	return {

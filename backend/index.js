@@ -49,7 +49,7 @@ setRealtimeServer(io)
 io.use(async (socket, next) => {
 	try {
 		const cookies = Object.fromEntries((socket.handshake.headers.cookie || '').split('; ').filter(Boolean).map((item) => item.split('=')))
-		const decoded = jwt.verify(cookies.jwt, env.jwtSecret)
+		const decoded = jwt.verify(cookies.jwt, env.jwtSecret, { algorithms: ['HS256'] })
 		const user = await User.findById(decoded.userId).select('_id sessionVersion emailVerified')
 		if (!user) return next(new Error('Unauthorized'))
 		if (!user.emailVerified) return next(new Error('Email verification required'))
@@ -122,6 +122,10 @@ io.on('connection', (socket) => {
 		if (!presence) return
 		presence.lastSeenAt = Date.now()
 		broadcastBoardPresence(socket.boardId)
+	})
+	// The connection is shared across pages, so leaving a board must not require a disconnect.
+	socket.on('leave-board', (boardId) => {
+		if (socket.boardId && socket.boardId === boardId) leaveBoard()
 	})
 	socket.on('disconnect', () => {
 		leaveBoard()

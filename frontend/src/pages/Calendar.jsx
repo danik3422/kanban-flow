@@ -16,6 +16,8 @@ import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { useAuthStore } from '../store/useAuthStore'
+import { formatDueDate, getDueDateKey, getLocalDateKey } from '../utils/dueDate'
+import { toPlainText } from '../lib/richText'
 
 const CalendarPage = () => {
   const authUser = useAuthStore((state) => state.authUser)
@@ -76,7 +78,7 @@ const CalendarPage = () => {
   }, [authUser?._id])
 
   const today = useMemo(() => new Date(), [])
-  const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().slice(0, 10)
+  const todayKey = getLocalDateKey(today)
   const monthName = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursorMonth)
 
   const toDateKey = (date) => {
@@ -223,7 +225,7 @@ const CalendarPage = () => {
   const tasksByDate = useMemo(() => {
     const grouped = new Map()
     filteredTasks.forEach((task) => {
-      const dateKey = String(task.dueDate).slice(0, 10)
+      const dateKey = getDueDateKey(task.dueDate)
       const current = grouped.get(dateKey) || []
       grouped.set(dateKey, [...current, task])
     })
@@ -231,15 +233,15 @@ const CalendarPage = () => {
   }, [filteredTasks])
 
   const todayTasks = useMemo(
-    () => filteredTasks.filter((task) => String(task.dueDate).slice(0, 10) === todayKey),
+    () => filteredTasks.filter((task) => getDueDateKey(task.dueDate) === todayKey),
     [filteredTasks, todayKey],
   )
   const upcomingTasks = useMemo(
-    () => filteredTasks.filter((task) => String(task.dueDate).slice(0, 10) > todayKey),
+    () => filteredTasks.filter((task) => getDueDateKey(task.dueDate) > todayKey),
     [filteredTasks, todayKey],
   )
   const overdueTasks = useMemo(
-    () => filteredTasks.filter((task) => String(task.dueDate).slice(0, 10) < todayKey),
+    () => filteredTasks.filter((task) => getDueDateKey(task.dueDate) < todayKey),
     [filteredTasks, todayKey],
   )
 
@@ -778,7 +780,7 @@ const CalendarPage = () => {
                     selectedDayTasks.map((task) => {
                       const taskKey = task._id || `${task.title}-${task.dueDate}`
                       const dueLabel = task.dueDate
-                        ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(task.dueDate))
+                        ? formatDueDate(task.dueDate)
                         : 'No due date'
 
                       return (
@@ -793,7 +795,7 @@ const CalendarPage = () => {
                             }
                           }}
                         >
-                          <span className={`calendar-modal-task-status is-${getTaskState(toDateKey(new Date(task.dueDate || selectedDay)))}`} />
+                          <span className={`calendar-modal-task-status is-${getTaskState((getDueDateKey(task.dueDate) || toDateKey(selectedDay)))}`} />
                           <div className='calendar-modal-task-copy'>
                             <span className='calendar-modal-task-title'>{task.title}</span>
                             <span className='calendar-modal-task-meta'>
@@ -847,7 +849,7 @@ const CalendarPage = () => {
                     selectedDayTasks.map((task) => {
                       const taskKey = task._id || `${task.title}-${task.dueDate}`
                       const dueLabel = task.dueDate
-                        ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(task.dueDate))
+                        ? formatDueDate(task.dueDate)
                         : 'No due date'
 
                       return (
@@ -863,7 +865,7 @@ const CalendarPage = () => {
                           }}
                         >
                           <div className='calendar-mobile-sheet-item-top'>
-                            <span className={`calendar-mobile-sheet-status is-${getTaskState(toDateKey(new Date(task.dueDate || selectedDay)))}`} />
+                            <span className={`calendar-mobile-sheet-status is-${getTaskState((getDueDateKey(task.dueDate) || toDateKey(selectedDay)))}`} />
                             <span className='calendar-mobile-sheet-title'>{task.title}</span>
                           </div>
 
@@ -893,7 +895,7 @@ const CalendarPage = () => {
               }}
             >
               <div className='calendar-task-preview-header'>
-                <span className={`calendar-task-preview-status is-${getTaskState(toDateKey(new Date(hoveredTask.task.dueDate || new Date())))}`} />
+                <span className={`calendar-task-preview-status is-${getTaskState((getDueDateKey(hoveredTask.task.dueDate) || todayKey))}`} />
                 <span className='calendar-task-preview-column'>
                   {hoveredTask.task.column?.title || hoveredTask.task.status || 'Task'}
                 </span>
@@ -901,23 +903,23 @@ const CalendarPage = () => {
 
               <div className='calendar-task-preview-title'>{hoveredTask.task.title}</div>
 
-              {hoveredTask.task.description && (
+              {toPlainText(hoveredTask.task.description) && (
                 <p className='calendar-task-preview-description'>
-                  {hoveredTask.task.description}
+                  {toPlainText(hoveredTask.task.description)}
                 </p>
               )}
 
               <div className='calendar-task-preview-meta'>
                 {(hoveredTask.task.column?.title || hoveredTask.task.status) && (
                   <span className='calendar-task-preview-badge'>
-                    <span className={`calendar-task-preview-badge-dot is-${getTaskState(toDateKey(new Date(hoveredTask.task.dueDate || new Date())))}`} />
+                    <span className={`calendar-task-preview-badge-dot is-${getTaskState((getDueDateKey(hoveredTask.task.dueDate) || todayKey))}`} />
                     {hoveredTask.task.column?.title || hoveredTask.task.status || 'Task'}
                   </span>
                 )}
 
                 {hoveredTask.task.dueDate && (
                   <span className='calendar-task-preview-badge'>
-                    Due {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(hoveredTask.task.dueDate))}
+                    Due {formatDueDate(hoveredTask.task.dueDate, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                 )}
 

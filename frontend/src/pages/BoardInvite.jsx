@@ -6,12 +6,27 @@ import {
 	Link2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { axiosInstance } from '../lib/axios'
+import { clearBoardsCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
+
+const PENDING_INVITE_KEY = 'kanban-pending-invite'
+
+const setPendingInvite = (token) => {
+	try {
+		if (token) localStorage.setItem(PENDING_INVITE_KEY, token)
+		else localStorage.removeItem(PENDING_INVITE_KEY)
+	} catch {
+		// Without storage the user simply opens the link again after signing in.
+	}
+}
 
 const BoardInvite = () => {
 	const { token } = useParams()
+	const navigate = useNavigate()
+	const [invitedBy, setInvitedBy] = useState('')
+	const [isAccepting, setIsAccepting] = useState(false)
 	const [searchParams] = useSearchParams()
 	const authUser = useAuthStore((state) => state.authUser)
 	const [requestError, setRequestError] = useState('')
@@ -32,9 +47,10 @@ const BoardInvite = () => {
 			.get(`/board/invites/${token}/details`)
 			.then(({ data }) => {
 				setBoardName(data.boardName || 'this board')
+				setInvitedBy(data.invitedBy?.name || data.invitedBy?.email || '')
 			})
 			.catch((requestError) => {
-				localStorage.removeItem('kanban-pending-invite')
+				setPendingInvite(null)
 				const message =
 					requestError.response?.data?.message ||
 					'This invite is no longer available'
@@ -42,13 +58,25 @@ const BoardInvite = () => {
 			})
 	}, [token])
 
+	// Signed-out visitors keep the invite for after sign-in; signed-in users decide here.
 	useEffect(() => {
-		if (searchParams.get('error')) {
-			localStorage.removeItem('kanban-pending-invite')
-			return
+		setPendingInvite(authUser || searchParams.get('error') ? null : token)
+	}, [authUser, searchParams, token])
+
+	const acceptInvite = async () => {
+		setIsAccepting(true)
+		try {
+			const { data } = await axiosInstance.post(`/board/invites/${token}/accept`)
+			clearBoardsCache()
+			navigate(`/workspaces/${data.boardId}`, { replace: true })
+		} catch (acceptError) {
+			setRequestError(
+				acceptError.response?.data?.message || 'This invite is no longer available',
+			)
+		} finally {
+			setIsAccepting(false)
 		}
-		localStorage.setItem('kanban-pending-invite', token)
-	}, [searchParams, token])
+	}
 
 	return (
 		<main className='invite-page'>
@@ -116,9 +144,23 @@ const BoardInvite = () => {
 					</>
 				) : authUser ? (
 					<>
-						<div className='invite-status-row'>
-							<CheckCircle2 size={22} />
-							<p>Accepting your invitation...</p>
+						<p>
+							{invitedBy
+								? `${invitedBy} invited you to collaborate on this board.`
+								: 'You were invited to collaborate on this board.'}
+						</p>
+						<div className='invite-actions'>
+							<button
+								type='button'
+								className='primary-button'
+								onClick={acceptInvite}
+								disabled={isAccepting}
+							>
+								<CheckCircle2 size={16} /> {isAccepting ? 'Joining...' : 'Join board'}
+							</button>
+							<Link className='quiet-button' to='/workspaces'>
+								Not now
+							</Link>
 						</div>
 					</>
 				) : (
@@ -127,7 +169,10 @@ const BoardInvite = () => {
 							Sign in or create an account to accept this one-time invitation.
 						</p>
 						<div className='invite-actions'>
-							<Link className='primary-button' to='/login'>
+							<Link
+								className='primary-button'
+								to={`/login?redirect=${encodeURIComponent(`/invite/${token}`)}`}
+							>
 								<ArrowLeft size={16} /> Sign in
 							</Link>
 							<Link className='quiet-button' to='/signup'>

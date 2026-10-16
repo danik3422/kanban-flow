@@ -24,5 +24,9 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ user: 1, createdAt: -1 })
 
+// Task and board deletions clean up notifications by these keys.
+notificationSchema.index({ task: 1 })
+notificationSchema.index({ board: 1 })
+
 const Notification = mongoose.model('Notification', notificationSchema)
 export default Notification

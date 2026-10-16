@@ -20,6 +20,22 @@ import BoardActivity from '../models/boardActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
 import { notifyTaskRecipients } from '../lib/notificationDelivery.js'
 
+// Matches the reorder payload limits so every board stays reorderable.
+const MAX_COLUMNS_PER_BOARD = 100
+const MAX_TASKS_PER_COLUMN = 2000
+const MY_TASKS_LIMIT = 1000
+
+// Human-readable field names mapped to comparable snapshots of a task's content.
+const describeTaskContent = (task) => ({
+	title: task.title,
+	description: task.description || '',
+	'due date': task.dueDate ? new Date(task.dueDate).toISOString() : '',
+	assignees: (task.assignees || []).map(String).sort().join(','),
+	labels: (task.labels || []).join('\u0000'),
+	checklist: JSON.stringify((task.checklist || []).map((item) => [item.text, Boolean(item.completed)])),
+	priority: task.priority || 'none',
+})
+
 const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0 }) =>
 	TaskActivity.create({
 		task: taskId,
@@ -32,31 +48,19 @@ const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '',
 		durationMinutes,
 	})
 
-const ensureBoardAccess = async (userId, boardId) => {
-	const board = await Board.findById(boardId)
-	if (!board) {
-		return { board: null, allowed: false }
-	}
+// Accepts a loaded board (from boardMiddleware) to avoid fetching it a second time.
+const resolveBoard = (boardOrId) =>
+	boardOrId?.createdBy ? boardOrId : Board.findById(boardOrId)
 
-	if (board.createdBy.toString() === userId.toString()) {
-		return { board, allowed: true }
-	}
-
-	const membership = await BoardMember.findOne({
-		board: boardId,
-		user: userId,
-	})
-
-	return { board, allowed: Boolean(membership) }
-}
-
-const ensureBoardEditAccess = async (userId, boardId) => {
-	const board = await Board.findById(boardId)
+const ensureBoardAccess = async (userId, boardOrId) => {
+	const board = await resolveBoard(boardOrId)
 	if (!board) return { board: null, allowed: false }
 	if (board.createdBy.toString() === userId.toString()) return { board, allowed: true }
-	const membership = await BoardMember.exists({ board: boardId, user: userId })
+	const membership = await BoardMember.exists({ board: board._id, user: userId })
 	return { board, allowed: Boolean(membership) }
 }
+
+const ensureBoardEditAccess = ensureBoardAccess
 
 const canManageBoard = async (board, userId) => {
 	if (board.createdBy.toString() === userId.toString()) return true
@@ -145,7 +149,7 @@ export const getBoardById = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid board ID' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board)
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found' })
 		}
@@ -269,7 +273,7 @@ export const getPublicBoard = async (req, res) => {
 
 export const getBoardActivities = async (req, res) => {
 	try {
-		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board._id)
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board)
 		if (!board) return res.status(404).json({ message: 'Board not found' })
 		if (!allowed) return res.status(403).json({ message: 'Access denied' })
 
@@ -292,7 +296,7 @@ export const getBoardMembers = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid board ID' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board)
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found' })
 		}
@@ -346,21 +350,34 @@ export const updateBoardMemberRole = async (req, res) => {
 				})
 			}
 			const previousOwnerId = board.createdBy
-			board.createdBy = membership.user._id
-			await board.save()
-			await BoardMember.updateOne(
-				{ board: board._id, user: previousOwnerId },
-				{ $set: { role: 'admin' } },
-			)
-			await recordBoardActivity({
-				boardId: board._id,
-				userId: req.user._id,
-				action: 'transferred ownership',
-				entityType: 'member',
-				entityId: membership.user._id,
-				entityName: membership.user.name || membership.user.email,
-				details: 'transferred board ownership',
-			})
+			const session = await mongoose.startSession()
+			let activity
+			try {
+				await session.withTransaction(async () => {
+					board.createdBy = membership.user._id
+					await board.save({ session })
+					await BoardMember.updateOne(
+						{ board: board._id, user: previousOwnerId },
+						{ $set: { role: 'admin' } },
+						{ session },
+					)
+					activity = await recordBoardActivity({
+						boardId: board._id,
+						userId: req.user._id,
+						action: 'transferred ownership',
+						entityType: 'member',
+						entityId: membership.user._id,
+						entityName: membership.user.name || membership.user.email,
+						details: 'transferred board ownership',
+						session,
+						emit: false,
+					})
+				})
+			} finally {
+				await session.endSession()
+			}
+			emitBoardEvent(board._id.toString(), 'activity:new', activity)
+			emitBoardEvent(board._id.toString(), 'board:updated', board.toObject())
 			return res.status(200).json({
 				...membership.toObject(),
 				ownershipTransferred: true,
@@ -369,6 +386,10 @@ export const updateBoardMemberRole = async (req, res) => {
 		}
 		membership.role = role
 		await membership.save()
+		// Invites carry the inviter's authority; a demoted member's links must stop working.
+		if (role === 'member') {
+			await BoardInvite.deleteMany({ board: board._id, createdBy: membership.user._id, usedAt: null })
+		}
 		await recordBoardActivity({
 			boardId: board._id,
 			userId: req.user._id,
@@ -603,7 +624,7 @@ export const copyBoardInviteLink = async (req, res) => {
 			details: 'copied a board invite link',
 		})
 
-		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
+		const inviteUrl = `${env.frontendUrl}/invite/${rawToken}`
 		return res.status(200).json({ inviteUrl, expiresInDays: 7 })
 	} catch (error) {
 		console.error('Board invite copy failed:', error)
@@ -618,7 +639,7 @@ export const getBoardColumns = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid board ID' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(req.user._id, boardId)
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board)
 		if (!board) {
 			return res.status(404).json({ message: 'Board not found' })
 		}
@@ -634,6 +655,32 @@ export const getBoardColumns = async (req, res) => {
 	} catch (error) {
 		console.error('Error fetching board columns:', error)
 		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const getBoardContent = async (req, res) => {
+	try {
+		const { board, allowed } = await ensureBoardAccess(req.user._id, req.board)
+		if (!board) return res.status(404).json({ message: 'Board not found' })
+		if (!allowed) return res.status(403).json({ message: 'Access denied' })
+
+		const columns = await Column.find({ board: board._id })
+			.sort({ position: 1, createdAt: 1 })
+			.lean()
+		const tasks = await Task.find({ column: { $in: columns.map((column) => column._id) } })
+			.populate('assignees', 'name email avatar')
+			.sort({ position: 1, createdAt: 1 })
+			.lean()
+		const tasksByColumn = new Map(columns.map((column) => [column._id.toString(), []]))
+		for (const task of tasks) tasksByColumn.get(task.column.toString())?.push(task)
+
+		return res.status(200).json(columns.map((column) => ({
+			...column,
+			tasks: tasksByColumn.get(column._id.toString()) || [],
+		})))
+	} catch (error) {
+		console.error('Board content fetch failed:', error)
+		return res.status(500).json({ message: 'Could not load this board' })
 	}
 }
 
@@ -829,16 +876,35 @@ export const leaveBoard = async (req, res) => {
 		if (!membership) {
 			return res.status(404).json({ message: 'You are not a member of this board.' })
 		}
-		await BoardMember.deleteMany({ board: board._id, user: userId })
-		await recordBoardActivity({
-			boardId: board._id,
-			userId,
-			action: 'left',
-			entityType: 'member',
-			entityId: userId,
-			entityName: req.user.name || req.user.email,
-			details: 'left this board',
-		})
+		const session = await mongoose.startSession()
+		let activity
+		try {
+			await session.withTransaction(async () => {
+				const columnIds = await Column.find({ board: board._id }).distinct('_id').session(session)
+				await BoardMember.deleteMany({ board: board._id, user: userId }, { session })
+				await Notification.deleteMany({ user: userId, board: board._id }, { session })
+				await BoardInvite.deleteMany({ board: board._id, createdBy: userId, usedAt: null }, { session })
+				await Task.updateMany(
+					{ column: { $in: columnIds } },
+					{ $pull: { assignees: userId } },
+					{ session },
+				)
+				activity = await recordBoardActivity({
+					boardId: board._id,
+					userId,
+					action: 'left',
+					entityType: 'member',
+					entityId: userId,
+					entityName: req.user.name || req.user.email,
+					details: 'left this board',
+					session,
+					emit: false,
+				})
+			})
+		} finally {
+			await session.endSession()
+		}
+		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		revokeUserBoardAccess(userId, board._id, {
 			reason: 'left-board',
 		})
@@ -890,11 +956,48 @@ export const getUserBoards = async (req, res) => {
 	}
 }
 
+// Every accessible board with its members, for the Team page, in two queries.
+export const getTeam = async (req, res) => {
+	try {
+		const memberBoardIds = await BoardMember.find({ user: req.user._id }).distinct('board')
+		const boards = await Board.find({
+			$or: [{ createdBy: req.user._id }, { _id: { $in: memberBoardIds } }],
+		})
+			.select('name createdBy visibility')
+			.lean()
+		const members = await BoardMember.find({ board: { $in: boards.map((board) => board._id) } })
+			.populate('user', 'name email avatar provider')
+			.lean()
+		const membersByBoard = new Map(boards.map((board) => [board._id.toString(), []]))
+		for (const member of members) membersByBoard.get(member.board.toString())?.push(member)
+		const userId = req.user._id.toString()
+		return res.status(200).json(boards.map((board) => {
+			const boardMembers = membersByBoard.get(board._id.toString()) || []
+			const isOwner = board.createdBy.toString() === userId
+			// Same access fields as /boards so the sidebar can group rooms.
+			const ownMembership = boardMembers.find((member) => member.user?._id?.toString() === userId)
+			return {
+				board: {
+					...board,
+					access: isOwner ? 'owned' : 'invited',
+					role: isOwner ? 'owner' : ownMembership?.role || 'member',
+				},
+				members: boardMembers,
+			}
+		}))
+	} catch (error) {
+		console.error('Team fetch failed:', error)
+		return res.status(500).json({ message: 'Could not load team' })
+	}
+}
+
 export const getMyTasks = async (req, res) => {
 	try {
-		const search = (req.query.search || req.query.q || '').trim().toLowerCase()
-		const priority = (req.query.priority || 'all').toString()
-		const board = (req.query.board || 'all').toString()
+		// Repeated query keys arrive as arrays; only plain strings are meaningful filters.
+		const readQuery = (value, fallback) => (typeof value === 'string' ? value : fallback)
+		const search = readQuery(req.query.search ?? req.query.q, '').trim().toLowerCase().slice(0, 200)
+		const priority = readQuery(req.query.priority, 'all')
+		const board = readQuery(req.query.board, 'all')
 		const [ownedBoardIds, memberships] = await Promise.all([
 			Board.find({ createdBy: req.user._id }).distinct('_id'),
 			BoardMember.find({ user: req.user._id }).select('board').lean(),
@@ -905,12 +1008,36 @@ export const getMyTasks = async (req, res) => {
 				...memberships.map((membership) => membership.board.toString()),
 			]),
 		]
-		const accessibleColumnIds = await Column.find({ board: { $in: accessibleBoardIds } }).distinct('_id')
-
-		let tasks = await Task.find({
+		// Filter in MongoDB instead of loading every assigned task into memory.
+		const scopedBoardIds = board === 'all'
+			? accessibleBoardIds
+			: accessibleBoardIds.filter((boardId) => boardId === board)
+		const columns = await Column.find({ board: { $in: scopedBoardIds } }).select('_id title board').lean()
+		const query = {
 			assignees: req.user._id,
-			column: { $in: accessibleColumnIds },
-		})
+			column: { $in: columns.map((column) => column._id) },
+		}
+		if (priority !== 'all') {
+			query.priority = priority === 'none' ? { $in: ['none', null] } : priority
+		}
+		if (search) {
+			const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+			const matchingBoardIds = new Set(
+				(await Board.find({ _id: { $in: scopedBoardIds }, name: pattern }).distinct('_id'))
+					.map((boardId) => boardId.toString()),
+			)
+			const matchingColumnIds = columns
+				.filter((column) => pattern.test(column.title) || matchingBoardIds.has(column.board.toString()))
+				.map((column) => column._id)
+			query.$or = [
+				{ title: pattern },
+				{ description: pattern },
+				{ labels: pattern },
+				{ column: { $in: matchingColumnIds } },
+			]
+		}
+
+		const tasks = await Task.find(query)
 			.populate({
 				path: 'column',
 				select: 'title board',
@@ -918,118 +1045,13 @@ export const getMyTasks = async (req, res) => {
 			})
 			.populate('assignees', 'name email avatar')
 			.sort({ dueDate: 1, updatedAt: -1 })
+			.limit(MY_TASKS_LIMIT)
 			.lean()
-
-		if (priority !== 'all') {
-			tasks = tasks.filter((task) => (task.priority || 'none') === priority)
-		}
-
-		if (board !== 'all') {
-			tasks = tasks.filter((task) => {
-				const boardId = task.column?.board?._id?.toString?.() || task.column?.board?.toString?.()
-				return boardId === board
-			})
-		}
-
-		if (search) {
-			tasks = tasks.filter((task) => {
-				const title = (task.title || '').toLowerCase()
-				const description = (task.description || '').toLowerCase()
-				const boardName = (task.column?.board?.name || '').toLowerCase()
-				const columnName = (task.column?.title || '').toLowerCase()
-				const labels = (task.labels || []).map((label) => String(label).toLowerCase())
-				return [title, description, boardName, columnName, ...labels].some((value) => value.includes(search))
-			})
-		}
 
 		return res.status(200).json(tasks)
 	} catch (error) {
 		console.error('My tasks fetch failed:', error)
 		return res.status(500).json({ message: 'Could not load your tasks' })
-	}
-}
-
-export const addMemberToBoard = async (req, res) => {
-	try {
-		const boardId = req.params.id
-		const { email, role = 'member' } = req.body
-		const requesterId = req.user._id
-
-		const board = await Board.findById(boardId)
-		if (!board) {
-			return res.status(404).json({ message: 'Board not found.' })
-		}
-
-		if (!(await canManageBoard(board, requesterId))) {
-			return res.status(403).json({
-				message: 'Access denied: Only the board owner or an admin can add members.',
-			})
-		}
-
-		const userToAdd = await User.findOne({ email })
-
-		if (!userToAdd) {
-			return res
-				.status(404)
-				.json({ message: 'User with this email not found.' })
-		}
-		if (userToAdd._id.toString() === requesterId.toString()) {
-			return res
-				.status(400)
-				.json({ message: 'You cannot add yourself to the board' })
-		}
-
-		const existingMember = await BoardMember.findOne({
-			board: boardId,
-			user: userToAdd._id,
-		})
-
-		if (existingMember) {
-			return res
-				.status(400)
-				.json({ message: 'User is already a member of this board.' })
-		}
-
-		const newMember = new BoardMember({
-			board: boardId,
-			user: userToAdd._id,
-			role,
-		})
-
-		await newMember.save()
-		await recordBoardActivity({
-			boardId: board._id,
-			userId: requesterId,
-			action: 'added member',
-			entityType: 'member',
-			entityId: userToAdd._id,
-			entityName: userToAdd.name || userToAdd.email,
-			details: `added ${userToAdd.email} to this board`,
-		})
-		let emailSent = true
-		try {
-			await sendBoardInviteEmail({
-				email: userToAdd.email,
-				boardName: board.name,
-				boardUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/workspaces/${board._id}`,
-			})
-		} catch (mailError) {
-			emailSent = false
-			console.warn('Board invite email was not sent:', mailError.message)
-		}
-
-		return res
-			.status(201)
-			.json({
-				message: emailSent
-					? 'User added and invite email sent'
-					: 'User added, but invite email could not be sent',
-				member: newMember,
-				emailSent,
-			})
-	} catch (error) {
-		console.error('Error adding member to board:', error)
-		res.status(500).json({ message: 'Internal server error' })
 	}
 }
 
@@ -1135,7 +1157,7 @@ export const createBoardInvite = async (req, res) => {
 			entityName: email || 'Anyone with the link',
 			details: email ? `invited ${email}` : 'created a share link invite',
 		})
-		const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/invite/${rawToken}`
+		const inviteUrl = `${env.frontendUrl}/invite/${rawToken}`
 		let emailSent = false
 		if (email) {
 			try {
@@ -1270,7 +1292,7 @@ export const createColumn = async (req, res) => {
 	try {
 		const board = req.board
 		const userId = req.user._id
-		const { title, position = 0 } = req.body
+		const { title } = req.body
 
 		if (!title || title.trim() === '') {
 			return res.status(400).json({ message: 'Column title is required' })
@@ -1292,10 +1314,15 @@ export const createColumn = async (req, res) => {
 			}
 		}
 
+		// The server appends: client-supplied positions collide when people add columns at once.
+		const columnCount = await Column.countDocuments({ board: board._id })
+		if (columnCount >= MAX_COLUMNS_PER_BOARD) {
+			return res.status(400).json({ message: `A board can have up to ${MAX_COLUMNS_PER_BOARD} columns` })
+		}
 		const newColumn = new Column({
 			title: title.trim(),
 			board: board._id,
-			position,
+			position: columnCount,
 		})
 
 		const savedColumn = await newColumn.save()
@@ -1490,7 +1517,7 @@ export const updateColumnSort = async (req, res) => {
 		}
 
 		// Check if user has access to this board
-		const { allowed } = await ensureBoardEditAccess(userId, board._id)
+		const { allowed } = await ensureBoardEditAccess(userId, board)
 		if (!allowed) {
 			return res.status(403).json({ message: 'Access denied' })
 		}
@@ -1541,7 +1568,7 @@ export const reorderTasks = async (req, res) => {
 		}
 
 		const board = req.board
-		const { allowed } = await ensureBoardEditAccess(req.user._id, board._id)
+		const { allowed } = await ensureBoardEditAccess(req.user._id, board)
 		if (!allowed) return res.status(403).json({ message: 'Access denied' })
 
 		const columnIds = columns.map((item) => item?.columnId)
@@ -1624,7 +1651,7 @@ export const createTask = async (req, res) => {
 			assignees = [],
 			labels = [],
 			checklist = [],
-			position = 0,
+			dueDate = null,
 			priority = 'none',
 		} = req.body
 
@@ -1651,11 +1678,16 @@ export const createTask = async (req, res) => {
 			return res.status(400).json({ message: 'Task title is required' })
 		}
 
+		const taskCount = await Task.countDocuments({ column: column._id })
+		if (taskCount >= MAX_TASKS_PER_COLUMN) {
+			return res.status(400).json({ message: `A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks` })
+		}
 		const newTask = new Task({
 			title: title.trim(),
 			description: description || '',
+			dueDate: dueDate || null,
 			column: column._id,
-			position,
+			position: taskCount,
 			assignees,
 			labels,
 			checklist,
@@ -1737,62 +1769,74 @@ export const updateTask = async (req, res) => {
 			}
 			task.column = targetColumn._id
 		}
+		const contentBefore = describeTaskContent(task)
 		if (title !== undefined) task.title = title.trim()
 		if (description !== undefined) task.description = description
 		if (dueDate !== undefined) task.dueDate = dueDate || null
 		if (assignees !== undefined) task.assignees = assignees
 		if (labels !== undefined) task.labels = labels
 		if (checklist !== undefined) task.checklist = checklist
-		if (position !== undefined) task.position = position
-		if (priority !== undefined) {
-			task.priority = ['none', 'low', 'medium', 'high', 'urgent'].includes(priority)
-				? priority
-				: 'none'
-		}
+		if (priority !== undefined) task.priority = priority
+		const moved = originalColumnId.toString() !== targetColumn._id.toString()
+		// A column change without an explicit slot appends the card to the target column.
+		const requestedPosition = position !== undefined
+			? position
+			: moved
+				? await Task.countDocuments({ column: targetColumn._id })
+				: undefined
+		const repositioned = requestedPosition !== undefined
 
-		if (position !== undefined) {
-			const nextPosition = Math.max(0, position)
-			const movedWithinColumn =
-				originalColumnId.toString() === targetColumn._id.toString()
-			if (movedWithinColumn && nextPosition < originalPosition) {
-				await Task.updateMany(
-					{
-						column: originalColumnId,
-						_id: { $ne: task._id },
-						position: { $gte: nextPosition, $lt: originalPosition },
-					},
-					{ $inc: { position: 1 } },
-				)
-			} else if (movedWithinColumn && nextPosition > originalPosition) {
-				await Task.updateMany(
-					{
-						column: originalColumnId,
-						_id: { $ne: task._id },
-						position: { $gt: originalPosition, $lte: nextPosition },
-					},
-					{ $inc: { position: -1 } },
-				)
-			} else if (!movedWithinColumn) {
-				await Task.updateMany(
-					{
-						column: originalColumnId,
-						_id: { $ne: task._id },
-						position: { $gt: originalPosition },
-					},
-					{ $inc: { position: -1 } },
-				)
-				await Task.updateMany(
-					{ column: targetColumn._id, position: { $gte: nextPosition } },
-					{ $inc: { position: 1 } },
-				)
-			}
-			task.position = nextPosition
+		const session = await mongoose.startSession()
+		try {
+			await session.withTransaction(async () => {
+				if (repositioned) {
+					if (moved) {
+						const targetCount = await Task.countDocuments({ column: targetColumn._id }).session(session)
+						if (targetCount >= MAX_TASKS_PER_COLUMN) {
+							const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
+							error.statusCode = 400
+							throw error
+						}
+						const nextPosition = Math.min(Math.max(0, requestedPosition), targetCount)
+						await Task.updateMany(
+							{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition } },
+							{ $inc: { position: -1 } },
+							{ session },
+						)
+						await Task.updateMany(
+							{ column: targetColumn._id, position: { $gte: nextPosition } },
+							{ $inc: { position: 1 } },
+							{ session },
+						)
+						task.position = nextPosition
+					} else {
+						const lastPosition = Math.max(0, await Task.countDocuments({ column: originalColumnId }).session(session) - 1)
+						const nextPosition = Math.min(Math.max(0, requestedPosition), lastPosition)
+						if (nextPosition < originalPosition) {
+							await Task.updateMany(
+								{ column: originalColumnId, _id: { $ne: task._id }, position: { $gte: nextPosition, $lt: originalPosition } },
+								{ $inc: { position: 1 } },
+								{ session },
+							)
+						} else if (nextPosition > originalPosition) {
+							await Task.updateMany(
+								{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition, $lte: nextPosition } },
+								{ $inc: { position: -1 } },
+								{ session },
+							)
+						}
+						task.position = nextPosition
+					}
+				}
+				await task.save({ session })
+			})
+		} finally {
+			await session.endSession()
 		}
-		await task.save()
 		const updatedTask = await Task.findById(task._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
-		if (position !== undefined) {
+		if (repositioned) {
 			const affectedColumnIds = [originalColumnId.toString()]
 			if (!affectedColumnIds.includes(targetColumn._id.toString())) {
 				affectedColumnIds.push(targetColumn._id.toString())
@@ -1808,8 +1852,10 @@ export const updateTask = async (req, res) => {
 				})
 			}
 		}
-		const moved = originalColumnId.toString() !== targetColumn._id.toString()
-		await recordBoardActivity({
+		const contentAfter = describeTaskContent(task)
+		const changedFields = Object.keys(contentAfter).filter((field) => contentAfter[field] !== contentBefore[field])
+		// Plain reorders and saves without edits are not news; keep the feeds readable.
+		if (moved || changedFields.length) await recordBoardActivity({
 			boardId,
 			userId: req.user._id,
 			action: moved ? 'moved' : 'updated',
@@ -1818,16 +1864,16 @@ export const updateTask = async (req, res) => {
 			entityName: updatedTask.title,
 			details: moved
 				? `moved ${updatedTask.title} from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}`
-				: `updated ${updatedTask.title}`,
+				: `updated ${changedFields.join(', ')} of ${updatedTask.title}`,
 		})
-		await recordTaskActivity({
+		if (moved || changedFields.length) await recordTaskActivity({
 			taskId: task._id,
 			boardId,
 			userId: req.user._id,
 			type: moved ? 'moved' : 'updated',
 			message: moved
 				? `moved this card from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}`
-				: 'updated this card',
+				: `updated the ${changedFields.join(', ')}`,
 			fromColumn: originalColumn?.title || '',
 			toColumn: targetColumn.title || '',
 		})
@@ -1860,6 +1906,7 @@ export const updateTask = async (req, res) => {
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
 		return res.status(200).json(updatedTask)
 	} catch (error) {
+		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error updating task:', error)
 		return res.status(500).json({ message: 'Internal server error' })
 	}
@@ -1893,31 +1940,37 @@ export const deleteColumn = async (req, res) => {
 				message: 'Access denied: Only board admins can delete columns.',
 			})
 		}
-		await recordBoardActivity({
-			boardId: board._id,
-			userId,
-			action: 'deleted',
-			entityType: 'column',
-			entityId: column._id,
-			entityName: column.title,
-			details: `deleted the ${column.title} column and its tasks`,
-		})
+		const session = await mongoose.startSession()
+		let activity
+		try {
+			await session.withTransaction(async () => {
+				const taskIds = await Task.find({ column: columnId }).distinct('_id').session(session)
+				await Task.deleteMany({ column: columnId }, { session })
+				await TaskActivity.deleteMany({ task: { $in: taskIds } }, { session })
+				await Notification.deleteMany({ task: { $in: taskIds } }, { session })
+				await Column.deleteOne({ _id: columnId }, { session })
+				await Column.updateMany(
+					{ board: column.board, position: { $gt: column.position } },
+					{ $inc: { position: -1 } },
+					{ session },
+				)
+				activity = await recordBoardActivity({
+					boardId: board._id,
+					userId,
+					action: 'deleted',
+					entityType: 'column',
+					entityId: column._id,
+					entityName: column.title,
+					details: `deleted the ${column.title} column and its tasks`,
+					session,
+					emit: false,
+				})
+			})
+		} finally {
+			await session.endSession()
+		}
 
-		// Delete all tasks in this column
-		const taskIds = await Task.find({ column: columnId }).distinct('_id')
-		await Task.deleteMany({ column: columnId })
-		await TaskActivity.deleteMany({ task: { $in: taskIds } })
-		await Notification.deleteMany({ task: { $in: taskIds } })
-
-		// Delete the column
-		await Column.deleteOne({ _id: columnId })
-
-		// Adjust positions of remaining columns
-		await Column.updateMany(
-			{ board: column.board, position: { $gt: column.position } },
-			{ $inc: { position: -1 } },
-		)
-
+		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(column.board.toString(), 'column:deleted', { columnId })
 
 		return res.status(200).json({ message: 'Column deleted successfully' })
@@ -1949,41 +2002,54 @@ export const deleteTask = async (req, res) => {
 		const columnId = task.column._id
 		const position = task.position
 		const columnTitle = task.column.title
-		await recordBoardActivity({
-			boardId: board._id,
-			userId,
-			action: 'deleted',
-			entityType: 'task',
-			entityId: task._id,
-			entityName: task.title,
-			details: `deleted ${task.title} from ${columnTitle}`,
-		})
+		const session = await mongoose.startSession()
+		let activity
+		try {
+			await session.withTransaction(async () => {
+				// Only the request that actually removes the card may shift its neighbours,
+				// otherwise a double delete moves the rest of the column up twice.
+				const { deletedCount } = await Task.deleteOne({ _id: taskId }, { session })
+				if (!deletedCount) {
+					const error = new Error('Task not found')
+					error.statusCode = 404
+					throw error
+				}
+				await Task.updateMany(
+					{ column: columnId, position: { $gt: position } },
+					{ $inc: { position: -1 } },
+					{ session },
+				)
+				await TaskActivity.deleteMany({ task: taskId }, { session })
+				await Notification.deleteMany({ task: taskId }, { session })
+				await TaskActivity.create([{
+					task: taskId,
+					board: board._id,
+					user: userId,
+					type: 'deleted',
+					message: `removed this card from ${columnTitle}`,
+				}], { session })
+				activity = await recordBoardActivity({
+					boardId: board._id,
+					userId,
+					action: 'deleted',
+					entityType: 'task',
+					entityId: task._id,
+					entityName: task.title,
+					details: `deleted ${task.title} from ${columnTitle}`,
+					session,
+					emit: false,
+				})
+			})
+		} finally {
+			await session.endSession()
+		}
 
-		// Delete all activities and notifications related to this task
-		await TaskActivity.deleteMany({ task: taskId })
-		await Notification.deleteMany({ task: taskId })
-
-		// Delete the task
-		await Task.deleteOne({ _id: taskId })
-
-		// Adjust positions of remaining tasks in the same column
-		await Task.updateMany(
-			{ column: columnId, position: { $gt: position } },
-			{ $inc: { position: -1 } },
-		)
-
-		await recordTaskActivity({
-			taskId,
-			boardId: board._id,
-			userId,
-			type: 'deleted',
-			message: `removed this card from ${columnTitle}`,
-		})
-
+		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(board._id.toString(), 'task:deleted', { taskId })
 
 		return res.status(200).json({ message: 'Task deleted successfully' })
 	} catch (error) {
+		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error deleting task:', error)
 		return res.status(500).json({ message: 'Internal server error' })
 	}

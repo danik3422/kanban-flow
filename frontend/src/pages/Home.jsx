@@ -48,7 +48,7 @@ const Home = () => {
 	}, [])
 
 	return (
-		<div className='bg-base-100 text-base-content min-h-screen flex flex-col'>
+		<div className='bg-base-100 text-base-content min-h-dvh flex flex-col'>
 			<HomeHero />
 			<section className='workflow-section' data-reveal>
 				<div className='workflow-intro reveal-item'>

@@ -14,6 +14,7 @@ import { translations } from '../lib/translations'
 import { useAuthStore } from '../store/useAuthStore'
 import AuthButton from '../ui/AuthButton'
 import { axiosInstance } from '../lib/axios'
+import { loadFirebase } from '../lib/firebase'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 
@@ -25,6 +26,10 @@ const loginPreviewStages = [
 ]
 
 const Login = () => {
+	// Preload social sign-in so the provider popup opens straight from the click.
+	useEffect(() => {
+		loadFirebase().catch(() => {})
+	}, [])
 	const { authUser, login, passkeyLogin, handleSocialSignin, isLoggingIn } = useAuthStore()
 	const currentLanguage =
 		authUser?.language || document.documentElement.lang || 'en'

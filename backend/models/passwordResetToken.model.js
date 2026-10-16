@@ -25,6 +25,8 @@ const passwordResetTokenSchema = new mongoose.Schema(
 	{ timestamps: true }
 )
 
+passwordResetTokenSchema.index({ user: 1 })
+
 const PasswordResetToken = mongoose.model(
 	'PasswordResetToken',
 	passwordResetTokenSchema

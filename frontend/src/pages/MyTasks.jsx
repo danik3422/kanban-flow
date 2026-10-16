@@ -19,6 +19,7 @@ import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
+import { addDaysToKey, formatDueDate, getDueDateKey, getDueDateState as getDueStateForDate, getLocalDateKey } from '../utils/dueDate'
 
 const MyTasks = () => {
 	const authUser = useAuthStore((state) => state.authUser)
@@ -53,11 +54,7 @@ const MyTasks = () => {
 	const getDueDateState = (task) => {
 		if (!task.dueDate) return 'none'
 		if (getTaskStatus(task) === 'Completed') return 'completed'
-		const today = new Date()
-		today.setHours(0, 0, 0, 0)
-		const dueDate = new Date(task.dueDate)
-		dueDate.setHours(0, 0, 0, 0)
-		return dueDate < today ? 'overdue' : 'upcoming'
+		return getDueStateForDate(task.dueDate) === 'overdue' ? 'overdue' : 'upcoming'
 	}
 
 	useEffect(() => {
@@ -135,23 +132,17 @@ const MyTasks = () => {
 	}
 
 	const stats = useMemo(() => {
-		const today = new Date()
-		today.setHours(0, 0, 0, 0)
-		const endOfWeek = new Date(today)
-		endOfWeek.setDate(today.getDate() + 7)
+		const todayKey = getLocalDateKey()
+		const endOfWeekKey = addDaysToKey(todayKey, 7)
 
 		const assignedCount = tasks.length
 		const overdueCount = tasks.filter((task) => {
-			if (!task.dueDate) return false
-			const dueDate = new Date(task.dueDate)
-			dueDate.setHours(0, 0, 0, 0)
-			return dueDate < today && !task.checklist?.every((item) => item.completed)
+			const dueKey = getDueDateKey(task.dueDate)
+			return Boolean(dueKey) && dueKey < todayKey && !task.checklist?.every((item) => item.completed)
 		}).length
 		const dueThisWeekCount = tasks.filter((task) => {
-			if (!task.dueDate) return false
-			const dueDate = new Date(task.dueDate)
-			dueDate.setHours(0, 0, 0, 0)
-			return dueDate >= today && dueDate <= endOfWeek
+			const dueKey = getDueDateKey(task.dueDate)
+			return Boolean(dueKey) && dueKey >= todayKey && dueKey <= endOfWeekKey
 		}).length
 		const completedCount = tasks.filter((task) => {
 			if (!task.checklist || task.checklist.length === 0) return false
@@ -189,7 +180,7 @@ const MyTasks = () => {
 	}, [boards, tasks])
 
 	return (
-		<div className='workspace-shell flex h-screen'>
+		<div className='workspace-shell flex h-dvh'>
 			<WorkspaceSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
@@ -409,10 +400,7 @@ const MyTasks = () => {
 														>
 															<CalendarDays size={13} />
 															<span>
-																{new Date(task.dueDate).toLocaleDateString(
-																	undefined,
-																	{ month: 'short', day: 'numeric' },
-																)}
+																{formatDueDate(task.dueDate)}
 															</span>
 														</span>
 													)}

@@ -13,7 +13,7 @@ export const authMiddleware = async (req, res, next) => {
 				.json({ message: 'Unauthorized - No token provided' })
 		}
 
-		const decoded = jwt.verify(token, env.jwtSecret)
+		const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] })
 
 		if (!decoded) {
 			return res.status(401).json({ message: 'Unauthorized - Invalid token' })
