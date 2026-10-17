@@ -7,6 +7,8 @@ export const signupSchema = z.object({
 	email,
 	password: passwordSchema,
 	provider: z.literal('local').default('local'),
+	// The language chosen on the sign-up screen, so the account starts in it.
+	language: z.enum(['en', 'uk', 'ru']).optional(),
 })
 
 export const loginSchema = z.object({

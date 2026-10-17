@@ -1,0 +1,47 @@
+import { APP, API, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, SHOTS, ALICE_STATE } from '../lib.mjs'
+const browser = await launch()
+const alice = await browser.newContext({ viewport: { width: 1280, height: 860 }, storageState: ALICE_STATE })
+const a = await alice.newPage(); watch(a, 'alice')
+const board = await (await a.request.post(`${API}/board/boards`, { data: { name: `Shared ${Date.now()}` } })).json()
+const { inviteUrl } = await (await a.request.post(`${API}/board/boards/${board._id}/invites`, { data: {} })).json()
+check('invite link created', Boolean(inviteUrl), inviteUrl)
+
+// Bob opens the invite on a phone before having an account
+const bobEmail = `bob${Date.now()}@example.com`, pw = 'Password123!'
+await apiSignup(bobEmail, pw)
+const bobCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+const b = await bobCtx.newPage(); watch(b, 'bob')
+await b.goto(inviteUrl); await b.waitForTimeout(1200)
+await b.getByRole('link', { name: /sign in/i }).click()
+await b.waitForURL(/\/login\?redirect=/)
+check('invite sign-in link carries a redirect back to the invite', b.url().includes(encodeURIComponent('/invite/')), b.url())
+await uiLogin(b, bobEmail, pw); await b.waitForTimeout(1500)
+await b.goto(linkFrom(lastMailTo(bobEmail))); await b.waitForURL(/setup-profile/, { timeout: 10000 })
+await b.fill('#setup-name', 'Bob Mobile'); await b.click('button.setup-submit')
+await b.waitForURL(/\/invite\//, { timeout: 10000 }).catch(() => {})
+check('after onboarding Bob is brought back to the invite', b.url().includes('/invite/'), b.url())
+await b.waitForTimeout(800)
+const members = await (await a.request.get(`${API}/board/boards/${board._id}/members`)).json()
+check('Bob is not joined without confirming', members.length === 1, `${members.length} members`)
+await b.screenshot({ path: SHOTS + 'e2e-invite-mobile.png' })
+await b.getByRole('button', { name: /join board/i }).click()
+await b.waitForURL(new RegExp(`/workspaces/${board._id}`), { timeout: 10000 }).catch(() => {})
+check('Join board opens the shared board', b.url().includes(board._id), b.url())
+await b.waitForTimeout(1500)
+check('Bob sees "Leave room" as a member', await b.locator('[aria-label="Leave room"]').count() === 1)
+
+// Alice transfers ownership; Bob's open board updates live
+const bobMembership = (await (await a.request.get(`${API}/board/boards/${board._id}/members`)).json()).find((m) => m.user.email === bobEmail)
+const transfer = await a.request.patch(`${API}/board/boards/${board._id}/members/${bobMembership._id}`, { data: { role: 'owner' } })
+check('ownership transfer succeeds', transfer.status() === 200)
+await b.waitForTimeout(1500)
+check('Bob sees owner actions live after the transfer', await b.locator('[aria-label="Delete room"]').count() === 1)
+
+// Bob removes Alice; Alice's open board is closed live
+await a.goto(`${APP}/workspaces/${board._id}`); await a.waitForTimeout(2000)
+const aliceMembership = (await (await b.request.get(`${API}/board/boards/${board._id}/members`)).json()).find((m) => m.user.email !== bobEmail)
+const removal = await b.request.delete(`${API}/board/boards/${board._id}/members/${aliceMembership._id}`)
+check('new owner can remove the previous owner', removal.status() === 200)
+await a.waitForTimeout(1500)
+check('removed member is sent back to the overview live', !a.url().includes(board._id), a.url())
+await browser.close(); done()

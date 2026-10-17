@@ -8,24 +8,72 @@ import {
 } from 'react-router-dom'
 import { Toaster } from 'sonner'
 
+import AppLoader from './components/AppLoader'
 import Navbar from './components/Navbar'
 import { axiosInstance } from './lib/axios'
-const BoardInvite = lazy(() => import('./pages/BoardInvite'))
-const CalendarPage = lazy(() => import('./pages/Calendar'))
-const EditProfile = lazy(() => import('./pages/EditProfile'))
-const Home = lazy(() => import('./pages/Home'))
-const Login = lazy(() => import('./pages/Login'))
-const MyTasks = lazy(() => import('./pages/MyTasks'))
-const NotFound = lazy(() => import('./pages/NotFound'))
-const Profile = lazy(() => import('./pages/Profile'))
-const PublicBoard = lazy(() => import('./pages/PublicBoard'))
-const ResetPassword = lazy(() => import('./pages/ResetPassword'))
-const Settings = lazy(() => import('./pages/Settings'))
-const SetupProfile = lazy(() => import('./pages/SetupProfile'))
-const Signup = lazy(() => import('./pages/Signup'))
-const Team = lazy(() => import('./pages/Team'))
-const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
-const Workspace = lazy(() => import('./pages/Workspace'))
+// Page chunks, keyed so the one for the opened address can start downloading
+// while the session is still being checked instead of after it.
+const PAGES = {
+	BoardInvite: () => import('./pages/BoardInvite'),
+	Calendar: () => import('./pages/Calendar'),
+	EditProfile: () => import('./pages/EditProfile'),
+	Home: () => import('./pages/Home'),
+	Login: () => import('./pages/Login'),
+	MyTasks: () => import('./pages/MyTasks'),
+	NotFound: () => import('./pages/NotFound'),
+	Profile: () => import('./pages/Profile'),
+	PublicBoard: () => import('./pages/PublicBoard'),
+	ResetPassword: () => import('./pages/ResetPassword'),
+	Settings: () => import('./pages/Settings'),
+	SetupProfile: () => import('./pages/SetupProfile'),
+	Signup: () => import('./pages/Signup'),
+	Team: () => import('./pages/Team'),
+	VerifyEmail: () => import('./pages/VerifyEmail'),
+	Workspace: () => import('./pages/Workspace'),
+}
+const BoardInvite = lazy(PAGES.BoardInvite)
+const CalendarPage = lazy(PAGES.Calendar)
+const EditProfile = lazy(PAGES.EditProfile)
+const Home = lazy(PAGES.Home)
+const Login = lazy(PAGES.Login)
+const MyTasks = lazy(PAGES.MyTasks)
+const NotFound = lazy(PAGES.NotFound)
+const Profile = lazy(PAGES.Profile)
+const PublicBoard = lazy(PAGES.PublicBoard)
+const ResetPassword = lazy(PAGES.ResetPassword)
+const Settings = lazy(PAGES.Settings)
+const SetupProfile = lazy(PAGES.SetupProfile)
+const Signup = lazy(PAGES.Signup)
+const Team = lazy(PAGES.Team)
+const VerifyEmail = lazy(PAGES.VerifyEmail)
+const Workspace = lazy(PAGES.Workspace)
+
+const EXACT_PAGES = {
+	'/': 'Home',
+	'/login': 'Login',
+	'/signup': 'Signup',
+	'/login/resetpassword': 'ResetPassword',
+	'/login/verify-email': 'VerifyEmail',
+	'/verify-email': 'VerifyEmail',
+	'/setup-profile': 'SetupProfile',
+	'/workspaces': 'Workspace',
+	'/my-tasks': 'MyTasks',
+	'/calendar': 'Calendar',
+	'/team': 'Team',
+	'/profile': 'Profile',
+	'/profile/edit': 'EditProfile',
+	'/settings': 'Settings',
+}
+const pageFor = (pathname) => {
+	if (EXACT_PAGES[pathname]) return EXACT_PAGES[pathname]
+	if (pathname.startsWith('/workspaces/')) return 'Workspace'
+	if (pathname.startsWith('/invite/')) return 'BoardInvite'
+	if (pathname.startsWith('/public/')) return 'PublicBoard'
+	return 'NotFound'
+}
+// Pages not yet moved to the new design still rely on the old top bar.
+const LEGACY_NAVBAR_PAGES = new Set(['Profile', 'EditProfile', 'Settings', 'BoardInvite', 'PublicBoard'])
+
 import { shouldBlockAccountGateRoute } from './lib/authRouteRules'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -33,13 +81,10 @@ export const App = () => {
 	const location = useLocation()
 	const navigate = useNavigate()
 	const handledSocialRedirectRef = useRef(false)
-	const isWorkspace =
-		location.pathname.startsWith('/workspaces') ||
-		location.pathname === '/my-tasks' ||
-		location.pathname === '/team' ||
-		location.pathname === '/calendar'
 	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
-	const loadingLabel = isWorkspace ? 'Loading workspace' : 'Loading'
+	// These pages bring their own header (logo, language and theme).
+	const usesAuthLayout = ['/login', '/signup', '/login/resetpassword', '/login/verify-email', '/verify-email', '/setup-profile'].includes(location.pathname)
+		|| Boolean(authUser && (authUser.emailVerified === false || authUser.profileSetup === false))
 	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
 	// so the board, sidebar and socket are not torn down and loaded twice.
 	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
@@ -62,6 +107,7 @@ export const App = () => {
 
 	useEffect(() => {
 		checkAuth()
+		PAGES[pageFor(window.location.pathname)]().catch(() => {})
 	}, [checkAuth])
 
 	useEffect(() => {
@@ -119,31 +165,19 @@ export const App = () => {
 			? requestedRedirect
 			: '/'
 
-	if (isCheckingAuth) {
-		return (
-			<div className='loading-screen' role='status' aria-live='polite'>
-				<div className='loading-shell' aria-label='Checking session'>
-					<div className='loading-brand'>
-						<span className='brand-mark'>K</span>
-						<span>KanbanHub</span>
-					</div>
-					<div className='loading-pill'>
-						<span className='loading-spinner' aria-hidden='true' />
-						<p className='loading-label'>
-							{loadingLabel}
-							<span className='loading-dots'>...</span>
-						</p>
-					</div>
-				</div>
-			</div>
-		)
-	}
+	if (isCheckingAuth) return <AppLoader />
+
+	// Signed-out visitors go to sign-in and come back to the address they opened.
+	const signInFirst = (
+		<Navigate to={`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`} replace />
+	)
+	const showLegacyNavbar = !usesAuthLayout && LEGACY_NAVBAR_PAGES.has(pageFor(location.pathname))
 
 	return (
 		<>
 			<Toaster position='bottom-right' richColors />
-			{!isWorkspace && <Navbar />}
-			<Suspense fallback={<div className='loading-screen' role='status' aria-live='polite'><div className='loading-shell' aria-label='Loading page'><div className='loading-brand'><span className='brand-mark'>K</span><span>KanbanHub</span></div><div className='loading-pill'><span className='loading-spinner' aria-hidden='true' /><p className='loading-label'>Loading<span className='loading-dots'>...</span></p></div></div></div>}>
+			{showLegacyNavbar && <Navbar />}
+			<Suspense fallback={<AppLoader page />}>
 			<Routes key={routesKey}>
 				{needsVerification ? (
 					<>
@@ -205,44 +239,44 @@ export const App = () => {
 
 						<Route
 							path='/workspaces'
-							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
+							element={authUser ? <Workspace /> : signInFirst}
 						/>
 						<Route
 							path='/my-tasks'
 							element={
-								authUser ? <MyTasks /> : <Navigate to='/login' replace />
+								authUser ? <MyTasks /> : signInFirst
 							}
 						/>
 						<Route
 							path='/calendar'
 							element={
-								authUser ? <CalendarPage /> : <Navigate to='/login' replace />
+								authUser ? <CalendarPage /> : signInFirst
 							}
 						/>
 						<Route
 							path='/team'
-							element={authUser ? <Team /> : <Navigate to='/login' replace />}
+							element={authUser ? <Team /> : signInFirst}
 						/>
 						<Route
 							path='/workspaces/:boardId'
-							element={authUser ? <Workspace /> : <Navigate to='/' replace />}
+							element={authUser ? <Workspace /> : signInFirst}
 						/>
 						<Route
 							path='/profile'
 							element={
-								authUser ? <Profile /> : <Navigate to='/login' replace />
+								authUser ? <Profile /> : signInFirst
 							}
 						/>
 						<Route
 							path='/profile/edit'
 							element={
-								authUser ? <EditProfile /> : <Navigate to='/login' replace />
+								authUser ? <EditProfile /> : signInFirst
 							}
 						/>
 						<Route
 							path='/settings'
 							element={
-								authUser ? <Settings /> : <Navigate to='/login' replace />
+								authUser ? <Settings /> : signInFirst
 							}
 						/>
 						<Route path='*' element={<NotFound />} />

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { translateCurrent } from '../i18n/translate'
 import { toast } from 'sonner'
 import InviteMemberModal from '../components/InviteMemberModal'
 import WorkspaceOverview from '../components/WorkspaceOverview'
@@ -344,7 +345,11 @@ const Workspace = () => {
 				setIsActivityLoading(Boolean(nextBoard))
 				setBoardNameDraft(nextBoard?.name || '')
 				setIsEditingBoardName(false)
-				if (boardId && !nextBoard) navigate('/workspaces', { replace: true })
+				if (boardId && !nextBoard) {
+					// A mistyped, deleted or no-longer-shared board: say so instead of silently switching pages.
+					toast.error(translateCurrent('notFound.boardMissing'), { id: 'board-missing' })
+					navigate('/workspaces', { replace: true })
+				}
 				// The cache survives reloads; refresh it once per visit so boards created or
 				// shared elsewhere show up without waiting for the cache to expire.
 				if (usedCache && !hasRevalidatedBoardsRef.current) {

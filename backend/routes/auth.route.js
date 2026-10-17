@@ -112,9 +112,11 @@ router.patch(
 	validateBody(setupProfileSchema),
 	setupProfile,
 )
+// Preferences such as language must work before the email is verified,
+// because the verification screen itself follows them.
 router.patch(
 	'/settings',
-	verifiedAuthMiddleware,
+	authMiddleware,
 	validateBody(settingsSchema),
 	updateSettings,
 )

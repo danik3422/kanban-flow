@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './index.css'
+import './ui'
+import { I18nProvider } from './i18n'
 import { applyThemeFromStorage } from './utils/theme.js'
 
 applyThemeFromStorage()
@@ -12,7 +14,9 @@ createRoot(document.getElementById('root')).render(
 	<StrictMode>
 		<ErrorBoundary>
 			<BrowserRouter>
-				<App />
+				<I18nProvider>
+					<App />
+				</I18nProvider>
 			</BrowserRouter>
 		</ErrorBoundary>
 	</StrictMode>

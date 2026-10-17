@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { LogoMark } from './BrandMark'
 
 const MIN_WIDTH = 220
 const MAX_WIDTH = 286
@@ -151,7 +152,7 @@ const WorkspaceSidebar = ({
 				<div className='workspace-sidebar-main'>
 					<div className='workspace-brand-row'>
 						<Link to='/workspaces' className='workspace-brand'>
-							<span className='brand-mark'>K</span>
+							<LogoMark size={27} />
 							<span>KanbanHub</span>
 						</Link>
 					</div>

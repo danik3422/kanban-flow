@@ -1,0 +1,36 @@
+import { APP, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, SHOTS, ALICE_STATE } from '../lib.mjs'
+const browser = await launch()
+const email = `alice${Date.now()}@example.com`, password = 'Password123!'
+await apiSignup(email, password)
+const verifyUrl = linkFrom(lastMailTo(email))
+check('verification email links to /verify-email', verifyUrl?.startsWith(`${APP}/verify-email?token=`), verifyUrl)
+
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+const page = await ctx.newPage(); watch(page, 'alice')
+let verifyCalls = 0
+page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/auth/verify-email')) verifyCalls++ })
+await page.goto(verifyUrl)
+await page.waitForURL(/\/login/, { timeout: 8000 })
+check('logged-out verification link redirects to login', page.url().includes('/login'))
+await uiLogin(page, email, password)
+await page.waitForURL(/setup-profile/, { timeout: 10000 }).catch(() => {})
+check('after login the remembered token verifies the email', page.url().includes('/setup-profile'), page.url())
+
+await page.waitForTimeout(1000)
+check('the verification token is submitted exactly once', verifyCalls === 1, `${verifyCalls} calls`)
+await page.fill('#setup-name', 'Alice Tester')
+await page.click('button.setup-submit')
+await page.waitForURL(/\/workspaces/, { timeout: 10000 }).catch(() => {})
+check('profile setup enters the workspace', page.url().includes('/workspaces'), page.url())
+await page.waitForTimeout(1200)
+
+// create a board through the UI (overview → New room)
+await page.getByRole('button', { name: /new room/i }).first().click()
+await page.fill('input[placeholder="e.g. Product launch"]', 'E2E board')
+await page.locator('form').filter({ has: page.locator('input[placeholder="e.g. Product launch"]') }).locator('button[type=submit]').click()
+await page.waitForTimeout(2500)
+check('a newly created board stays open (no bounce to the overview)', /\/workspaces\/[a-f0-9]{24}$/.test(page.url()), page.url())
+await page.screenshot({ path: SHOTS + 'e2e-board-created.png' })
+await ctx.storageState({ path: ALICE_STATE })
+console.log('ALICE', email, page.url())
+await browser.close(); done()

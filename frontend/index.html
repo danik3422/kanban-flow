@@ -5,11 +5,33 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/kanban-mark.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="mask-icon" href="/kanban-mark.svg" color="#147d78" />
+    <link rel="mask-icon" href="/kanban-mark.svg" color="#0f766e" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-    <meta name="theme-color" content="#147d78" />
+    <!-- Fonts load without blocking the first paint; system fonts show until they arrive. -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" /></noscript>
+    <meta name="theme-color" content="#f4f7f5" />
+    <!-- Apply the saved theme and language before the first paint, so a dark page never flashes white. -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement
+          var saved = localStorage.getItem('theme')
+          var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          root.setAttribute('data-theme', dark ? 'dark' : 'light')
+          root.style.colorScheme = dark ? 'dark' : 'light'
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0e1513' : '#f4f7f5')
+          var language = (localStorage.getItem('kanban-language') || '').slice(0, 2)
+          if (/^(en|uk|ru)$/.test(language)) root.setAttribute('lang', language)
+        } catch (error) {}
+      })()
+    </script>
+    <style>
+      html { background: #f4f7f5; }
+      html[data-theme='dark'] { background: #0e1513; }
+    </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="KanbanHub helps teams turn ideas into visible progress, aligned work, and clear momentum." />
     <meta name="robots" content="index,follow" />
@@ -17,7 +39,7 @@
     <meta property="og:site_name" content="KanbanHub" />
     <meta property="og:title" content="KanbanHub — Make progress visible" />
     <meta property="og:description" content="A focused workspace for turning ideas into visible progress." />
-    <meta property="og:image" content="/kanban-mark.svg" />
+    <meta property="og:image" content="/icon-512.png" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="KanbanHub — Make progress visible" />
     <meta name="twitter:description" content="A focused workspace for turning ideas into visible progress." />

@@ -137,3 +137,6 @@ dist
 serviceAccountKey.json
 # macOS
 .DS_Store
+
+# Browser check artifacts
+e2e/.tmp/

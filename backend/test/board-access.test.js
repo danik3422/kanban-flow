@@ -1440,6 +1440,32 @@ describe('board access and invitation flow', () => {
 	})
 })
 
+describe('language preference', () => {
+	it('starts a new account in the language chosen at sign-up and lets an unverified user change it', async () => {
+		const original = { fetch: globalThis.fetch, key: env.brevoApiKey, from: env.mailFrom }
+		globalThis.fetch = async () => new Response('{}', { status: 201 })
+		env.brevoApiKey = 'test'
+		env.mailFrom = 'KanbanHub <noreply@example.com>'
+		try {
+			const signup = await request(app).post('/api/auth/signup').send({ email: 'lang-new@example.com', password: 'Password123!', language: 'uk' })
+			assert.equal(signup.status, 201)
+		} finally {
+			Object.assign(globalThis, { fetch: original.fetch })
+			env.brevoApiKey = original.key
+			env.mailFrom = original.from
+		}
+		const user = await User.findOne({ email: 'lang-new@example.com' })
+		assert.equal(user.language, 'uk')
+		assert.equal(user.emailVerified, false)
+
+		const change = await request(app).patch('/api/auth/settings').set('Cookie', authCookie(user._id)).send({ language: 'ru' })
+		assert.equal(change.status, 200)
+		assert.equal((await User.findById(user._id)).language, 'ru')
+		const blocked = await request(app).get('/api/board/boards').set('Cookie', authCookie(user._id))
+		assert.equal(blocked.status, 403)
+	})
+})
+
 describe('my tasks filtering', () => {
 	it('filters assigned tasks by priority, board and search the same way across fields', async () => {
 		const { owner, board } = await createBoardWithOwner()

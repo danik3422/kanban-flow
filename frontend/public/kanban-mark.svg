@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title>KanbanHub</title>
-  <rect width="64" height="64" rx="16" fill="#147d78"/>
-  <path d="M19 16h8v14l18-14h9L31 32l23 16h-9L27 34v14h-8z" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="title">
+  <title id="title">KanbanHub</title>
+  <style>
+    .t { fill: #0f766e } .g { fill: #ffffff } .m { fill: #99f6e4 }
+    @media (prefers-color-scheme: dark) { .t { fill: #2dd4bf } .g { fill: #04201c } .m { fill: #0f766e } }
+  </style>
+  <rect class="t" width="32" height="32" rx="8"/>
+  <rect class="g" x="6" y="6" width="5" height="20" rx="2"/>
+  <rect class="g" x="13" y="13" width="6" height="6" rx="2"/>
+  <rect class="g" x="19" y="21" width="7" height="5" rx="2"/>
+  <rect class="m" x="19" y="6" width="7" height="5" rx="2"/>
 </svg>

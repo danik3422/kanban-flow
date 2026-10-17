@@ -6,10 +6,16 @@
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "backend": "npm --prefix backend run dev",
     "frontend": "npm --prefix frontend run dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "e2e:start": "node e2e/stack.mjs start",
+    "e2e:start:prod": "node e2e/stack.mjs start --prod",
+    "e2e:stop": "node e2e/stack.mjs stop",
+    "e2e:flows": "node e2e/run-flows.mjs",
+    "ui:audit": "node e2e/ui-audit.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.2.0"
+    "concurrently": "^9.2.0",
+    "playwright-core": "^1.48.2"
   },
   "keywords": [],
   "author": "Danylo Syloats <mr.siloacd@gmail.com>",

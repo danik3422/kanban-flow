@@ -653,7 +653,7 @@ export const setSocialPassword = async (req, res) => {
 
 export const signup = async (req, res) => {
 	try {
-		const { email, password, provider = 'local' } = req.body
+		const { email, password, provider = 'local', language } = req.body
 
 		if (!email || !provider) {
 			return res
@@ -715,6 +715,7 @@ export const signup = async (req, res) => {
 				provider === 'local' ? emailVerificationExpiresAt : null,
 			emailVerificationLastSentAt: provider === 'local' ? new Date() : null,
 			profileSetup: false,
+			...(language ? { language } : {}),
 		})
 
 		await newUser.save()

@@ -1,0 +1,167 @@
+/*
+ * Design tokens: the only place colors, type, spacing, radii and shadows are defined.
+ * Components read these variables, so a theme is just a different set of values.
+ * Text/background pairs below meet WCAG AA (4.5:1) in both themes.
+ */
+:root {
+	color-scheme: light;
+
+	--ui-font-body: 'DM Sans', system-ui, sans-serif;
+	--ui-font-display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+
+	--ui-text-xs: 0.75rem;
+	--ui-text-sm: 0.8125rem;
+	--ui-text-md: 0.875rem;
+	--ui-text-lg: 1rem;
+	--ui-text-xl: 1.25rem;
+	--ui-text-2xl: 1.5rem;
+	--ui-text-3xl: 2rem;
+	--ui-text-4xl: 2.75rem;
+
+	--ui-space-1: 4px;
+	--ui-space-2: 8px;
+	--ui-space-3: 12px;
+	--ui-space-4: 16px;
+	--ui-space-5: 20px;
+	--ui-space-6: 24px;
+	--ui-space-8: 32px;
+	--ui-space-10: 40px;
+	--ui-space-12: 48px;
+
+	--ui-radius-sm: 6px;
+	--ui-radius-md: 10px;
+	--ui-radius-lg: 12px;
+	--ui-radius-xl: 16px;
+	--ui-radius-2xl: 20px;
+	--ui-radius-full: 999px;
+
+	/* Comfortable for a mouse; grows to a 44px touch target on touch screens. */
+	--ui-control-h: 40px;
+	--ui-control-h-sm: 32px;
+	--ui-control-h-lg: 48px;
+
+	--ui-bg: #f4f7f5;
+	--ui-surface: #ffffff;
+	--ui-surface-2: #f0f4f2;
+	--ui-surface-3: #eaf0ec;
+	--ui-border: #dce6e0;
+	--ui-border-strong: #b9cbc2;
+	--ui-text: #17211d;
+	--ui-text-2: #3e4c47;
+	--ui-text-muted: #5b6b65;
+	--ui-text-inverse: #ffffff;
+
+	--ui-accent: #0f766e;
+	--ui-accent-hover: #115e59;
+	--ui-accent-text: #ffffff;
+	--ui-accent-soft: #e3f1ee;
+	--ui-accent-soft-text: #0b5d57;
+	/* Accent used as text on the page background: links, eyebrows. */
+	--ui-link: #0b5d57;
+	/* Brand panel on the auth screens: deep teal in both themes, light text. */
+	--ui-brand-panel: #0b3f3a;
+	--ui-brand-panel-glow: rgba(45, 212, 191, 0.28);
+	--ui-brand-panel-text: #ffffff;
+	--ui-brand-panel-muted: #c5e4de;
+	--ui-brand-panel-chip: rgba(255, 255, 255, 0.16);
+	/* The tinted "moving card" in the logo, and on the brand panel. */
+	--ui-logo-moving: #99f6e4;
+	--ui-logo-moving-on-brand: #2dd4bf;
+	--ui-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+
+	--ui-danger: #b42318;
+	--ui-danger-hover: #912018;
+	--ui-danger-text: #ffffff;
+	--ui-danger-soft: #fdecea;
+	--ui-danger-soft-text: #b42318;
+
+	--ui-warning-soft: #fff4d6;
+	--ui-warning-soft-text: #8a5a00;
+	--ui-success: #12a150;
+	--ui-success-soft: #e6f5ec;
+	--ui-success-soft-text: #146c3a;
+	--ui-success-text: #146c3a;
+	--ui-info-soft: #eaf1fd;
+	--ui-info-soft-text: #1d4f91;
+	--ui-neutral-soft: #f0f2f5;
+	--ui-neutral-soft-text: #475467;
+	--ui-orange-soft: #fef0e1;
+	--ui-orange-soft-text: #a4400b;
+
+	--ui-focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.35);
+	--ui-shadow-sm: 0 1px 2px rgba(23, 33, 29, 0.06);
+	--ui-shadow-md: 0 4px 12px rgba(23, 33, 29, 0.08), 0 1px 3px rgba(23, 33, 29, 0.06);
+	--ui-shadow-lg: 0 20px 48px rgba(23, 33, 29, 0.18), 0 4px 12px rgba(23, 33, 29, 0.08);
+	--ui-overlay: rgba(10, 20, 17, 0.45);
+
+	--ui-duration: 160ms;
+	--ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html[data-theme='dark'] {
+	color-scheme: dark;
+
+	--ui-bg: #0e1513;
+	--ui-surface: #16201d;
+	--ui-surface-2: #1c2925;
+	--ui-surface-3: #121b18;
+	--ui-border: #2a3833;
+	--ui-border-strong: #3a4a44;
+	--ui-text: #e8efec;
+	--ui-text-2: #c7d3ce;
+	--ui-text-muted: #9aaba4;
+	--ui-text-inverse: #0e1513;
+
+	--ui-accent: #2dd4bf;
+	--ui-accent-hover: #5eead4;
+	--ui-accent-text: #04201c;
+	--ui-accent-soft: #134e48;
+	--ui-accent-soft-text: #99f6e4;
+	--ui-link: #2dd4bf;
+	--ui-brand-panel: #0f2724;
+	--ui-brand-panel-glow: rgba(45, 212, 191, 0.16);
+	--ui-brand-panel-text: #e8efec;
+	--ui-brand-panel-muted: #a9c7c1;
+	--ui-brand-panel-chip: rgba(255, 255, 255, 0.1);
+	--ui-logo-moving: #0f766e;
+	--ui-logo-moving-on-brand: #2dd4bf;
+	--ui-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2304201c' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+
+	--ui-danger: #f97066;
+	--ui-danger-hover: #fda29b;
+	--ui-danger-text: #2b0a07;
+	--ui-danger-soft: #55160c;
+	--ui-danger-soft-text: #fecdca;
+
+	--ui-warning-soft: #4e3a06;
+	--ui-warning-soft-text: #fedf89;
+	--ui-success: #47cd89;
+	--ui-success-soft: #0a3d22;
+	--ui-success-soft-text: #a6f4c5;
+	--ui-success-text: #47cd89;
+	--ui-info-soft: #102a56;
+	--ui-info-soft-text: #b2ccff;
+	--ui-neutral-soft: #22302b;
+	--ui-neutral-soft-text: #c7d3ce;
+	--ui-orange-soft: #4d2509;
+	--ui-orange-soft-text: #fedab4;
+
+	--ui-focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.4);
+	--ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+	--ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+	--ui-shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+	--ui-overlay: rgba(0, 0, 0, 0.6);
+}
+
+@media (pointer: coarse) {
+	:root {
+		--ui-control-h: 44px;
+		--ui-control-h-sm: 44px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--ui-duration: 0ms;
+	}
+}

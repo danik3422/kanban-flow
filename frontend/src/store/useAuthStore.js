@@ -5,6 +5,9 @@ import { clearBoardsCache } from '../lib/boardsCache'
 import { resetSocket } from '../lib/socketRegistry'
 import { devUser, isDevAuthBypass } from '../lib/devMode'
 import { firebaseEnabled, isFirebaseLoaded, loadFirebase } from '../lib/firebase'
+import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
+
+const providerName = (provider) => ({ google: 'Google', microsoft: 'Microsoft', apple: 'Apple' })[provider] || provider
 
 export const useAuthStore = create((set, get) => ({
 	authUser: null,
@@ -18,8 +21,9 @@ export const useAuthStore = create((set, get) => ({
 	isLoggingIn: false,
 	socket: null,
 
+	// Only the first check blocks the app; later refreshes (after saving a profile,
+	// changing settings) update the user in place without remounting every page.
 	checkAuth: async () => {
-		set({ isCheckingAuth: true })
 		if (isDevAuthBypass) {
 			set({ authUser: devUser, isCheckingAuth: false })
 			return
@@ -42,15 +46,15 @@ export const useAuthStore = create((set, get) => ({
 			const responseData = res.data
 
 			if (responseData.requiresVerification) {
-				toast.success('Account created. Check your email to verify it.')
+				toast.success(translateCurrent('auth.toast.accountCreated'))
 				return { success: true, requiresVerification: true, email: responseData.email }
 			}
 
-			toast.success('Account created successfully')
+			toast.success(translateCurrent('auth.toast.socialAccountCreated'))
 			set({ authUser: responseData })
 			return { success: true, requiresVerification: false }
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Signup failed')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message))
 			return { success: false, requiresVerification: false }
 		} finally {
 			set({ isSigningUp: false })
@@ -63,7 +67,7 @@ export const useAuthStore = create((set, get) => ({
 			const res = await axiosInstance.post('/auth/login', data)
 			
 			if (res.data.requiresVerification) {
-				toast.info('Please verify your email to complete login')
+				toast.info(translateCurrent('auth.toast.verifyToContinue'))
 				set({ authUser: res.data })
 				return {
 					success: true,
@@ -72,11 +76,11 @@ export const useAuthStore = create((set, get) => ({
 				}
 			}
 			
-			toast.success('Logged in successfully')
+			toast.success(translateCurrent('auth.toast.signedIn'))
 			set({ authUser: res.data })
 			return { success: true, requiresVerification: false }
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Login failed')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message))
 			return { success: false }
 		} finally {
 			set({ isLoggingIn: false })
@@ -88,10 +92,10 @@ export const useAuthStore = create((set, get) => ({
 		try {
 			const res = await axiosInstance.post('/auth/passkeys/authenticate', response)
 			set({ authUser: res.data })
-			toast.success('Signed in with passkey')
+			toast.success(translateCurrent('auth.toast.signedInPasskey'))
 			return { success: true, requiresVerification: Boolean(res.data.requiresVerification) }
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not sign in with passkey')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message || 'Could not sign in with passkey'))
 			return { success: false }
 		} finally {
 			set({ isLoggingIn: false })
@@ -101,7 +105,7 @@ export const useAuthStore = create((set, get) => ({
 	logout: async () => {
 		if (isDevAuthBypass) {
 			set({ authUser: null })
-			toast.info('Logged out successfully')
+			toast.info(translateCurrent('auth.toast.signedOut'))
 			return
 		}
 		try {
@@ -111,20 +115,20 @@ export const useAuthStore = create((set, get) => ({
 			// Only sign out of Firebase if this visit loaded it; never download it just for that.
 			if (isFirebaseLoaded()) loadFirebase().then((firebase) => firebase?.signOut(firebase.auth)).catch(() => {})
 			set({ authUser: null })
-			toast.success('Logged out successfully')
+			toast.success(translateCurrent('auth.toast.signedOut'))
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Logout failed')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message))
 		}
 	},
 
 	handleSocialSignin: async (provider) => {
 		if (!firebaseEnabled) {
-			toast.error('Social sign-in is not configured yet')
+			toast.error(translateCurrent('auth.toast.socialUnavailable'))
 			return { success: false }
 		}
 		const firebase = await loadFirebase().catch(() => null)
 		if (!firebase) {
-			toast.error('Could not load sign-in. Check your connection and try again.')
+			toast.error(translateCurrent('auth.toast.socialLoadFailed'))
 			return { success: false }
 		}
 		const firebaseProvider = firebase.providers[provider]
@@ -140,22 +144,22 @@ export const useAuthStore = create((set, get) => ({
 			)
 
 			set({ authUser: response.data })
-			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} sign-in successful`)
+			toast.success(translateCurrent('auth.toast.socialSignedIn', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
-			toast.error(error.response?.data?.message || `${provider} sign-in failed`)
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.toast.socialFailed').replace('{provider}', providerName(provider)))
 			return { success: false, error }
 		}
 	},
 
 	handleSocialSignup: async (provider) => {
 		if (!firebaseEnabled) {
-			toast.error('Social sign-up is not configured yet')
+			toast.error(translateCurrent('auth.toast.socialUnavailable'))
 			return { success: false }
 		}
 		const firebase = await loadFirebase().catch(() => null)
 		if (!firebase) {
-			toast.error('Could not load sign-in. Check your connection and try again.')
+			toast.error(translateCurrent('auth.toast.socialLoadFailed'))
 			return { success: false }
 		}
 		const firebaseProvider = firebase.providers[provider]
@@ -165,22 +169,22 @@ export const useAuthStore = create((set, get) => ({
 			const idToken = await result.user.getIdToken()
 			const response = await axiosInstance.post('/auth/social/signup', { idToken, provider }, { withCredentials: true })
 			set({ authUser: response.data })
-			toast.success('Account created successfully')
+			toast.success(translateCurrent('auth.toast.socialAccountCreated'))
 			return { success: true, user: response.data }
 		} catch (error) {
-			toast.error(error.response?.data?.message || `${provider} signup failed`)
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.toast.socialFailed').replace('{provider}', providerName(provider)))
 			return { success: false, error }
 		}
 	},
 
 	connectSocialAccount: async (provider, currentPassword) => {
 		if (!firebaseEnabled) {
-			toast.error('Social sign-in is not configured yet')
+			toast.error(translateCurrent('auth.toast.socialUnavailable'))
 			return { success: false }
 		}
 		const firebase = await loadFirebase().catch(() => null)
 		if (!firebase) {
-			toast.error('Could not load sign-in. Check your connection and try again.')
+			toast.error(translateCurrent('auth.toast.socialLoadFailed'))
 			return { success: false }
 		}
 		const firebaseProvider = firebase.providers[provider]
@@ -196,7 +200,7 @@ export const useAuthStore = create((set, get) => ({
 			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider, currentPassword }, { withCredentials: true })
 			set({ authUser: response.data })
-			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
+			toast.success(translateCurrent('auth.toast.providerConnected', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
 			const firebaseMessage = {
@@ -220,14 +224,14 @@ export const useAuthStore = create((set, get) => ({
 			const redirectUser = result?.user || firebase.auth.currentUser
 			if (!redirectUser) {
 				console.warn('Firebase redirect completed without a user result', { provider })
-				toast.error('Google sign-in did not return an account. Please try again.')
+				toast.error(translateCurrent('auth.toast.socialNoAccount'))
 				return { success: false }
 			}
 			const idToken = await redirectUser.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
 			sessionStorage.removeItem('pending-social-provider')
 			set({ authUser: response.data })
-			toast.success(`${provider[0].toUpperCase()}${provider.slice(1)} connected successfully`)
+			toast.success(translateCurrent('auth.toast.providerConnected', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
 			sessionStorage.removeItem('pending-social-provider')
@@ -238,14 +242,14 @@ export const useAuthStore = create((set, get) => ({
 
 	setSocialPassword: async (password) => {
 		if (!firebaseEnabled) {
-			toast.error('Social sign-in is not configured yet')
+			toast.error(translateCurrent('auth.toast.socialUnavailable'))
 			return { success: false }
 		}
 		const currentUser = get().authUser
 		const provider = currentUser?.provider
 		const firebase = await loadFirebase().catch(() => null)
 		if (!firebase) {
-			toast.error('Could not load sign-in. Check your connection and try again.')
+			toast.error(translateCurrent('auth.toast.socialLoadFailed'))
 			return { success: false }
 		}
 		const firebaseProvider = firebase.providers[provider]
@@ -255,10 +259,10 @@ export const useAuthStore = create((set, get) => ({
 			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/set-password', { idToken, provider, password }, { withCredentials: true })
 			set((state) => ({ authUser: { ...state.authUser, ...response.data, hasPassword: true } }))
-			toast.success('Password sign-in added')
+			toast.success(translateCurrent('auth.toast.passwordAdded'))
 			return { success: true, user: response.data }
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not add password sign-in')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.toast.passwordAddFailed'))
 			return { success: false, error }
 		}
 	},

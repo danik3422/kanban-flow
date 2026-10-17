@@ -1,95 +1,54 @@
-import {
-	ArrowLeft,
-	ArrowRight,
-	CheckCircle2,
-	Eye,
-	EyeOff,
-	LockKeyhole,
-	Mail,
-} from 'lucide-react'
+import { ArrowLeft, CheckCircle2, LinkIcon, Mail, MailCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import AuthLayout from '../components/auth/AuthLayout'
+import { AuthHeading, AuthStatus, PasswordRules } from '../components/auth/AuthParts'
+import { useI18n } from '../i18n'
+import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
+import { Button, Field, Input, PasswordInput, Spinner } from '../ui'
+import { meetsPasswordRules } from '../utils/password'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const ResetPassword = () => {
+	const { t, language } = useI18n()
 	const navigate = useNavigate()
-	const [email, setEmail] = useState(
-		() => sessionStorage.getItem(AUTH_EMAIL_KEY) || '',
-	)
+	const [token] = useState(() => new URLSearchParams(window.location.search).get('token') || '')
+	const isPasswordReset = Boolean(token)
+	const [email, setEmail] = useState(() => sessionStorage.getItem(AUTH_EMAIL_KEY) || '')
 	const [password, setPassword] = useState('')
 	const [confirmPassword, setConfirmPassword] = useState('')
-	const [showPassword, setShowPassword] = useState(false)
-	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-	const [isSubmitted, setIsSubmitted] = useState(false)
+	const [errors, setErrors] = useState({})
 	const [isSubmitting, setIsSubmitting] = useState(false)
-	const [fieldErrors, setFieldErrors] = useState({})
-	const [isValidatingToken, setIsValidatingToken] = useState(false)
+	const [isSubmitted, setIsSubmitted] = useState(false)
+	const [tokenState, setTokenState] = useState(isPasswordReset ? 'checking' : 'none')
 	const [tokenError, setTokenError] = useState('')
-	const [tokenStatus, setTokenStatus] = useState('')
-	const [isTokenValid, setIsTokenValid] = useState(false)
-	const shouldAutoFocusEmail =
-		typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches
-	const [token] = useState(() => {
-		if (typeof window === 'undefined') return ''
-		return new URLSearchParams(window.location.search).get('token') || ''
-	})
-
-	const isPasswordReset = Boolean(token)
 	const validationStartedRef = useRef(false)
 
+	// Validate the link once and take the token out of the address bar.
 	useEffect(() => {
-		if (!token) {
-			return
-		}
-
-		if (validationStartedRef.current) return
-
+		if (!token || validationStartedRef.current) return undefined
 		validationStartedRef.current = true
-
 		const cleanUrl = new URL(window.location.href)
 		cleanUrl.searchParams.delete('token')
-		window.history.replaceState(
-			window.history.state,
-			document.title,
-			`${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
-		)
-
+		window.history.replaceState(window.history.state, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
 		let ignore = false
-
-		const validateToken = async () => {
-			setIsValidatingToken(true)
-			try {
-				const { data } = await axiosInstance.get(
-					'/auth/password-reset/validate',
-					{
-						params: { token },
-					},
-				)
-
-				if (!ignore) {
-					setIsTokenValid(true)
-					setEmail(data.email || '')
-					if (data.email) sessionStorage.setItem(AUTH_EMAIL_KEY, data.email)
-				}
-			} catch (error) {
-				if (!ignore) {
-					setIsTokenValid(false)
-					setTokenStatus(error.response?.data?.code || 'invalid')
-					setTokenError(
-						error.response?.data?.message ||
-							'Reset link is invalid or expired.',
-					)
-				}
-			} finally {
-				if (!ignore) setIsValidatingToken(false)
-			}
-		}
-
-		validateToken()
-
+		axiosInstance
+			.get('/auth/password-reset/validate', { params: { token } })
+			.then(({ data }) => {
+				if (ignore) return
+				setTokenState('valid')
+				setEmail(data.email || '')
+				if (data.email) sessionStorage.setItem(AUTH_EMAIL_KEY, data.email)
+			})
+			.catch((error) => {
+				if (ignore) return
+				setTokenState('invalid')
+				setTokenError(error.response?.data?.message || '')
+			})
 		return () => {
 			ignore = true
 			validationStartedRef.current = false
@@ -98,330 +57,161 @@ const ResetPassword = () => {
 
 	useEffect(() => {
 		if (isSubmitted) return undefined
-
 		const handleKeyDown = (event) => {
-			if (event.key === 'Escape') navigate('/login')
+			// Leave only from an empty form: Escape must never throw away what was typed.
+			const typing = event.target instanceof HTMLInputElement && event.target.value
+			if (event.key === 'Escape' && !typing && !document.querySelector('[role="dialog"], [role="menu"]')) navigate('/login')
 		}
-
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
 	}, [isSubmitted, navigate])
 
-	const showTokenErrorState =
-		isPasswordReset && !isTokenValid && !isValidatingToken && tokenError
-	const tokenErrorTitle =
-		tokenStatus === 'expired' ? 'Reset link expired' : 'Reset link expired'
-
-	const shouldShowPasswordForm = isPasswordReset && isTokenValid && !isSubmitted
-	const shouldShowCheckingState =
-		isPasswordReset && !isTokenValid && isValidatingToken
-	const passwordChecks = {
-		length: password.length >= 8,
-		uppercase: /[A-Z]/.test(password),
-		number: /\d/.test(password),
-		special: /[^A-Za-z0-9]/.test(password),
-	}
-
-	const handleSubmit = async (e) => {
-		e.preventDefault()
+	const handleSubmit = async (event) => {
+		event.preventDefault()
 		const nextErrors = {}
-
 		if (isPasswordReset) {
-			if (!token) {
-				toast.error('Reset token is missing.')
-				return
-			}
-
-			if (!isTokenValid) {
-				toast.error(tokenError || 'This reset link is no longer valid.')
-				return
-			}
-
-			if (!password) nextErrors.password = 'Create a new password.'
-			else if (!Object.values(passwordChecks).every(Boolean)) {
-				nextErrors.password = 'Use 8 characters, uppercase, number, and symbol.'
-			}
-			if (!confirmPassword) nextErrors.confirmPassword = 'Repeat your new password.'
-			else if (password !== confirmPassword) {
-				nextErrors.confirmPassword = 'Passwords do not match.'
-			}
+			if (!password) nextErrors.password = t('auth.errors.passwordCreate')
+			else if (!meetsPasswordRules(password)) nextErrors.password = t('auth.errors.passwordRules')
+			if (!confirmPassword) nextErrors.confirmPassword = t('auth.errors.confirmRequired')
+			else if (password !== confirmPassword) nextErrors.confirmPassword = t('auth.errors.passwordsMismatch')
 		} else if (!email.trim()) {
-			nextErrors.email = 'Enter your email address.'
-		} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-			nextErrors.email = 'Enter a valid email address.'
+			nextErrors.email = t('auth.errors.emailRequired')
+		} else if (!EMAIL_PATTERN.test(email.trim())) {
+			nextErrors.email = t('auth.errors.emailInvalid')
 		}
-
-		if (Object.keys(nextErrors).length > 0) {
-			setFieldErrors(nextErrors)
-			return
-		}
-		setFieldErrors({})
-
+		if (Object.keys(nextErrors).length) return setErrors(nextErrors)
+		setErrors({})
 		setIsSubmitting(true)
 		try {
 			if (isPasswordReset) {
-				await axiosInstance.post('/auth/password-reset/confirm', {
-					token,
-					password,
-				})
-
-				toast.success('Password updated successfully')
+				await axiosInstance.post('/auth/password-reset/confirm', { token, password })
+				toast.success(t('auth.toast.passwordUpdated'))
 				setIsSubmitted(true)
 				setTimeout(() => navigate('/login', { replace: true }), 1800)
 			} else {
-				await axiosInstance.post('/auth/password-reset/request', { email })
+				await axiosInstance.post('/auth/password-reset/request', { email: email.trim() })
 				setIsSubmitted(true)
-				toast.success(
-					'If an account exists for this email, a reset link has been sent.',
-				)
 			}
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Password reset failed')
+			toast.error(translateServerMessage(language, error.response?.data?.message))
 		} finally {
 			setIsSubmitting(false)
 		}
 	}
 
-	return (
-		<div className='auth-page'>
-			<div className='auth-layout reset-layout'>
-				<section className='auth-intro'>
-					<div className='auth-intro-copy'>
-						<p className='eyebrow'>Account recovery</p>
-						<h1>A clear path back to your workspace.</h1>
-						<p>
-							We will help you get back in without losing the rhythm of your
-							work.
-						</p>
-					</div>
-					<div className='auth-preview reset-preview'>
-						<div className='auth-preview-top'>
-							<span>Account security</span>
-							<LockKeyhole size={16} />
-						</div>
-						<div className='reset-icon'>
-							<Mail size={22} />
-						</div>
-						<strong>One step at a time.</strong>
-						<p>Use the email connected to your KanbanHub account.</p>
-					</div>
-				</section>
-
-				<section className='auth-form-panel'>
-					<div className='auth-form-heading'>
-						<p className='eyebrow'>
-							{isPasswordReset ? 'New password' : 'Reset password'}
-						</p>
-						<h2>
-							{isPasswordReset
-								? 'Choose a new password.'
-								: 'Need a fresh start?'}
-						</h2>
-						<p>
-							{isPasswordReset
-								? 'Create a new password for your KanbanHub account.'
-								: 'Enter your email and we will send you a secure reset link.'}
-						</p>
-					</div>
-
-					{isSubmitted ? (
-						<div className='reset-success'>
-							<div className='reset-success-icon'>
-								<CheckCircle2 size={24} />
-							</div>
-							<h3>
-								{isPasswordReset ? 'Password updated' : 'Request submitted'}
-							</h3>
-							<p>
-								{isPasswordReset
-									? 'Your password has been changed. You can now sign in with the new password.'
-									: 'If an account exists for this email, a reset link has been sent.'}
-							</p>
-							<Link to='/login' className='auth-secondary-button'>
-								<ArrowLeft size={16} /> Back to login
-							</Link>
-						</div>
-					) : showTokenErrorState ? (
-						<div className='reset-success'>
-							<div className='reset-success-icon'>
-								<LockKeyhole size={24} />
-							</div>
-							<h3>{tokenErrorTitle}</h3>
-							<p>{tokenError}</p>
-							<Link to='/login' className='auth-secondary-button'>
-								<ArrowLeft size={16} /> Back to login
-							</Link>
-						</div>
-					) : shouldShowCheckingState ? (
-						<div className='reset-success'>
-							<div className='reset-success-icon'>
-								<LockKeyhole size={24} />
-							</div>
-							<h3>Reset link expired</h3>
-							<p>Please wait while we verify your secure link.</p>
-						</div>
-					) : (
-						<form className='auth-form' onSubmit={handleSubmit} noValidate>
-							{shouldShowPasswordForm ? (
-								<>
-									<div className='auth-field'>
-										<label htmlFor='new-password'>New password</label>
-										<div className='auth-input-wrap'>
-											<input
-												id='new-password'
-												type={showPassword ? 'text' : 'password'}
-												value={password}
-														onChange={(event) => {
-															setPassword(event.target.value)
-															setFieldErrors((current) => ({ ...current, password: '' }))
-														}}
-												placeholder='At least 8 characters'
-												minLength={8}
-														aria-invalid={Boolean(fieldErrors.password)}
-														aria-describedby={fieldErrors.password ? 'reset-password-error' : undefined}
-												autoComplete='new-password'
-												required
-											/>
-											<button
-												type='button'
-												className='auth-input-action'
-												onClick={() => setShowPassword((value) => !value)}
-												aria-label={
-													showPassword ? 'Hide password' : 'Show password'
-												}
-												title={showPassword ? 'Hide password' : 'Show password'}
-											>
-												{showPassword ? (
-													<EyeOff size={16} />
-												) : (
-													<Eye size={16} />
-												)}
-											</button>
-										</div>
-											{fieldErrors.password && (
-												<p className='auth-field-error' id='reset-password-error' role='alert'>
-													{fieldErrors.password}
-												</p>
-											)}
-									</div>
-
-									<div className='auth-field'>
-										<label htmlFor='confirm-reset-password'>
-											Confirm new password
-										</label>
-										<div className='auth-input-wrap'>
-											<input
-												id='confirm-reset-password'
-												type={showConfirmPassword ? 'text' : 'password'}
-												value={confirmPassword}
-														onChange={(event) => {
-															setConfirmPassword(event.target.value)
-															setFieldErrors((current) => ({ ...current, confirmPassword: '' }))
-														}}
-												placeholder='Repeat your password'
-												minLength={8}
-														aria-invalid={Boolean(fieldErrors.confirmPassword)}
-														aria-describedby={fieldErrors.confirmPassword ? 'reset-confirm-error' : undefined}
-												autoComplete='new-password'
-												required
-											/>
-											<button
-												type='button'
-												className='auth-input-action'
-												onClick={() =>
-													setShowConfirmPassword((value) => !value)
-												}
-												aria-label={
-													showConfirmPassword
-														? 'Hide password'
-														: 'Show password'
-												}
-												title={
-													showConfirmPassword
-														? 'Hide password'
-														: 'Show password'
-												}
-											>
-												{showConfirmPassword ? (
-													<EyeOff size={16} />
-												) : (
-													<Eye size={16} />
-												)}
-											</button>
-										</div>
-											{fieldErrors.confirmPassword && (
-												<p className='auth-field-error' id='reset-confirm-error' role='alert'>
-													{fieldErrors.confirmPassword}
-												</p>
-											)}
-									</div>
-
-									<button
-										type='submit'
-										className='auth-submit'
-										disabled={isSubmitting}
-									>
-										{isSubmitting ? 'Updating...' : 'Update password'}
-										<ArrowRight size={16} />
-									</button>
-								</>
-							) : (
-								<>
-									<div className='auth-field'>
-										<label htmlFor='reset-email'>Email address</label>
-										<div className='auth-input-wrap'>
-											<input
-												id='reset-email'
-												type='email'
-												name='email'
-												value={email}
-												onChange={(event) => {
-													setEmail(event.target.value)
-															setFieldErrors((current) => ({ ...current, email: '' }))
-													sessionStorage.setItem(
-														AUTH_EMAIL_KEY,
-														event.target.value,
-													)
-												}}
-												placeholder='you@example.com'
-												autoComplete='email'
-												autoFocus={!isPasswordReset && shouldAutoFocusEmail}
-												required
-														aria-invalid={Boolean(fieldErrors.email)}
-														aria-describedby={fieldErrors.email ? 'reset-email-error' : undefined}
-											/>
-										</div>
-												{fieldErrors.email && (
-													<p className='auth-field-error' id='reset-email-error' role='alert'>
-														{fieldErrors.email}
-													</p>
-												)}
-									</div>
-
-									<button
-										type='submit'
-										className='auth-submit'
-										disabled={isSubmitting}
-									>
-										{isSubmitting ? 'Sending...' : 'Send reset link'}
-										<ArrowRight size={16} />
-									</button>
-								</>
-							)}
-						</form>
-					)}
-
-					{!isSubmitted && !showTokenErrorState && !shouldShowCheckingState && (
-						<p className='auth-footer-copy'>
-							<Link to='/login' className='auth-secondary-link'>
-								<ArrowLeft size={16} /> Back to login
-							</Link>
-						</p>
-					)}
-				</section>
-			</div>
-		</div>
+	const backToLogin = (
+		<Button as={Link} to='/login' variant='secondary' block icon={ArrowLeft}>
+			{t('auth.reset.backToLogin')}
+		</Button>
 	)
+
+	let content
+	if (isSubmitted && isPasswordReset) {
+		content = (
+			<AuthStatus icon={CheckCircle2} tone='success' title={t('auth.reset.updatedTitle')} actions={backToLogin}>
+				{t('auth.reset.updatedText')}
+			</AuthStatus>
+		)
+	} else if (isSubmitted) {
+		content = (
+			<AuthStatus icon={MailCheck} title={t('auth.reset.sentTitle')} actions={backToLogin}>
+				{t('auth.reset.sentText', { email: email.trim() })}
+			</AuthStatus>
+		)
+	} else if (tokenState === 'checking') {
+		content = (
+			<AuthStatus icon={LinkIcon} title={t('auth.reset.checking')}>
+				<Spinner size={20} />
+			</AuthStatus>
+		)
+	} else if (tokenState === 'invalid') {
+		content = (
+			<AuthStatus
+				icon={LinkIcon}
+				tone='danger'
+				title={t('auth.reset.invalidTitle')}
+				actions={
+					<>
+						<Button as={Link} to='/login/resetpassword' reloadDocument block>{t('auth.reset.requestNew')}</Button>
+						{backToLogin}
+					</>
+				}
+			>
+				{tokenError ? translateServerMessage(language, tokenError, 'auth.reset.invalidText') : t('auth.reset.invalidText')}
+			</AuthStatus>
+		)
+	} else if (isPasswordReset) {
+		content = (
+			<>
+				<AuthHeading title={t('auth.reset.newTitle')} subtitle={t('auth.reset.newSubtitle')} />
+				<form className='auth-form' onSubmit={handleSubmit} noValidate>
+					{email && <input type='email' name='username' value={email} autoComplete='username' readOnly hidden />}
+					<Field label={t('auth.fields.newPassword')} error={errors.password}>
+						<PasswordInput
+							id='new-password'
+							value={password}
+							onChange={(event) => {
+								setPassword(event.target.value)
+								setErrors((current) => ({ ...current, password: '' }))
+							}}
+							placeholder={t('auth.fields.newPasswordPlaceholder')}
+							autoComplete='new-password'
+							autoFocus
+							aria-describedby='reset-password-rules'
+						/>
+					</Field>
+					<PasswordRules password={password} id='reset-password-rules' />
+					<Field label={t('auth.fields.confirmPassword')} error={errors.confirmPassword}>
+						<PasswordInput
+							id='confirm-reset-password'
+							value={confirmPassword}
+							onChange={(event) => {
+								setConfirmPassword(event.target.value)
+								setErrors((current) => ({ ...current, confirmPassword: '' }))
+							}}
+							placeholder={t('auth.fields.confirmPasswordPlaceholder')}
+							autoComplete='new-password'
+						/>
+					</Field>
+					<Button type='submit' size='lg' block loading={isSubmitting}>
+						{isSubmitting ? t('common.saving') : t('auth.reset.save')}
+					</Button>
+				</form>
+			</>
+		)
+	} else {
+		content = (
+			<>
+				<AuthHeading title={t('auth.reset.requestTitle')} subtitle={t('auth.reset.requestSubtitle')} />
+				<form className='auth-form' onSubmit={handleSubmit} noValidate>
+					<Field label={t('auth.fields.email')} error={errors.email}>
+						<Input
+							id='reset-email'
+							type='email'
+							icon={Mail}
+							value={email}
+							onChange={(event) => {
+								setEmail(event.target.value)
+								setErrors({})
+							}}
+							placeholder={t('auth.fields.emailPlaceholder')}
+							autoComplete='username'
+							inputMode='email'
+							autoFocus
+						/>
+					</Field>
+					<Button type='submit' size='lg' block loading={isSubmitting}>
+						{isSubmitting ? t('auth.reset.sending') : t('auth.reset.send')}
+					</Button>
+				</form>
+				<p className='auth-footer'>
+					<Link className='auth-link' to='/login'>{t('auth.reset.backToLogin')}</Link>
+				</p>
+			</>
+		)
+	}
+
+	return <AuthLayout panel='recovery'>{content}</AuthLayout>
 }
 
 export default ResetPassword

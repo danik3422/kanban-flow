@@ -46,9 +46,9 @@ html[data-theme='dark'] .settings-toggle-row,
 html[data-theme='dark'] .security-provider-row,
 html[data-theme='dark'] .security-provider-list,
 html[data-theme='dark'] .settings-language-options button,
-html[data-theme='dark'] input,
-html[data-theme='dark'] textarea,
-html[data-theme='dark'] select {
+html[data-theme='dark'] input:not([class*='ui-']),
+html[data-theme='dark'] textarea:not([class*='ui-']),
+html[data-theme='dark'] select:not([class*='ui-']) {
 	background: var(--paper);
 	color: var(--ink);
 	border-color: var(--line);

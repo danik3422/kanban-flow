@@ -1,0 +1,6 @@
+/* The logo is used in every header, so its styles travel with the component. */
+.logo-mark { display: block; flex: 0 0 auto; }
+.logo-mark__tile { fill: var(--logo-tile, var(--ui-accent)); }
+.logo-mark__glyph { fill: var(--logo-glyph, var(--ui-accent-text)); }
+.logo-mark__moving { fill: var(--logo-moving, var(--ui-logo-moving)); }
+.brand-lockup { display: inline-flex; align-items: center; gap: 10px; color: var(--ui-text); font-family: var(--ui-font-display); font-size: var(--ui-text-lg); font-weight: 600; letter-spacing: -0.02em; }

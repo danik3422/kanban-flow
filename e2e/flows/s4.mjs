@@ -1,0 +1,16 @@
+import { APP, check, done, launch, watch, ALICE_STATE } from '../lib.mjs'
+const browser = await launch()
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, storageState: ALICE_STATE })
+const page = await ctx.newPage(); watch(page, 'alice')
+const calls = []
+page.on('response', (r) => { if (/reauthenticate|passkeys\/options/.test(r.url())) calls.push(`${new URL(r.url()).pathname} ${r.status()}`) })
+await page.goto(APP + '/settings#security'); await page.waitForTimeout(1500)
+await page.getByRole('button', { name: /^security$/i }).click().catch(() => {})
+await page.getByRole('button', { name: /manage passkeys/i }).click()
+const addButton = page.getByRole('button', { name: /add new passkey/i })
+check('adding a passkey is disabled until the password is entered', await addButton.isDisabled())
+await page.fill('input[placeholder="Confirm your password to add a passkey"]', process.env.PW || 'Password123!')
+await addButton.click()
+await page.waitForTimeout(2500)
+check('password is confirmed before the passkey challenge is issued', calls.join(' | ') === '/api/auth/reauthenticate 204 | /api/auth/passkeys/options 200', calls.join(' | '))
+await browser.close(); done()

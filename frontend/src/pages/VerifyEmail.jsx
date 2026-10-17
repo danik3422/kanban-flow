@@ -1,55 +1,49 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, MailWarning, ShieldCheck } from 'lucide-react'
+import { LogOut, MailCheck, MailWarning } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import AuthLayout from '../components/auth/AuthLayout'
+import { AuthStatus } from '../components/auth/AuthParts'
+import { useI18n } from '../i18n'
+import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
+import { Alert, Button, Spinner } from '../ui'
 
 const RESEND_COOLDOWN_KEY = 'kanban-email-resend-cooldown'
 const PENDING_TOKEN_KEY = 'kanban-pending-verification-token'
 
 const readStoredResendCooldown = () => {
-	const storedValue = window.sessionStorage.getItem(RESEND_COOLDOWN_KEY)
-	if (!storedValue) return 0
-
-	const expiresAt = Number(storedValue)
-	if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
-		window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
+	try {
+		const expiresAt = Number(window.sessionStorage.getItem(RESEND_COOLDOWN_KEY))
+		const remaining = Math.ceil((expiresAt - Date.now()) / 1000)
+		return Number.isFinite(remaining) && remaining > 0 ? remaining : 0
+	} catch {
 		return 0
 	}
-
-	const remainingSeconds = Math.ceil((expiresAt - Date.now()) / 1000)
-	if (remainingSeconds <= 0) {
-		window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
-		return 0
-	}
-
-	return remainingSeconds
 }
 
 const persistResendCooldown = (seconds) => {
-	const nextSeconds = Math.max(0, Math.ceil(seconds))
-	if (nextSeconds <= 0) {
-		window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
-		return
+	try {
+		if (seconds > 0) window.sessionStorage.setItem(RESEND_COOLDOWN_KEY, String(Date.now() + seconds * 1000))
+		else window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
+	} catch {
+		// The countdown still runs for this visit.
 	}
-
-	const expiresAt = Date.now() + nextSeconds * 1000
-	window.sessionStorage.setItem(RESEND_COOLDOWN_KEY, String(expiresAt))
 }
 
-const getRetryAfterSeconds = (value) => {
-	const numericValue = Number(value)
-	if (!Number.isFinite(numericValue) || numericValue <= 0) {
-		return 0
-	}
-	return Math.ceil(numericValue)
+const toSeconds = (value) => {
+	const seconds = Number(value)
+	return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 0
 }
+
+const formatCooldown = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
 const VerifyEmail = () => {
+	const { t, tNode, language } = useI18n()
 	const navigate = useNavigate()
+	const { authUser, checkAuth, logout } = useAuthStore()
 	const [token] = useState(() => {
-		if (typeof window === 'undefined') return ''
 		const urlToken = new URLSearchParams(window.location.search).get('token')
 		// The link is often opened before signing in; keep the token across the login detour.
 		try {
@@ -59,113 +53,75 @@ const VerifyEmail = () => {
 			return urlToken || ''
 		}
 	})
-	const { authUser, checkAuth, logout } = useAuthStore()
-	const [status, setStatus] = useState(token ? 'pending' : 'idle')
-	const [message, setMessage] = useState('')
+	const [status, setStatus] = useState(token ? 'checking' : 'waiting')
+	const [errorMessage, setErrorMessage] = useState('')
 	const [isResending, setIsResending] = useState(false)
-	const [resendStatus, setResendStatus] = useState('idle')
-	const [resendCooldown, setResendCooldown] = useState(() => readStoredResendCooldown())
+	const [justSent, setJustSent] = useState(false)
+	const [cooldown, setCooldown] = useState(readStoredResendCooldown)
 
-	// Check authentication on mount - allow users with unverified email
 	useEffect(() => {
-		if (!authUser) {
-			// Unauthenticated users are redirected without showing a logout error.
-			navigate('/login', { replace: true })
-		}
+		if (!authUser) navigate('/login', { replace: true })
 	}, [authUser, navigate])
 
-	// Auto-verify if token is present. checkAuth() below changes authUser and re-runs
-	// this effect, so guard against submitting the one-time token twice.
+	// checkAuth() below changes authUser and re-runs this effect, so guard against
+	// submitting the one-time token twice.
 	const verificationStartedRef = useRef(false)
 	useEffect(() => {
-		if (!token || !authUser || verificationStartedRef.current) {
-			return
-		}
+		if (!token || !authUser || verificationStartedRef.current) return
 		verificationStartedRef.current = true
-
 		const cleanUrl = new URL(window.location.href)
 		cleanUrl.searchParams.delete('token')
-		window.history.replaceState(
-			window.history.state,
-			document.title,
-			`${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
-		)
-
+		window.history.replaceState(window.history.state, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
 		try {
 			window.sessionStorage.removeItem(PENDING_TOKEN_KEY)
 		} catch {
 			// Storage can be unavailable in private mode.
 		}
-
-		const verify = async () => {
-			try {
-				await axiosInstance.post('/auth/verify-email', { token })
+		axiosInstance
+			.post('/auth/verify-email', { token })
+			.then(async () => {
 				await checkAuth()
-				toast.success('Email verified successfully')
+				toast.success(t('auth.verify.verified'))
 				navigate('/setup-profile', { replace: true })
-			} catch (error) {
-				setStatus('error')
-				const errorMsg = error.response?.data?.message
-				setMessage(
-					errorMsg || 'Your verification link is invalid or expired.'
-				)
-				toast.error(errorMsg || 'Could not verify email')
-			}
-		}
+			})
+			.catch((error) => {
+				setStatus('expired')
+				setErrorMessage(error.response?.data?.message || '')
+			})
+	}, [token, authUser, checkAuth, navigate, t])
 
-		verify()
-	}, [token, authUser, checkAuth, navigate])
-
-	// Countdown timer
 	useEffect(() => {
-		if (resendCooldown <= 0) {
-			window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
-			return undefined
-		}
+		if (cooldown <= 0) return undefined
 		const timer = window.setTimeout(() => {
-			setResendCooldown(prev => {
-				const next = Math.max(0, prev - 1)
-				if (next <= 0) {
-					window.sessionStorage.removeItem(RESEND_COOLDOWN_KEY)
-					return 0
-				}
+			setCooldown((current) => {
+				const next = Math.max(0, current - 1)
 				persistResendCooldown(next)
 				return next
 			})
 		}, 1000)
 		return () => window.clearTimeout(timer)
-	}, [resendCooldown])
+	}, [cooldown])
+
+	const startCooldown = (seconds) => {
+		setCooldown(seconds)
+		persistResendCooldown(seconds)
+	}
 
 	const handleResend = async () => {
-		if (!authUser || !authUser.email) {
-			toast.error('Unable to resend: User information missing')
-			return
-		}
-
+		if (!authUser?.email) return
 		setIsResending(true)
 		try {
-			const response = await axiosInstance.post('/auth/verify-email/resend', {
-				email: authUser.email,
-			})
-			const retryAfter = getRetryAfterSeconds(response.data.retryAfter) || 60
-			setResendStatus('cooldown')
-			setResendCooldown(retryAfter)
-			persistResendCooldown(retryAfter)
-			toast.success('Verification link sent! Check your inbox.')
+			const { data } = await axiosInstance.post('/auth/verify-email/resend', { email: authUser.email })
+			startCooldown(toSeconds(data.retryAfter) || 60)
+			setJustSent(true)
+			toast.success(t('auth.verify.sent'))
 		} catch (error) {
-			const errorMsg = error.response?.data?.message
-			const retryAfter =
-				getRetryAfterSeconds(error.response?.data?.retryAfter) ||
-				getRetryAfterSeconds(error.response?.headers?.['retry-after']) ||
-				60
-			
+			const retryAfter = toSeconds(error.response?.data?.retryAfter) || toSeconds(error.response?.headers?.['retry-after']) || 60
 			if (error.response?.status === 429) {
-				setResendStatus('cooldown')
-				setResendCooldown(retryAfter)
-				persistResendCooldown(retryAfter)
-				toast.error(`Please wait ${formatCooldown(retryAfter)} before requesting another link`)
+				startCooldown(retryAfter)
+				toast.error(t('auth.verify.waitBeforeResend', { time: formatCooldown(retryAfter) }))
 			} else {
-				toast.error(errorMsg || 'Could not send verification email. Try again later.')
+				toast.error(translateServerMessage(language, error.response?.data?.message))
 			}
 		} finally {
 			setIsResending(false)
@@ -177,147 +133,40 @@ const VerifyEmail = () => {
 		navigate('/login', { replace: true })
 	}
 
-	const heading =
-		status === 'success'
-			? 'Email verified'
-			: status === 'error'
-				? 'Verification failed'
-				: 'Check your inbox'
+	if (!authUser) return null
 
-	const description =
-		status === 'success'
-			? message
-			: status === 'error'
-				? message
-				: 'We sent a verification link to your email address. Open it to activate your account.'
-
-	if (!authUser) {
-		return null // Redirect is handled in useEffect
-	}
-
-	return (
-		<div className='auth-page'>
-			<div className='auth-layout reset-layout'>
-				<section className='auth-intro'>
-					<div className='auth-intro-copy'>
-						<p className='eyebrow'>Account activation</p>
-						<h1>One final step before you begin.</h1>
-						<p>Verify your email to activate your workspace and continue with confidence.</p>
-					</div>
-					<div className='auth-preview reset-preview'>
-						<div className='auth-preview-top'>
-							<span>Account security</span>
-							<ShieldCheck size={16} />
-						</div>
-						<div className='reset-icon'>
-							<MailWarning size={22} />
-						</div>
-						<strong>Email verification</strong>
-						<p>{authUser?.email || 'Check your inbox for the confirmation email.'}</p>
-						<div className='auth-check-list'>
-							<span><CheckCircle2 size={13} /> Open the verification email</span>
-							<span><CheckCircle2 size={13} /> Confirm your account</span>
-							<span><CheckCircle2 size={13} /> Continue to your workspace</span>
-						</div>
-					</div>
-				</section>
-
-				<section className='auth-form-panel'>
-					<div className='auth-form-heading'>
-						<p className='eyebrow'>Verify email</p>
-						<h2>{heading}</h2>
-						<p>{description}</p>
-					</div>
-
-					{status === 'idle' && (
-						<VerificationActions
-						userEmail={authUser?.email}
-							isResending={isResending}
-							resendCooldown={resendCooldown}
-							resendStatus={resendStatus}
-							onResend={handleResend}
-							onLogout={handleLogout}
-						/>
-					)}
-
-					{status === 'success' && (
-						<div className='reset-success'>
-							<div className='reset-success-icon'>
-								<CheckCircle2 size={24} />
-							</div>
-							<h3>Everything is ready</h3>
-							<p>{message}</p>
-							<Link to='/' className='auth-submit'>Go to dashboard <ArrowRight size={16} /></Link>
-						</div>
-					)}
-
-					{status === 'error' && (
-						<VerificationActions
-						userEmail={authUser?.email}
-							isResending={isResending}
-							resendCooldown={resendCooldown}
-							resendStatus={resendStatus}
-							onResend={handleResend}
-							onLogout={handleLogout}
-							isExpired
-						/>
-					)}
-				</section>
-			</div>
-		</div>
-	)
-}
-
-const VerificationActions = ({
-	userEmail,
-	isExpired = false,
-	isResending,
-	resendCooldown,
-	resendStatus,
-	onResend,
-	onLogout,
-}) => {
-	if (!userEmail) {
-		return (
-			<div className='reset-success'>
-				<div className='reset-success-icon'><MailWarning size={24} /></div>
-				<h3>Sign in to request verification</h3>
-				<p>You need to be logged in to verify your email address.</p>
-				<button type='button' className='auth-submit' onClick={onLogout}><ArrowLeft size={16} /> Back to login</button>
-			</div>
-		)
-	}
-
-	return (
-		<div className='verification-actions-card'>
-			<div className='verification-email-label'>Verification email</div>
-			<div className='verification-email' title={userEmail}>{userEmail}</div>
-			<p className='verification-help'>
-				{isExpired
-					? 'This link is no longer valid. We can send a fresh one to this address.'
-					: 'Check your inbox and Spam folder. The link expires after one hour.'}
-			</p>
-			<button
-				className='auth-submit'
-				type='button'
-				onClick={onResend}
-				disabled={isResending || resendCooldown > 0}
-			>
+	const actions = (
+		<>
+			<Button block size='lg' onClick={handleResend} loading={isResending} disabled={cooldown > 0}>
 				{isResending
-					? 'Sending…'
-					: resendCooldown > 0
-						? `Resend in ${formatCooldown(resendCooldown)}`
-						: 'Resend verification email'}
-			</button>
-			{resendStatus === 'sent' && resendCooldown === 0 && (
-				<p className='verification-sent' role='status'>A fresh link is on its way. Check your inbox and Spam folder.</p>
+					? t('auth.verify.sending')
+					: cooldown > 0
+						? t('auth.verify.resendIn', { time: formatCooldown(cooldown) })
+						: t('auth.verify.resend')}
+			</Button>
+			<Button variant='ghost' block icon={LogOut} onClick={handleLogout}>{t('auth.verify.otherAccount')}</Button>
+		</>
+	)
+
+	return (
+		<AuthLayout panel='verify'>
+			{status === 'checking' ? (
+				<AuthStatus icon={MailCheck} title={t('auth.verify.checking')}>
+					<Spinner size={20} />
+				</AuthStatus>
+			) : status === 'expired' ? (
+				<AuthStatus icon={MailWarning} tone='danger' title={t('auth.verify.expiredTitle')} actions={actions}>
+					{errorMessage ? translateServerMessage(language, errorMessage, 'auth.verify.expiredHelp') : t('auth.verify.expiredHelp')}
+				</AuthStatus>
+			) : (
+				<AuthStatus icon={MailCheck} title={t('auth.verify.title')} actions={actions}>
+					<p>{tNode('auth.verify.subtitle', { email: <strong>{authUser.email}</strong> })}</p>
+					<p>{t('auth.verify.help')}</p>
+					{justSent && cooldown > 0 && <Alert tone='success'>{t('auth.verify.sent')}</Alert>}
+				</AuthStatus>
 			)}
-			<button type='button' className='verification-back-link' onClick={onLogout}><ArrowLeft size={15} /> Back to login</button>
-		</div>
+		</AuthLayout>
 	)
 }
-
-const formatCooldown = (seconds) =>
-	`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
 export default VerifyEmail

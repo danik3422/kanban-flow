@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import { applyTheme } from '../utils/theme'
 import AccountDropdown from './AccountDropdown'
+import { LogoMark } from './BrandMark'
 
 const themeOptions = [
 	{ id: 'light', label: 'Light', Icon: Sun },
@@ -72,7 +73,7 @@ const Navbar = () => {
 			<div className='navbar-inner flex justify-between items-center h-16'>
 				{/* Logo */}
 				<Link to='/' className='flex items-center gap-2 text-xl font-bold text-base-content'>
-					<span className='brand-mark'>K</span>
+					<LogoMark size={27} />
 					KanbanHub
 				</Link>
 
