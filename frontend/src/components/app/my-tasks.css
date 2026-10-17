@@ -1,8 +1,4 @@
 /* My tasks: a to-do list grouped by when things are due. */
-.mt-page { display: flex; flex-direction: column; gap: var(--ui-space-4); width: 100%; max-width: 960px; margin: 0 auto; padding: var(--ui-space-5) var(--ui-space-4) var(--ui-space-8); }
-@media (min-width: 721px) {
-	.mt-page { padding: var(--ui-space-8); }
-}
 
 /* Search and filters stay reachable while the list scrolls. */
 .mt-toolbar { position: sticky; top: 56px; z-index: 5; display: flex; align-items: center; gap: var(--ui-space-2); margin: 0 calc(-1 * var(--ui-space-2)); padding: var(--ui-space-2); background: var(--ui-bg); }

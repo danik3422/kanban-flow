@@ -1,269 +1,309 @@
-import { Check, ChevronDown, ChevronRight, Copy, Search, Users, UserRound } from 'lucide-react'
+import { ArrowUpDown, Check, Copy, Mail, MoreHorizontal, Plus, Search, SearchX, Send, Users } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import '../components/team/team.css'
+import InviteDialog from '../components/team/InviteDialog'
+import PersonPanel from '../components/team/PersonPanel'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
-import { handleAvatarError } from '../utils/avatar'
-import { useAuthStore } from '../store/useAuthStore'
+import { useI18n } from '../i18n'
+import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
+import { useAuthStore } from '../store/useAuthStore'
+import { Avatar, Badge, Button, EmptyState, IconButton, Input, Menu, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
+import { cx } from '../ui/utils'
+import { boardToneFor } from '../utils/boardTone'
 
-const getInitials = (person) => {
-	const name = person.name || person.email || '?'
-	return name
-		.split(/\s+/)
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((part) => part[0])
-		.join('')
-		.toUpperCase()
+const SORTS = ['name', 'open', 'overdue']
+const MANAGES = ['owner', 'admin']
+
+// Everyone across my boards, merged into one entry per person with their role and load per board.
+const buildPeople = (results) => {
+	const people = new Map()
+	for (const { board, members } of results) {
+		const canManage = MANAGES.includes(board.role)
+		for (const member of members) {
+			const user = member.user
+			if (!user?._id) continue
+			const id = String(user._id)
+			const role = String(board.createdBy) === id ? 'owner' : member.role || 'member'
+			const person = people.get(id) || { ...user, _id: id, memberships: [], open: 0, overdue: 0 }
+			person.memberships.push({
+				boardId: board._id,
+				boardName: board.name,
+				memberId: member._id,
+				role,
+				canManage,
+				open: member.openTasks || 0,
+				overdue: member.overdueTasks || 0,
+			})
+			person.open += member.openTasks || 0
+			person.overdue += member.overdueTasks || 0
+			people.set(id, person)
+		}
+	}
+	return [...people.values()]
 }
 
-const avatarColors = ['#aa6687', '#77a65c', '#c8754d', '#6486b4', '#6d9f59', '#8c6ba8']
-const roleOrder = ['owner', 'admin', 'member']
-const roleLabels = { owner: 'Owner', admin: 'Admin', member: 'Member' }
-
 const Team = () => {
-	const authUser = useAuthStore((state) => state.authUser)
+	const { t } = useI18n()
 	const navigate = useNavigate()
-	const [boards, setBoards] = useState([])
-	const [people, setPeople] = useState([])
-	const [search, setSearch] = useState('')
-	const [roleFilter, setRoleFilter] = useState('all')
-	const [sortBy, setSortBy] = useState('name')
-	const [copiedEmail, setCopiedEmail] = useState('')
+	const authUser = useAuthStore((state) => state.authUser)
+	const myId = String(authUser?._id || '')
+	const [searchParams, setSearchParams] = useSearchParams()
+	const [results, setResults] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
-	const {
-		isSidebarOpen,
-		setIsSidebarOpen,
-		isSidebarCollapsed,
-		setIsSidebarCollapsed,
-	} = useWorkspaceNavigation()
+	const [loadError, setLoadError] = useState('')
+	const [reloadKey, setReloadKey] = useState(0)
+	const [query, setQuery] = useState('')
+	const [boardFilter, setBoardFilter] = useState('all')
+	const [mode, setMode] = useState('all')
+	const [sort, setSort] = useState('name')
+	const [inviteFor, setInviteFor] = useState(null)
+	const { isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
 
 	useEffect(() => {
-		let isCurrent = true
-		const loadTeam = async () => {
-			try {
-				// One request returns every board with its members.
-				const { data: results } = await axiosInstance.get('/board/team')
-				const boardList = results.map(({ board }) => board)
-				if (boardList.length === 0) {
-					if (isCurrent) {
-						setBoards([])
-						setPeople([])
-					}
-					return
-				}
-				const peopleById = new Map()
-				results.forEach(({ board, members }) => {
-					members.forEach((member) => {
-						const user = member.user
-						if (!user?._id) return
-						const personId = String(user._id)
-						const isOwner = String(board.createdBy) === personId
-						const role = isOwner ? 'owner' : member.role || 'member'
-						const existing = peopleById.get(personId)
-						if (existing) {
-							existing.boards += 1
-							existing.roleCounts[role] = (existing.roleCounts[role] || 0) + 1
-							existing.rooms.push({ id: board._id, name: board.name, role })
-							return
-						}
-						peopleById.set(personId, {
-							...user,
-							roleCounts: { owner: role === 'owner' ? 1 : 0, admin: role === 'admin' ? 1 : 0, member: role === 'member' ? 1 : 0 },
-							boards: 1,
-							rooms: [{ id: board._id, name: board.name, role }],
-						})
-					})
-				})
-				if (isCurrent) {
-					setBoards(boardList)
-					setPeople(Array.from(peopleById.values()))
-				}
-			} catch (error) {
-				if (isCurrent && ![404, 204].includes(error.response?.status)) {
-					toast.error(error.response?.data?.message || 'Could not load team')
-				}
-			} finally {
-				if (isCurrent) setIsLoading(false)
-			}
-		}
-		loadTeam()
+		let ignore = false
+		axiosInstance.get('/board/team')
+			.then(({ data }) => {
+				if (ignore) return
+				setResults(Array.isArray(data) ? data : [])
+				setLoadError('')
+			})
+			.catch((error) => {
+				if (!ignore) setLoadError(translateServerMessageCurrent(error.response?.data?.message, 'team.loadError'))
+			})
+			.finally(() => {
+				if (!ignore) setIsLoading(false)
+			})
 		return () => {
-			isCurrent = false
+			ignore = true
 		}
-	}, [authUser?._id])
+	}, [authUser?._id, reloadKey])
 
-	const filteredPeople = useMemo(() => {
-		const query = search.trim().toLowerCase()
-		return people.filter((person) =>
-			(roleFilter === 'all' || person.roleCounts[roleFilter] > 0) &&
-			(!query || [person.name, person.email, ...person.rooms.map((room) => room.name), ...roleOrder.filter((role) => person.roleCounts[role])].some((value) =>
-				String(value || '').toLowerCase().includes(query),
-			)),
-		)
-	}, [people, roleFilter, search])
+	const boards = useMemo(() => results.map(({ board }) => board), [results])
+	const managedBoards = boards.filter((board) => MANAGES.includes(board.role))
+	const people = useMemo(() => buildPeople(results), [results])
+	const me = people.find((person) => person._id === myId)
+	const others = people.filter((person) => person._id !== myId)
+	const filtersActive = Boolean(query.trim()) || boardFilter !== 'all' || mode !== 'all'
 
-	const sortedPeople = useMemo(() => [...filteredPeople].sort((first, second) => {
-		if (sortBy === 'rooms') return second.boards - first.boards
-		return (first.name || first.email).localeCompare(second.name || second.email)
-	}), [filteredPeople, sortBy])
+	const visible = useMemo(() => {
+		const needle = query.trim().toLocaleLowerCase()
+		return others
+			.filter((person) => boardFilter === 'all' || person.memberships.some((membership) => membership.boardId === boardFilter))
+			.filter((person) => mode !== 'managed' || person.memberships.some((membership) => membership.canManage))
+			.filter((person) => mode !== 'overdue' || person.overdue > 0)
+			.filter((person) => !needle || [person.name, person.email, ...person.memberships.map((membership) => membership.boardName)].some((value) => String(value || '').toLocaleLowerCase().includes(needle)))
+			.sort((left, right) => (sort === 'open' ? right.open - left.open : sort === 'overdue' ? right.overdue - left.overdue : 0)
+				|| (left.name || left.email).localeCompare(right.name || right.email))
+	}, [others, query, boardFilter, mode, sort])
 
-	const ownerCount = people.filter((person) => person.roleCounts.owner > 0).length
-	const adminCount = people.filter((person) => person.roleCounts.admin > 0).length
-	const memberCount = people.filter((person) => person.roleCounts.member > 0).length
+	const selectedId = searchParams.get('person')
+	const selected = people.find((person) => person._id === selectedId) || null
+	const openPerson = (person) => setSearchParams((params) => {
+		params.set('person', person._id)
+		return params
+	})
+	const closePerson = () => setSearchParams((params) => {
+		params.delete('person')
+		return params
+	}, { replace: true })
 
 	const copyEmail = async (email) => {
 		try {
 			await navigator.clipboard.writeText(email)
-			setCopiedEmail(email)
-			toast.success('Email copied')
-			window.setTimeout(() => setCopiedEmail((current) => current === email ? '' : current), 1600)
+			toast.success(t('team.emailCopied'))
 		} catch {
-			toast.error('Could not copy email')
+			toast.error(t('team.copyError'))
 		}
+	}
+	const resetFilters = () => {
+		setQuery('')
+		setBoardFilter('all')
+		setMode('all')
+	}
+	const sendInvite = async (boardId, email) => {
+		try {
+			await axiosInstance.post(`/board/boards/${boardId}/invites`, { email, role: 'member' })
+			toast.success(t('team.inviteSent', { email }))
+		} catch (error) {
+			toast.error(error.response?.status === 409 ? t('team.inviteExists', { email }) : translateServerMessageCurrent(error.response?.data?.message, 'team.inviteError'))
+		}
+	}
+
+	const totals = { people: others.length, open: others.reduce((sum, person) => sum + person.open, 0), overdue: others.reduce((sum, person) => sum + person.overdue, 0) }
+
+	const personRow = (person, isMe) => {
+		const name = person.name || person.email
+		const shown = person.memberships.slice(0, 2)
+		const invitable = managedBoards.filter((board) => !person.memberships.some((membership) => membership.boardId === board._id))
+		return (
+			<li key={person._id} className='tm-row'>
+				<button type='button' className='tm-row__main' onClick={() => openPerson(person)} aria-label={t('team.openPerson', { name })} data-i18n-ignore>
+					<Avatar name={name} src={person.avatar} size={36} decorative />
+					<span className='tm-row__who'>
+						<span className='tm-row__name'>{name}{isMe && <Badge tone='accent'>{t('team.you')}</Badge>}</span>
+						<span className='tm-row__email'>{person.email}</span>
+						<span className='tm-row__summary'>{t('team.boards', { count: person.memberships.length })} · {person.open ? t('team.open', { count: person.open }) : t('team.nothingOpen')}</span>
+					</span>
+					<span className='tm-row__boards'>
+						{shown.map((membership) => (
+							<span key={membership.boardId} className='tm-chip'>
+								<i style={{ background: `var(--ui-${boardToneFor(membership.boardId)}-soft-text)` }} aria-hidden='true' />
+								<span className='tm-chip__name'>{membership.boardName}</span>
+								{membership.role !== 'member' && <span className='tm-chip__role'>{t(`team.role.${membership.role}`)}</span>}
+							</span>
+						))}
+						{person.memberships.length > shown.length && <span className='tm-chip tm-chip--more'>{t('team.moreBoards', { count: person.memberships.length - shown.length })}</span>}
+					</span>
+					<span className='tm-row__load'>
+						<span className={cx(!person.open && 'is-muted')}>{person.open ? t('team.open', { count: person.open }) : '—'}</span>
+						{person.overdue > 0 && <Badge tone='danger'>{t('team.overdue', { count: person.overdue })}</Badge>}
+					</span>
+				</button>
+				<span className='tm-row__menu'>
+					<Menu
+						label={t('team.actions', { name })}
+						trigger={(props) => <IconButton icon={MoreHorizontal} size='sm' label={t('team.actions', { name })} {...props} />}
+						items={[
+							{ label: t('team.copyEmail'), icon: Copy, onSelect: () => copyEmail(person.email) },
+							{ label: t('team.writeEmail'), icon: Mail, href: `mailto:${person.email}` },
+							!isMe && invitable.length > 0 && { label: t('team.inviteToBoard'), icon: Send, onSelect: () => setInviteFor({ email: person.email, boards: invitable }) },
+						]}
+					/>
+				</span>
+			</li>
+		)
+	}
+
+	let body
+	if (isLoading) {
+		body = (
+			<ul className='tm-list' role='status' aria-label={t('team.loading')}>
+				{[0, 1, 2, 3].map((index) => (
+					<li key={index} className='tm-row is-loading'><span className='tm-row__main'><Skeleton width={36} height={36} radius={999} /><span className='tm-row__who'><Skeleton width='40%' height={15} /><Skeleton width='60%' height={12} /></span></span></li>
+				))}
+			</ul>
+		)
+	} else if (loadError) {
+		body = <EmptyState icon={Users} tone='danger' title={loadError} action={<Button variant='secondary' onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }}>{t('common.retry')}</Button>} />
+	} else if (!boards.length) {
+		body = <EmptyState icon={Users} title={t('team.emptyNoBoardsTitle')} description={t('team.emptyNoBoardsText')} action={<Button icon={Plus} onClick={() => navigate('/workspaces', { state: { createBoard: true } })}>{t('team.createBoard')}</Button>} />
+	} else {
+		body = (
+			<>
+				{me && !filtersActive && (
+					<section className='tm-section' aria-labelledby='tm-you'>
+						<h2 className='tm-section__title' id='tm-you'>{t('team.youSection')}</h2>
+						<ul className='tm-list'>{personRow(me, true)}</ul>
+					</section>
+				)}
+				{!others.length ? (
+					<EmptyState
+						icon={Users}
+						title={t('team.emptyAloneTitle')}
+						description={t('team.emptyAloneText')}
+						action={managedBoards.length > 0 && <Button icon={Send} onClick={() => setInviteFor({ email: '', boards: managedBoards })}>{t('team.inviteToBoard').replace('…', '')}</Button>}
+					/>
+				) : visible.length ? (
+					<section className='tm-section' aria-labelledby='tm-others'>
+						<h2 className='tm-section__title' id='tm-others'>{t('team.othersSection')}</h2>
+						<ul className='tm-list'>{visible.map((person) => personRow(person, false))}</ul>
+					</section>
+				) : (
+					<EmptyState icon={SearchX} title={t('team.emptyNoMatch')} action={<Button variant='secondary' onClick={resetFilters}>{t('team.resetFilters')}</Button>} />
+				)}
+			</>
+		)
 	}
 
 	return (
 		<div className='workspace-shell flex h-dvh'>
 			<WorkspaceSidebar
-				isOpen={isSidebarOpen}
-				onClose={() => setIsSidebarOpen(false)}
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
 				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main team-page-main flex-1 overflow-auto'>
-				<WorkspaceTopbar
-					isSidebarOpen={isSidebarOpen}
-					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
-					isSidebarCollapsed={isSidebarCollapsed}
-					onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}
-				>
-					<div className='workspace-context-copy'>
-						<div className='workspace-context-label'>Workspace</div>
-						<div className='workspace-board-title-row'>
-															<span className='workspace-board-name'>
-																<ChevronRight size={13} /> Team
-							</span>
-						</div>
-					</div>
+			<main className='workspace-main flex-1 overflow-auto'>
+				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+					<span className='app-topbar__title'>{t('team.title')}</span>
 				</WorkspaceTopbar>
-				<section className='workspace-content team-page'>
-					<header className='team-page-header'>
-						<div className='team-summary'>
-							{isLoading ? [1, 2, 3, 4].map((item) => <span className='team-loading-summary-pill' key={item} />) : <>
-								<span>{people.length} people</span>
-								<span>{ownerCount} {ownerCount === 1 ? 'owner' : 'owners'}</span>
-								<span>{adminCount} {adminCount === 1 ? 'admin' : 'admins'}</span>
-								<span>{memberCount} {memberCount === 1 ? 'member' : 'members'}</span>
-							</>}
-						</div>
-					</header>
-					<div className={`team-toolbar ${isLoading ? 'is-loading' : ''}`}>
-						<div className={`team-search-wrap ${isLoading ? 'team-loading-control' : ''}`}>
-							{isLoading ? <><Search size={15} aria-hidden='true' /><span className='team-loading-control-fill' /></> : <>
-							<Search size={15} />
-							<input
-								value={search}
-								onChange={(event) => setSearch(event.target.value)}
-								placeholder='Search people'
-								aria-label='Search people'
-							/>
-							</>}
-						</div>
-						<div className={`team-filter-wrap ${isLoading ? 'team-loading-control' : ''}`}>
-							{isLoading ? <span className='team-loading-control-fill' /> : <>
-							<select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label='Filter by role'>
-								<option value='all'>All roles</option>
-								<option value='owner'>Owners</option>
-								<option value='admin'>Admins</option>
-								<option value='member'>Members</option>
-							</select>
-							<ChevronDown size={14} />
-							</>}
-						</div>
-						<div className={`team-filter-wrap ${isLoading ? 'team-loading-control' : ''}`}>
-							{isLoading ? <span className='team-loading-control-fill' /> : <>
-							<select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label='Sort team'>
-								<option value='name'>Sort by name</option>
-								<option value='rooms'>Most rooms</option>
-							</select>
-							<ChevronDown size={14} />
-							</>}
-						</div>
-					</div>
-					{isLoading ? (
-						<div className='team-loading-grid' role='status' aria-live='polite'>
-							{Array.from({ length: 8 }, (_, index) => index + 1).map((card) => (
-								<article className='team-person-card team-loading-card' key={card}>
-									<div className='team-avatar team-loading-avatar' />
-									<strong className='team-loading-line wide' />
-									<button type='button' className='team-email-copy team-loading-line' aria-hidden='true' tabIndex='-1' />
-									<div className='team-role-list team-loading-tags'><span className='team-role' /><span className='team-role' /></div>
-									<div className='team-room-list team-loading-room-list'><span /><span /><i /></div>
-									<div className='team-card-footer team-loading-footer' />
-								</article>
-							))}
-						</div>
-					) : sortedPeople.length ? (
-						<div className='team-grid'>
-							{sortedPeople.map((person, index) => (
-								<article className='team-person-card' key={person._id}>
-									{person.avatar ? (
-										<img className='team-avatar' src={person.avatar} onError={handleAvatarError} alt='' />
-									) : (
-										<div className='team-avatar' style={{ background: avatarColors[index % avatarColors.length] }}>
-											{getInitials(person)}
-										</div>
-									)}
-									<strong>{person.name || person.email}</strong>
-									<button
-										type='button'
-										className='team-email-copy'
-										onClick={() => copyEmail(person.email)}
-										title='Copy email'
-									>
-										<span>{person.email}</span>
-										{copiedEmail === person.email ? <Check size={13} /> : <Copy size={13} />}
-									</button>
-									<div className='team-role-list'>
-										{roleOrder.filter((role) => person.roleCounts[role] > 0).map((role) => (
-											<span className={`team-role is-${role}`} key={role}>
-												{roleLabels[role]} · {person.roleCounts[role]} {person.roleCounts[role] === 1 ? 'room' : 'rooms'}
-											</span>
-										))}
-									</div>
-									<div className='team-room-list'>
-										{person.rooms.slice(0, 2).map((room) => (
-											<button
-												type='button'
-												key={`${person._id}-${room.id}`}
-												onClick={() => navigate(`/workspaces/${room.id}`)}
-												title={`${roleLabels[room.role]} in ${room.name}`}
-											>
-												{room.name} · {roleLabels[room.role]}
-											</button>
-										))}
-										{person.rooms.length > 2 && <span>+{person.rooms.length - 2} more</span>}
-									</div>
-									<div className='team-card-footer'>On {person.boards} {person.boards === 1 ? 'room' : 'rooms'}</div>
-								</article>
-							))}
-						</div>
-					) : (
-						<div className='team-empty'>
-							<UserRound size={24} />
-							<strong>{search ? 'No people found' : 'No team members yet'}</strong>
-							<span>{search ? 'Try another search.' : 'Invite people to a room to see them here.'}</span>
-						</div>
+				<div className='app-page tm-page'>
+					<PageHeader title={t('team.title')} description={boards.length ? t('team.description', { count: boards.length }) : undefined} />
+					{!isLoading && boards.length > 0 && others.length > 0 && (
+						<>
+							<div className='tm-stats'>
+								<div className='tm-stat'><span className='tm-stat__value'>{totals.people}</span><span className='tm-stat__label'>{t('team.stats.people')}</span></div>
+								<div className='tm-stat'><span className='tm-stat__value'>{totals.open}</span><span className='tm-stat__label'>{t('team.stats.open')}</span></div>
+								<button
+									type='button'
+									className={cx('tm-stat', totals.overdue > 0 && 'tm-stat--danger')}
+									onClick={() => setMode(mode === 'overdue' ? 'all' : 'overdue')}
+									aria-pressed={mode === 'overdue'}
+									disabled={!totals.overdue}
+								>
+									<span className='tm-stat__value'>{totals.overdue}</span>
+									<span className='tm-stat__label'>{t('team.stats.overdue')}</span>
+								</button>
+							</div>
+							<div className='tm-toolbar'>
+								<div className='tm-toolbar__search'>
+									<Input icon={Search} type='search' value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('team.searchPlaceholder')} aria-label={t('team.searchLabel')} />
+								</div>
+								<Select className='tm-toolbar__board' aria-label={t('team.boardFilter')} value={boardFilter} onChange={(event) => setBoardFilter(event.target.value)} options={[{ value: 'all', label: t('team.allBoards') }, ...boards.map((board) => ({ value: board._id, label: board.name }))]} />
+								<SegmentedControl
+									className='tm-toolbar__mode'
+									label={t('team.show')}
+									value={mode}
+									onChange={setMode}
+									options={[
+										{ value: 'all', label: t('team.filterAll') },
+										...(managedBoards.length ? [{ value: 'managed', label: t('team.filterManaged') }] : []),
+										{ value: 'overdue', label: t('team.filterOverdue') },
+									]}
+								/>
+								<Menu
+									label={t('team.sortLabel')}
+									trigger={(props) => <IconButton icon={ArrowUpDown} variant='secondary' label={`${t('team.sortLabel')}: ${t(`team.sort${sort[0].toUpperCase()}${sort.slice(1)}`)}`} {...props} />}
+									items={SORTS.map((value) => ({
+										label: t(`team.sort${value[0].toUpperCase()}${value.slice(1)}`),
+										icon: value === sort ? Check : undefined,
+										checked: value === sort,
+										onSelect: () => setSort(value),
+									}))}
+								/>
+							</div>
+						</>
 					)}
-				</section>
+					{body}
+				</div>
 			</main>
+			<PersonPanel
+				key={selected?._id || 'none'}
+				person={selected}
+				isMe={selected?._id === myId}
+				managedBoards={managedBoards}
+				onClose={closePerson}
+				onCopyEmail={copyEmail}
+				onInvite={(boardId) => sendInvite(boardId, selected.email)}
+				onChanged={({ message, error, reload }) => {
+					if (error) toast.error(error)
+					else toast.success(message)
+					if (reload || !error) setReloadKey((key) => key + 1)
+				}}
+			/>
+			<InviteDialog
+				open={Boolean(inviteFor)}
+				onClose={() => setInviteFor(null)}
+				boards={inviteFor?.boards || []}
+				email={inviteFor?.email || ''}
+				onSent={(email) => toast.success(t('team.inviteSent', { email }))}
+			/>
 		</div>
 	)
 }

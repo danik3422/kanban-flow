@@ -35,7 +35,7 @@
 .notify__loading { display: flex; flex-direction: column; gap: var(--ui-space-4); padding: var(--ui-space-4); }
 .notify__skeleton { display: flex; gap: var(--ui-space-3); }
 .notify__skeleton > span { display: flex; flex: 1; flex-direction: column; gap: var(--ui-space-2); }
-.notify .ui-empty, .notify-sheet .ui-empty { padding: var(--ui-space-8) var(--ui-space-4); }
+.notify .ui-empty, .notify-sheet .ui-empty { padding: var(--ui-space-8) var(--ui-space-4); border: 0; }
 
 .notify-item { position: relative; display: flex; align-items: flex-start; border-radius: var(--ui-radius-lg); }
 .notify-item:hover { background: var(--ui-surface-2); }

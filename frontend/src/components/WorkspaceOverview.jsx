@@ -207,7 +207,7 @@ const WorkspaceOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoa
 	}
 
 	return (
-		<div className='boards-page'>
+		<div className='app-page boards-page'>
 			<PageHeader
 				title={t('boards.title')}
 				description={description}

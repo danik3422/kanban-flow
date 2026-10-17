@@ -14,7 +14,7 @@ let openModals = 0
  * Dialog with focus trap, Escape to close, background scroll lock and focus
  * restore. On phones it is shown as a bottom sheet (see ui.css).
  */
-export const Modal = ({ open, onClose, title, description, size = 'md', footer, children, initialFocusRef, closeOnBackdrop = true, className }) => {
+export const Modal = ({ open, onClose, title, description, size = 'md', variant = 'dialog', footer, children, initialFocusRef, closeOnBackdrop = true, className }) => {
 	const { t } = useI18n()
 	const panelRef = useRef(null)
 	const titleId = useId()
@@ -68,7 +68,7 @@ export const Modal = ({ open, onClose, title, description, size = 'md', footer, 
 	if (!open) return null
 	return createPortal(
 		<div
-			className='ui-overlay'
+			className={cx('ui-overlay', variant === 'panel' && 'ui-overlay--panel')}
 			role='presentation'
 			onMouseDown={(event) => {
 				if (closeOnBackdrop && event.target === event.currentTarget) onClose?.()
@@ -76,7 +76,7 @@ export const Modal = ({ open, onClose, title, description, size = 'md', footer, 
 		>
 			<section
 				ref={panelRef}
-				className={cx('ui-modal', size !== 'md' && `ui-modal--${size}`, className)}
+				className={cx('ui-modal', size !== 'md' && `ui-modal--${size}`, variant === 'panel' && 'ui-modal--panel', className)}
 				role='dialog'
 				aria-modal='true'
 				aria-labelledby={title ? titleId : undefined}

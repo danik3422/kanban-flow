@@ -1504,6 +1504,26 @@ describe('my tasks filtering', () => {
 })
 
 describe('team overview', () => {
+	it('counts open and overdue tasks per person and board, leaving finished work out', async () => {
+		await Promise.all([Column.deleteMany({}), Task.deleteMany({})])
+		const { owner, board } = await createBoardWithOwner()
+		const teammate = await createUser('team-load@example.com', 'Loaded')
+		await BoardMember.create({ board: board._id, user: teammate._id, role: 'member' })
+		const [todo, done] = await Column.create([
+			{ board: board._id, title: 'To do', position: 0 },
+			{ board: board._id, title: 'Done', position: 1 },
+		])
+		const yesterday = new Date(Date.now() - 86_400_000)
+		await Task.create([
+			{ column: todo._id, title: 'Late', dueDate: yesterday, assignees: [teammate._id] },
+			{ column: todo._id, title: 'Open', assignees: [teammate._id, owner._id] },
+			{ column: done._id, title: 'Finished late', dueDate: yesterday, assignees: [teammate._id] },
+		])
+		const response = await request(app).get('/api/board/team').set('Cookie', authCookie(owner._id))
+		const loads = Object.fromEntries(response.body[0].members.map((member) => [member.user.email, [member.openTasks, member.overdueTasks]]))
+		assert.deepEqual(loads, { 'owner@example.com': [1, 0], 'team-load@example.com': [2, 1] })
+	})
+
 	it('returns every accessible board with its members and nothing from other boards', async () => {
 		const { owner, board } = await createBoardWithOwner()
 		const teammate = await createUser('team-mate@example.com', 'Mate')
@@ -1927,5 +1947,50 @@ describe('my tasks done state', () => {
 		const byTitle = Object.fromEntries(response.body.map((task) => [task.title, task.isDone]))
 		assert.deepEqual(byTitle, { 'Open one': false, 'Finished one': true })
 		assert.ok(response.body.every((task) => task.doneColumnId === done._id.toString()), 'each task knows where Done is')
+	})
+})
+
+describe('calendar', () => {
+	it('returns tasks due in the range, mine or all, only from boards the user can open', async () => {
+		await Promise.all([Column.deleteMany({}), Task.deleteMany({})])
+		const { owner, board } = await createBoardWithOwner()
+		const teammate = await createUser('calendar-mate@example.com', 'Mate')
+		await BoardMember.create({ board: board._id, user: teammate._id, role: 'member' })
+		const [todo, done] = await Column.create([
+			{ board: board._id, title: 'To do', position: 0 },
+			{ board: board._id, title: 'Done', position: 1 },
+		])
+		await Task.create([
+			{ column: todo._id, title: 'Mine in range', dueDate: new Date('2026-03-10T00:00:00Z'), assignees: [owner._id] },
+			{ column: todo._id, title: 'Theirs in range', dueDate: new Date('2026-03-12T00:00:00Z'), assignees: [teammate._id] },
+			{ column: done._id, title: 'Mine finished', dueDate: new Date('2026-03-15T00:00:00Z'), assignees: [owner._id] },
+			{ column: todo._id, title: 'Mine outside', dueDate: new Date('2026-04-20T00:00:00Z'), assignees: [owner._id] },
+			{ column: todo._id, title: 'Mine undated', assignees: [owner._id] },
+		])
+		const stranger = await createUser('calendar-stranger@example.com')
+		const hidden = await Board.create({ name: 'Hidden', createdBy: stranger._id })
+		const hiddenColumn = await Column.create({ board: hidden._id, title: 'Secret' })
+		await Task.create({ column: hiddenColumn._id, title: 'Not yours', dueDate: new Date('2026-03-11T00:00:00Z'), assignees: [owner._id] })
+
+		const range = '/api/board/calendar?from=2026-03-01&to=2026-03-31'
+		const mine = await request(app).get(range).set('Cookie', authCookie(owner._id))
+		assert.equal(mine.status, 200)
+		assert.deepEqual(mine.body.map((task) => task.title), ['Mine in range', 'Mine finished'])
+		const finished = mine.body.find((task) => task.title === 'Mine finished')
+		assert.equal(finished.isDone, true)
+		assert.equal(finished.doneColumnId, done._id.toString())
+		assert.equal(finished.column.board.name, board.name)
+
+		const all = await request(app).get(`${range}&scope=all`).set('Cookie', authCookie(owner._id))
+		assert.deepEqual(all.body.map((task) => task.title), ['Mine in range', 'Theirs in range', 'Mine finished'])
+		assert.deepEqual(all.body.map((task) => task.isMine), [true, false, true])
+		assert.equal(all.body[1].assignees[0].email, undefined, 'assignees expose only name and avatar')
+
+		const bad = await request(app).get('/api/board/calendar?from=2026-03-31&to=2026-03-01').set('Cookie', authCookie(owner._id))
+		assert.equal(bad.status, 400)
+		const tooLong = await request(app).get('/api/board/calendar?from=2026-01-01&to=2026-06-30').set('Cookie', authCookie(owner._id))
+		assert.equal(tooLong.status, 400)
+		const injected = await request(app).get('/api/board/calendar?from[$gt]=&to=2026-03-01').set('Cookie', authCookie(owner._id))
+		assert.equal(injected.status, 400)
 	})
 })

@@ -94,8 +94,9 @@ check('back button returns to the first board with its columns', page.url() === 
 
 // calendar shows the task on today's cell
 await page.goto(APP + '/calendar'); await page.waitForTimeout(2000)
-const dayOfTask = (await page.locator('.calendar-day-cell', { hasText: 'Ship the audit fixes' }).first().locator('span').first().innerText().catch(() => '')).trim()
-check('calendar places the task on today', dayOfTask === String(new Date().getDate()), `day ${dayOfTask}`)
+const todayKey = new Date().toLocaleDateString('sv-SE')
+const dayOfTask = await page.locator('.cal-cell', { has: page.locator('.cal-chip', { hasText: 'Ship the audit fixes' }) }).first().locator('.cal-cell__day').getAttribute('data-day').catch(() => '')
+check('calendar places the task on today', dayOfTask === todayKey, `day ${dayOfTask}`)
 await page.goto(APP + '/my-tasks'); await page.waitForTimeout(1500)
 check('my tasks loads without error', !(await page.getByText(/could not be loaded/i).count()))
 

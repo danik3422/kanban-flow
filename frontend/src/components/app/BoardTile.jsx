@@ -1,12 +1,5 @@
 import { cx, initialsOf } from '../../ui/utils'
-
-// Same contrast-checked soft pairs as avatars, so every board gets a stable color in both themes.
-const TONES = ['accent', 'info', 'orange', 'success', 'warning', 'danger']
-const toneFor = (seed = '') => {
-	let hash = 0
-	for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
-	return TONES[hash % TONES.length]
-}
+import { boardToneFor as toneFor } from '../../utils/boardTone'
 
 /** A board's initials on its own color: the board's face in lists, cards and search. */
 const BoardTile = ({ board, size = 28, className }) => (

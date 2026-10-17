@@ -1,6 +1,7 @@
 import { CalendarDays, ClipboardList, LayoutGrid, Plus, Users } from 'lucide-react'
 import { useEffect, useSyncExternalStore } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../store/useAuthStore'
 import { useBoardPrefs } from '../store/useBoardPrefs'
@@ -57,7 +58,7 @@ const useNavigationData = (boards) => {
  * The app's navigation: a sidebar on desktop (a rail of icons on tablets) and a
  * bottom bar on phones. Pages pass their boards and how to open or create one.
  */
-const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreateBoard, isCollapsed = false }) => {
+const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreateBoard, isCollapsed = false, primaryAction }) => {
 	const { t } = useI18n()
 	const location = useLocation()
 	const navigate = useNavigate()
@@ -83,9 +84,22 @@ const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreat
 		</li>
 	)
 
-	const section = (title, items) => items.length > 0 && (
+	const clearRecent = () => {
+		const { recent, setRecent } = useBoardPrefs.getState()
+		setRecent([])
+		toast.success(t('app.nav.recentCleared'), { action: { label: t('myTasks.undo'), onClick: () => setRecent(recent) } })
+	}
+
+	const section = (title, items, action) => items.length > 0 && (
 		<div className='app-sidebar__section'>
-			<h2 className='app-sidebar__section-title'>{title}</h2>
+			<div className='app-sidebar__section-head'>
+				<h2 className='app-sidebar__section-title'>{title}</h2>
+				{action && !collapsed && (
+					<button type='button' className='app-sidebar__section-action' onClick={action.onClick} aria-label={action.label}>
+						{action.text}
+					</button>
+				)}
+			</div>
 			<ul>{items.map(boardLink)}</ul>
 		</div>
 	)
@@ -120,7 +134,7 @@ const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreat
 				</nav>
 				<div className='app-sidebar__boards'>
 					{section(t('app.nav.starred'), starredBoards)}
-					{section(t('app.nav.recent'), recentBoards)}
+					{section(t('app.nav.recent'), recentBoards, { text: t('app.nav.clearRecent'), label: t('app.nav.clearRecentLabel'), onClick: clearRecent })}
 					{!collapsed && !starredBoards.length && !recentBoards.length && boards.length > 0 && (
 						<p className='app-sidebar__hint'>{t('app.nav.starHint')}</p>
 					)}
@@ -144,7 +158,8 @@ const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreat
 						<span className='app-bottom-nav__label'>{t(`app.nav.${key}`)}</span>
 					</Link>
 				))}
-				<button type='button' className='app-bottom-nav__primary' onClick={createBoard} aria-label={t('app.nav.newBoard')}>
+				{/* Pages can give "+" their own meaning, e.g. a new task on the calendar. */}
+				<button type='button' className='app-bottom-nav__primary' onClick={primaryAction?.onClick || createBoard} aria-label={primaryAction?.label || t('app.nav.newBoard')}>
 					<Plus size={24} aria-hidden='true' />
 				</button>
 				{NAV_ITEMS.slice(2).map(({ key, to, icon: Icon }) => (

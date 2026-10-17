@@ -534,5 +534,16 @@ select.ui-control.ui-control {
 
 /* Toggle segments are full touch targets on phones. */
 @media (max-width: 720px) {
-	.ui-segmented__option { min-height: 44px; }
+	.ui-segmented__option { min-width: 44px; min-height: 44px; }
+}
+
+/* Side panel: slides in from the right on wide screens; phones keep the bottom sheet. */
+@media (min-width: 721px) {
+	.ui-overlay.ui-overlay--panel { place-items: stretch end; padding: 0; }
+	.ui-modal.ui-modal--panel { width: min(100%, 400px); height: 100dvh; max-height: none; border-radius: var(--ui-radius-2xl) 0 0 var(--ui-radius-2xl); animation: ui-panel-in 220ms var(--ui-ease); }
+	.ui-modal--panel .ui-modal__grabber { display: none; }
+}
+@keyframes ui-panel-in { from { transform: translateX(24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+	.ui-modal.ui-modal--panel { animation: none; }
 }

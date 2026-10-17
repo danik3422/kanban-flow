@@ -1,18 +1,17 @@
 import { ChevronDown, ClipboardList, PartyPopper, RotateCcw, Search, SearchX, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import MyTaskRow from '../components/app/MyTaskRow'
 import '../components/app/my-tasks.css'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
+import useTaskActions from '../hooks/useTaskActions'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { useBoardStats } from '../store/useBoardStats'
 import { Button, Chip, EmptyState, IconButton, Input, Modal, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
 import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../utils/dueDate'
@@ -83,8 +82,6 @@ const MyTasks = () => {
 	const [isLoading, setIsLoading] = useState(true)
 	const [loadError, setLoadError] = useState('')
 	const [reloadKey, setReloadKey] = useState(0)
-	// Where a task was before it was ticked done here, so it can go back.
-	const [previousColumns, setPreviousColumns] = useState({})
 	const searchRef = useRef(null)
 	const { isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
 
@@ -132,11 +129,6 @@ const MyTasks = () => {
 		return () => document.removeEventListener('keydown', handleKeyDown)
 	}, [])
 
-	const refresh = () => {
-		setReloadKey((key) => key + 1)
-		useBoardStats.getState().load({ force: true })
-	}
-
 	const changeFilter = (setter) => (value) => {
 		setIsLoading(true)
 		setter(value)
@@ -149,56 +141,10 @@ const MyTasks = () => {
 		setBoard('all')
 	}
 
-	const updateTask = async (task, changes, optimistic) => {
-		setTasks((current) => current.map((item) => (item._id === task._id ? { ...item, ...optimistic } : item)))
-		try {
-			await axiosInstance.patch(`/board/tasks/${task._id}`, changes)
-			return true
-		} catch (error) {
-			setTasks((current) => current.map((item) => (item._id === task._id ? task : item)))
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'myTasks.updateError'))
-			return false
-		} finally {
-			refresh()
-		}
-	}
-
-	const reopen = async (task, known) => {
-		const previous = known || previousColumns[task._id]
-		if (!previous) return
-		if (await updateTask(task, { column: previous.column, position: previous.position }, { isDone: false })) {
-			setPreviousColumns((current) => {
-				const next = { ...current }
-				delete next[task._id]
-				return next
-			})
-			toast.success(t('myTasks.reopenToast', { task: task.title }))
-		}
-	}
-
-	const toggleDone = async (task) => {
-		if (isDone(task)) {
-			reopen(task)
-			return
-		}
-		if (!task.doneColumnId) return
-		const previous = { column: task.column?._id || task.column, position: task.position ?? 0 }
-		setPreviousColumns((current) => ({ ...current, [task._id]: previous }))
-		if (await updateTask(task, { column: task.doneColumnId }, { isDone: true })) {
-			toast.success(t('myTasks.doneToast', { task: task.title }), {
-				action: { label: t('myTasks.undo'), onClick: () => reopen({ ...task, isDone: true }, previous) },
-			})
-		}
-	}
-
-	const openTask = (task) => {
-		const boardId = task.column?.board?._id || task.column?.board
-		if (boardId) navigate(`/workspaces/${boardId}`, { state: { notificationTaskId: task._id } })
-	}
-	const openBoard = (task) => {
-		const boardId = task.column?.board?._id || task.column?.board
-		if (boardId) navigate(`/workspaces/${boardId}`)
-	}
+	const { toggleDone, setDueDate: changeDueDate, setPriority: changePriority, canToggle, toggleHint, openTask, openBoard } = useTaskActions({
+		setTasks,
+		onChanged: () => setReloadKey((key) => key + 1),
+	})
 
 	const todayKey = getLocalDateKey()
 	const openTasks = useMemo(() => tasks.filter((task) => !isDone(task)), [tasks])
@@ -223,21 +169,20 @@ const MyTasks = () => {
 		<ul className='mt-list'>
 			{items.map((task) => {
 				const done = isDone(task)
-				const canToggle = done ? Boolean(previousColumns[task._id]) : Boolean(task.doneColumnId)
 				return (
 					<MyTaskRow
 						key={task._id}
 						task={task}
 						done={done}
 						showBoard={showBoard}
-						canToggle={canToggle}
-						toggleHint={done ? t('myTasks.reopenOnBoard') : t('myTasks.noDoneColumn')}
+						canToggle={canToggle(task)}
+						toggleHint={toggleHint(task)}
 						userId={authUser?._id}
 						onToggle={toggleDone}
 						onOpen={openTask}
 						onOpenBoard={openBoard}
-						onDueChange={(item, dueDate) => updateTask(item, { dueDate }, { dueDate: dueDate ? `${dueDate}T00:00:00.000Z` : null })}
-						onPriorityChange={(item, value) => updateTask(item, { priority: value }, { priority: value })}
+						onDueChange={changeDueDate}
+						onPriorityChange={changePriority}
 					/>
 				)
 			})}
@@ -328,7 +273,7 @@ const MyTasks = () => {
 				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('myTasks.title')}</span>
 				</WorkspaceTopbar>
-				<div className='mt-page'>
+				<div className='app-page mt-page'>
 					<PageHeader
 						title={t('myTasks.title')}
 						description={description}

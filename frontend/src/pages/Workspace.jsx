@@ -1831,6 +1831,7 @@ const Workspace = () => {
 					activities={boardActivities}
 					activityLoading={isActivityLoading}
 				>
+							{!boardId ? <span className='app-topbar__title'>{tr('boards.title')}</span> : (
 							<div className='workspace-context-copy'>
 										<div className='workspace-context-label'>Workspace</div>
 								<div className='workspace-board-title-row'>
@@ -1872,6 +1873,7 @@ const Workspace = () => {
 									{/* Board actions live in the top bar's menu. */}
 								</div>
 							</div>
+							)}
 				</WorkspaceTopbar>
 
 				{!boardId ? (

@@ -46,4 +46,11 @@ export const useBoardPrefs = create((set, get) => ({
 		set({ recent: next })
 		if (userId) write(keys(userId).recent, next)
 	},
+
+	// Replaces the whole history: [] clears it, the previous list undoes that.
+	setRecent: (next) => {
+		const { userId } = get()
+		set({ recent: next })
+		if (userId) write(keys(userId).recent, next)
+	},
 }))
