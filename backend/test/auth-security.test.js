@@ -27,7 +27,8 @@ const withFirebaseVerifier = async (verifyIdToken, callback) => {
 
 before(async () => {
 	mongoServer = await MongoMemoryServer.create()
-	await mongoose.connect(mongoServer.getUri())
+	// A database of its own, so another test run or a local stack can never share or wipe this data.
+	await mongoose.connect(mongoServer.getUri(), { dbName: `auth-security-${process.pid}` })
 	await User.init()
 })
 

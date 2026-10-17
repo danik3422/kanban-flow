@@ -1,27 +1,74 @@
-import {
-	AlertTriangle,
-	ArrowUpRight,
-	CalendarDays,
-	CheckCircle2,
-	ChevronDown,
-	ChevronRight,
-	ClipboardList,
-	Layers3,
-	RotateCcw,
-	Search,
-} from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ClipboardList, PartyPopper, RotateCcw, Search, SearchX, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import MyTaskRow from '../components/app/MyTaskRow'
+import '../components/app/my-tasks.css'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import { useI18n } from '../i18n'
+import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { addDaysToKey, formatDueDate, getDueDateKey, getDueDateState as getDueStateForDate, getLocalDateKey } from '../utils/dueDate'
+import { useBoardStats } from '../store/useBoardStats'
+import { Button, Chip, EmptyState, IconButton, Input, Modal, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
+import { cx } from '../ui/utils'
+import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../utils/dueDate'
+
+const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
+const DATE_SECTIONS = ['overdue', 'today', 'tomorrow', 'week', 'later', 'noDate']
+const FOCUS_SECTIONS = { open: DATE_SECTIONS, overdue: ['overdue'], week: ['today', 'tomorrow', 'week'] }
+const GROUP_KEY = 'kh:my-tasks-group'
+const SHOW_DONE_KEY = 'kh:my-tasks-show-done'
+
+const readSetting = (key, allowed, fallback) => {
+	try {
+		const value = localStorage.getItem(key)
+		return allowed.includes(value) ? value : fallback
+	} catch {
+		return fallback
+	}
+}
+const saveSetting = (key, value) => {
+	try {
+		localStorage.setItem(key, value)
+	} catch {
+		// The choice still applies for this visit.
+	}
+}
+
+// One rule across the app: a task is done when it sits in its board's last column.
+const isDone = (task) => Boolean(task.isDone)
+
+const dateSection = (task, todayKey) => {
+	const dueKey = getDueDateKey(task.dueDate)
+	if (!dueKey) return 'noDate'
+	if (dueKey < todayKey) return 'overdue'
+	if (dueKey === todayKey) return 'today'
+	if (dueKey === addDaysToKey(todayKey, 1)) return 'tomorrow'
+	if (dueKey <= addDaysToKey(todayKey, 7)) return 'week'
+	return 'later'
+}
+
+const byDueThenPriority = (left, right) => {
+	const leftKey = getDueDateKey(left.dueDate) || '9999'
+	const rightKey = getDueDateKey(right.dueDate) || '9999'
+	return leftKey.localeCompare(rightKey)
+		|| (PRIORITY_WEIGHT[right.priority] || 0) - (PRIORITY_WEIGHT[left.priority] || 0)
+		|| left.title.localeCompare(right.title)
+}
+
+const RowSkeleton = () => (
+	<li className='mt-row is-loading' aria-hidden='true'>
+		<span className='mt-row__check'><Skeleton width={20} height={20} radius={6} /></span>
+		<span className='mt-row__main'><Skeleton width='45%' height={15} /><Skeleton width='70%' height={12} /></span>
+	</li>
+)
 
 const MyTasks = () => {
+	const { t } = useI18n()
 	const authUser = useAuthStore((state) => state.authUser)
 	const navigate = useNavigate()
 	const [boards, setBoards] = useState([])
@@ -29,67 +76,38 @@ const MyTasks = () => {
 	const [search, setSearch] = useState('')
 	const [priority, setPriority] = useState('all')
 	const [board, setBoard] = useState('all')
+	const [focus, setFocus] = useState('open')
+	const [groupBy, setGroupBy] = useState(() => readSetting(GROUP_KEY, ['date', 'board'], 'date'))
+	const [showDone, setShowDone] = useState(() => readSetting(SHOW_DONE_KEY, ['true', 'false'], 'false') === 'true')
+	const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
 	const [isLoading, setIsLoading] = useState(true)
 	const [loadError, setLoadError] = useState('')
 	const [reloadKey, setReloadKey] = useState(0)
-	const {
-		isSidebarOpen,
-		setIsSidebarOpen,
-		isSidebarCollapsed,
-		setIsSidebarCollapsed,
-	} = useWorkspaceNavigation()
-
-	const getTaskStatus = (task) => {
-		if (!task.checklist?.length) return 'Todo'
-		if (task.checklist.every((item) => item.completed)) return 'Completed'
-		if (task.checklist.some((item) => item.completed)) return 'In progress'
-		return 'Todo'
-	}
-
-	const formatPriority = (value = 'none') =>
-		value === 'none'
-			? 'No priority'
-			: `${value[0].toUpperCase()}${value.slice(1)}`
-
-	const getDueDateState = (task) => {
-		if (!task.dueDate) return 'none'
-		if (getTaskStatus(task) === 'Completed') return 'completed'
-		return getDueStateForDate(task.dueDate) === 'overdue' ? 'overdue' : 'upcoming'
-	}
+	// Where a task was before it was ticked done here, so it can go back.
+	const [previousColumns, setPreviousColumns] = useState({})
+	const searchRef = useRef(null)
+	const { isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
 
 	useEffect(() => {
 		fetchBoardsWithCache(authUser?._id)
 			.then((nextBoards) => setBoards(nextBoards))
-			.catch((error) => {
-				if ([404, 204].includes(error.response?.status)) {
-					setBoards([])
-					return
-				}
-				toast.error(error.response?.data?.message || 'Could not load boards')
-			})
+			.catch(() => setBoards([]))
 	}, [authUser?._id])
 
 	useEffect(() => {
 		let isCurrent = true
 		const requestTimer = window.setTimeout(() => {
 			axiosInstance
-				.get('/board/my-tasks', {
-					params: { search, priority, board },
-				})
-				.then((tasksResponse) => {
+				.get('/board/my-tasks', { params: { search, priority, board } })
+				.then(({ data }) => {
 					if (!isCurrent) return
-					setTasks(tasksResponse.data)
+					setTasks(Array.isArray(data) ? data : [])
 					setLoadError('')
 				})
 				.catch((error) => {
 					if (!isCurrent) return
-					if ([404, 204].includes(error.response?.status)) {
-						setTasks([])
-						return
-					}
-					setLoadError(
-						error.response?.data?.message || 'Could not load your tasks',
-					)
+					if ([404, 204].includes(error.response?.status)) setTasks([])
+					else setLoadError(translateServerMessageCurrent(error.response?.data?.message, 'myTasks.loadError'))
 				})
 				.finally(() => {
 					if (isCurrent) setIsLoading(false)
@@ -101,29 +119,29 @@ const MyTasks = () => {
 		}
 	}, [search, priority, board, reloadKey])
 
-	const retryLoad = () => {
-		setIsLoading(true)
-		setLoadError('')
+	// "/" jumps to the search field.
+	useEffect(() => {
+		const handleKeyDown = (event) => {
+			const typing = event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')
+			if (event.key === '/' && !typing && !document.body.classList.contains('has-modal')) {
+				event.preventDefault()
+				searchRef.current?.focus()
+			}
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [])
+
+	const refresh = () => {
 		setReloadKey((key) => key + 1)
+		useBoardStats.getState().load({ force: true })
 	}
 
-	const handleSearchChange = (event) => {
+	const changeFilter = (setter) => (value) => {
 		setIsLoading(true)
-		setSearch(event.target.value)
+		setter(value)
 	}
-
-	const handlePriorityChange = (event) => {
-		setIsLoading(true)
-		setPriority(event.target.value)
-	}
-
-	const handleBoardChange = (event) => {
-		setIsLoading(true)
-		setBoard(event.target.value)
-	}
-
 	const hasFilters = Boolean(search || priority !== 'all' || board !== 'all')
-
 	const clearFilters = () => {
 		setIsLoading(true)
 		setSearch('')
@@ -131,53 +149,169 @@ const MyTasks = () => {
 		setBoard('all')
 	}
 
-	const stats = useMemo(() => {
-		const todayKey = getLocalDateKey()
-		const endOfWeekKey = addDaysToKey(todayKey, 7)
-
-		const assignedCount = tasks.length
-		const overdueCount = tasks.filter((task) => {
-			const dueKey = getDueDateKey(task.dueDate)
-			return Boolean(dueKey) && dueKey < todayKey && !task.checklist?.every((item) => item.completed)
-		}).length
-		const dueThisWeekCount = tasks.filter((task) => {
-			const dueKey = getDueDateKey(task.dueDate)
-			return Boolean(dueKey) && dueKey >= todayKey && dueKey <= endOfWeekKey
-		}).length
-		const completedCount = tasks.filter((task) => {
-			if (!task.checklist || task.checklist.length === 0) return false
-			return task.checklist.every((item) => item.completed)
-		}).length
-
-		return {
-			assignedCount,
-			overdueCount,
-			dueThisWeekCount,
-			completedCount,
+	const updateTask = async (task, changes, optimistic) => {
+		setTasks((current) => current.map((item) => (item._id === task._id ? { ...item, ...optimistic } : item)))
+		try {
+			await axiosInstance.patch(`/board/tasks/${task._id}`, changes)
+			return true
+		} catch (error) {
+			setTasks((current) => current.map((item) => (item._id === task._id ? task : item)))
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'myTasks.updateError'))
+			return false
+		} finally {
+			refresh()
 		}
-	}, [tasks])
+	}
 
-	const taskGroups = useMemo(() => {
-		const boardNames = new Map(boards.map((item) => [item._id, item.name]))
-		const groups = new Map()
+	const reopen = async (task, known) => {
+		const previous = known || previousColumns[task._id]
+		if (!previous) return
+		if (await updateTask(task, { column: previous.column, position: previous.position }, { isDone: false })) {
+			setPreviousColumns((current) => {
+				const next = { ...current }
+				delete next[task._id]
+				return next
+			})
+			toast.success(t('myTasks.reopenToast', { task: task.title }))
+		}
+	}
 
-		tasks.forEach((task) => {
-			const boardData = task.column?.board
-			const boardId = boardData?._id || boardData || 'unknown-board'
-			const boardName =
-				boardData?.name || boardNames.get(String(boardId)) || 'Room'
-			if (!groups.has(String(boardId))) {
-				groups.set(String(boardId), {
-					id: String(boardId),
-					name: boardName,
-					tasks: [],
-				})
-			}
-			groups.get(String(boardId)).tasks.push(task)
-		})
+	const toggleDone = async (task) => {
+		if (isDone(task)) {
+			reopen(task)
+			return
+		}
+		if (!task.doneColumnId) return
+		const previous = { column: task.column?._id || task.column, position: task.position ?? 0 }
+		setPreviousColumns((current) => ({ ...current, [task._id]: previous }))
+		if (await updateTask(task, { column: task.doneColumnId }, { isDone: true })) {
+			toast.success(t('myTasks.doneToast', { task: task.title }), {
+				action: { label: t('myTasks.undo'), onClick: () => reopen({ ...task, isDone: true }, previous) },
+			})
+		}
+	}
 
-		return Array.from(groups.values())
-	}, [boards, tasks])
+	const openTask = (task) => {
+		const boardId = task.column?.board?._id || task.column?.board
+		if (boardId) navigate(`/workspaces/${boardId}`, { state: { notificationTaskId: task._id } })
+	}
+	const openBoard = (task) => {
+		const boardId = task.column?.board?._id || task.column?.board
+		if (boardId) navigate(`/workspaces/${boardId}`)
+	}
+
+	const todayKey = getLocalDateKey()
+	const openTasks = useMemo(() => tasks.filter((task) => !isDone(task)), [tasks])
+	const doneTasks = useMemo(() => tasks.filter(isDone).sort(byDueThenPriority), [tasks])
+	const counts = {
+		open: openTasks.length,
+		overdue: openTasks.filter((task) => dateSection(task, todayKey) === 'overdue').length,
+		week: openTasks.filter((task) => ['today', 'tomorrow', 'week'].includes(dateSection(task, todayKey))).length,
+		done: doneTasks.length,
+	}
+
+	const focusedOpenTasks = focus === 'done' ? [] : openTasks.filter((task) => FOCUS_SECTIONS[focus].includes(dateSection(task, todayKey)))
+	const sections = groupBy === 'date'
+		? DATE_SECTIONS
+			.map((key) => ({ key, title: t(`myTasks.sections.${key}`), tone: key === 'overdue' ? 'danger' : undefined, tasks: focusedOpenTasks.filter((task) => dateSection(task, todayKey) === key).sort(byDueThenPriority) }))
+			.filter((section) => section.tasks.length)
+		: [...new Map(focusedOpenTasks.map((task) => [task.column?.board?._id || 'none', task.column?.board])).entries()]
+			.map(([key, boardInfo]) => ({ key, title: boardInfo?.name || '', boardId: boardInfo?._id, tasks: focusedOpenTasks.filter((task) => (task.column?.board?._id || 'none') === key).sort(byDueThenPriority) }))
+			.sort((left, right) => left.title.localeCompare(right.title))
+
+	const renderRows = (items, { showBoard = groupBy === 'date' } = {}) => (
+		<ul className='mt-list'>
+			{items.map((task) => {
+				const done = isDone(task)
+				const canToggle = done ? Boolean(previousColumns[task._id]) : Boolean(task.doneColumnId)
+				return (
+					<MyTaskRow
+						key={task._id}
+						task={task}
+						done={done}
+						showBoard={showBoard}
+						canToggle={canToggle}
+						toggleHint={done ? t('myTasks.reopenOnBoard') : t('myTasks.noDoneColumn')}
+						userId={authUser?._id}
+						onToggle={toggleDone}
+						onOpen={openTask}
+						onOpenBoard={openBoard}
+						onDueChange={(item, dueDate) => updateTask(item, { dueDate }, { dueDate: dueDate ? `${dueDate}T00:00:00.000Z` : null })}
+						onPriorityChange={(item, value) => updateTask(item, { priority: value }, { priority: value })}
+					/>
+				)
+			})}
+		</ul>
+	)
+
+	const emptyForFocus = {
+		open: { icon: PartyPopper, title: t('myTasks.openEmpty') },
+		overdue: { icon: PartyPopper, title: t('myTasks.overdueEmpty') },
+		week: { icon: ClipboardList, title: t('myTasks.weekEmpty') },
+		done: { icon: ClipboardList, title: t('myTasks.doneEmpty') },
+	}[focus]
+
+	let body
+	if (isLoading) {
+		body = <ul className='mt-list mt-card' role='status' aria-label={t('myTasks.loading')}>{[0, 1, 2, 3].map((index) => <RowSkeleton key={index} />)}</ul>
+	} else if (loadError) {
+		body = <EmptyState icon={RotateCcw} tone='danger' title={loadError} action={<Button variant='secondary' icon={RotateCcw} onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }}>{t('common.retry')}</Button>} />
+	} else if (!tasks.length) {
+		body = hasFilters ? (
+			<EmptyState icon={SearchX} title={t('myTasks.noMatchTitle')} action={<Button variant='secondary' onClick={clearFilters}>{t('myTasks.reset')}</Button>} />
+		) : (
+			<EmptyState icon={ClipboardList} title={t('myTasks.emptyTitle')} description={t('myTasks.emptyText')} action={<Button as={Link} to='/workspaces' variant='secondary'>{t('myTasks.goBoards')}</Button>} />
+		)
+	} else {
+		body = (
+			<>
+				{focus === 'done' ? (
+					doneTasks.length ? (
+						<section className='mt-section'>
+							<h2 className='mt-section__title'>{t('myTasks.sections.done')} <span>{doneTasks.length}</span></h2>
+							<div className='mt-card'>{renderRows(doneTasks, { showBoard: true })}</div>
+						</section>
+					) : <EmptyState icon={emptyForFocus.icon} title={emptyForFocus.title} />
+				) : sections.length ? (
+					sections.map((section) => (
+						<section key={section.key} className={cx('mt-section', section.tone && `mt-section--${section.tone}`)} aria-labelledby={`mt-section-${section.key}`}>
+							<h2 className='mt-section__title' id={`mt-section-${section.key}`}>
+								<span data-i18n-ignore={groupBy === 'board' || undefined}>{section.title}</span> <span className='mt-section__count'>{section.tasks.length}</span>
+								{section.boardId && (
+									<Button as={Link} to={`/workspaces/${section.boardId}`} variant='ghost' size='sm' className='mt-section__link'>{t('myTasks.openBoard')}</Button>
+								)}
+							</h2>
+							<div className='mt-card'>{renderRows(section.tasks)}</div>
+						</section>
+					))
+				) : (
+					<EmptyState icon={emptyForFocus.icon} title={emptyForFocus.title} />
+				)}
+				{focus !== 'done' && doneTasks.length > 0 && (
+					<section className='mt-section mt-section--done'>
+						<button
+							type='button'
+							className='mt-done-toggle'
+							aria-expanded={showDone}
+							onClick={() => {
+								setShowDone((value) => !value)
+								saveSetting(SHOW_DONE_KEY, String(!showDone))
+							}}
+						>
+							<ChevronDown size={16} aria-hidden='true' className={cx('mt-done-toggle__icon', showDone && 'is-open')} />
+							{showDone ? t('myTasks.hideDone') : t('myTasks.showDone', { count: doneTasks.length })}
+						</button>
+						{showDone && <div className='mt-card'>{renderRows(doneTasks, { showBoard: true })}</div>}
+					</section>
+				)}
+			</>
+		)
+	}
+
+	const priorityOptions = [{ value: 'all', label: t('myTasks.allPriorities') }, ...['urgent', 'high', 'medium', 'low', 'none'].map((value) => ({ value, label: t(`myTasks.priority.${value}`) }))]
+	const boardOptions = [{ value: 'all', label: t('myTasks.allBoards') }, ...boards.map((item) => ({ value: item._id, label: item.name }))]
+	const sheetFiltersActive = priority !== 'all' || board !== 'all'
+	const description = isLoading ? t('myTasks.loading') : [t('myTasks.open', { count: counts.open }), counts.overdue > 0 && t('boards.summaryOverdue', { count: counts.overdue })].filter(Boolean).join(' · ')
 
 	return (
 		<div className='workspace-shell flex h-dvh'>
@@ -186,278 +320,88 @@ const MyTasks = () => {
 				onClose={() => setIsSidebarOpen(false)}
 				boards={boards}
 				selectedBoardId={null}
-				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
-				onCreateBoard={() => navigate('/workspaces')}
+				onBoardSelect={(item) => navigate(`/workspaces/${item._id}`)}
+				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main my-tasks-main flex-1 overflow-auto'>
-				<WorkspaceTopbar
-					isSidebarOpen={isSidebarOpen}
-					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
-					isSidebarCollapsed={isSidebarCollapsed}
-					onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}
-				>
-					<div className='workspace-context-copy'>
-						<div className='workspace-context-label'>Workspace</div>
-						<div className='workspace-board-title-row'>
-							<span className='workspace-board-name'>
-								<ChevronRight size={13} /> My tasks
-							</span>
-						</div>
-					</div>
+			<main className='workspace-main flex-1 overflow-auto'>
+				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+					<span className='app-topbar__title'>{t('myTasks.title')}</span>
 				</WorkspaceTopbar>
-				<div className='workspace-content my-tasks-page'>
-					{!isLoading && (
-						<>
-							<div className='my-tasks-stats-grid'>
-								<div className='my-tasks-stat-card'>
-									<div className='my-tasks-stat-top'>
-										<span className='my-tasks-stat-title'>Assigned to you</span>
-										<span className='my-tasks-stat-icon my-tasks-stat-icon-assigned'>
-											<ClipboardList size={22} />
-										</span>
-									</div>
-									<span className='my-tasks-stat-value'>
-										{stats.assignedCount}
-									</span>
-								</div>
-								<div className='my-tasks-stat-card'>
-									<div className='my-tasks-stat-top'>
-										<span className='my-tasks-stat-title'>Overdue</span>
-										<span className='my-tasks-stat-icon my-tasks-stat-icon-overdue'>
-											<AlertTriangle size={22} />
-										</span>
-									</div>
-									<span className='my-tasks-stat-value'>
-										{stats.overdueCount}
-									</span>
-								</div>
-								<div className='my-tasks-stat-card'>
-									<div className='my-tasks-stat-top'>
-										<span className='my-tasks-stat-title'>Due this week</span>
-										<span className='my-tasks-stat-icon my-tasks-stat-icon-thisweek'>
-											<CalendarDays size={22} />
-										</span>
-									</div>
-									<span className='my-tasks-stat-value'>
-										{stats.dueThisWeekCount}
-									</span>
-								</div>
-								<div className='my-tasks-stat-card'>
-									<div className='my-tasks-stat-top'>
-										<span className='my-tasks-stat-title'>Completed</span>
-										<span className='my-tasks-stat-icon my-tasks-stat-icon-completed'>
-											<CheckCircle2 size={22} />
-										</span>
-									</div>
-									<span className='my-tasks-stat-value'>
-										{stats.completedCount}
-									</span>
-								</div>
-							</div>
-							<div className='my-tasks-toolbar'>
-								<div className='my-tasks-search-wrap'>
-									<Search size={14} className='my-tasks-search-icon' />
-									<input
-										className='my-tasks-search-input'
-										placeholder='Search your tasks'
-										value={search}
-										onChange={handleSearchChange}
-									/>
-								</div>
-								<div className='my-tasks-filter-wrap'>
-									<select
-										className='my-tasks-select'
-										value={priority}
-										onChange={handlePriorityChange}
-									>
-										<option value='all'>All priorities</option>
-										<option value='none'>No priority</option>
-										<option value='low'>Low</option>
-										<option value='medium'>Medium</option>
-										<option value='high'>High</option>
-										<option value='urgent'>Urgent</option>
-									</select>
-									<ChevronDown size={14} className='my-tasks-select-icon' />
-								</div>
-								{hasFilters && (
-									<button
-										type='button'
-										className='my-tasks-clear-button'
-										onClick={clearFilters}
-									>
-										<RotateCcw size={14} /> Clear
-									</button>
-								)}
-								<div className='my-tasks-filter-wrap'>
-									<select
-										className='my-tasks-select'
-										value={board}
-										onChange={handleBoardChange}
-									>
-										<option value='all'>All boards</option>
-										{boards.map((item) => (
-											<option key={item._id} value={item._id}>
-												{item.name}
-											</option>
-										))}
-									</select>
-									<ChevronDown size={14} className='my-tasks-select-icon' />
-								</div>
-							</div>
-						</>
-					)}
-					{isLoading ? (
-						<div className='my-tasks-loading' role='status' aria-live='polite'>
-							<div className='my-tasks-loading-stats'>
-								{[1, 2, 3, 4].map((item) => (
-									<div className='my-tasks-loading-stat-card' key={item}>
-										<div>
-											<span />
-											<i />
-										</div>
-										<b />
-									</div>
-								))}
-							</div>
-							<div className='my-tasks-loading-toolbar'>
-								<span className='search' />
-								<span className='filter' />
-								<span className='filter' />
-							</div>
-							<div className='my-tasks-loading-group'>
-								<div className='my-tasks-loading-group-heading'>
-									<span />
-									<div>
-										<b />
-										<i />
-									</div>
-									<em />
-								</div>
-								{[1, 2, 3, 4].map((item) => (
-									<div className='my-tasks-loading-row' key={item}>
-										<i />
-										<span />
-										<b />
-										<em />
-									</div>
-								))}
-							</div>
+				<div className='mt-page'>
+					<PageHeader
+						title={t('myTasks.title')}
+						description={description}
+						actions={
+							<SegmentedControl
+								label={t('myTasks.groupBy')}
+								value={groupBy}
+								onChange={(value) => {
+									setGroupBy(value)
+									saveSetting(GROUP_KEY, value)
+								}}
+								options={[{ value: 'date', label: t('myTasks.byDate') }, { value: 'board', label: t('myTasks.byBoard') }]}
+							/>
+						}
+					/>
+					<div className='mt-toolbar'>
+						<div className='mt-toolbar__search'>
+							<Input
+								ref={searchRef}
+								icon={Search}
+								type='search'
+								value={search}
+								onChange={(event) => changeFilter(setSearch)(event.target.value)}
+								placeholder={t('myTasks.searchPlaceholder')}
+								aria-label={t('myTasks.searchLabel')}
+								aria-keyshortcuts='/'
+							/>
 						</div>
-					) : tasks.length ? (
-						<div className='my-tasks-groups'>
-							{taskGroups.map((group) => (
-								<section className='my-tasks-group' key={group.id}>
-									<div className='my-tasks-group-heading'>
-										<div className='my-tasks-group-title'>
-											<span className='my-tasks-group-icon'>
-												<Layers3 size={16} />
-											</span>
-											<div>
-												<strong>{group.name}</strong>
-												<small>
-													{group.tasks.length}{' '}
-													{group.tasks.length === 1 ? 'task' : 'tasks'} assigned
-													to you
-												</small>
-											</div>
-										</div>
-										<button
-											type='button'
-											className='my-tasks-group-open'
-											onClick={() => navigate(`/workspaces/${group.id}`)}
-											aria-label={`Open ${group.name}`}
-											title={`Open ${group.name}`}
-										>
-											Open room <ArrowUpRight size={15} />
-										</button>
-									</div>
-									<div className='my-tasks-list'>
-										{group.tasks.map((task) => (
-											<button
-												className='my-task-card'
-												key={task._id}
-												onClick={() => navigate(`/workspaces/${group.id}`)}
-											>
-												<span className='my-task-icon'>
-													<ClipboardList size={18} />
-												</span>
-												<span className='my-task-copy'>
-													<strong>{task.title}</strong>
-													<span className='my-task-meta'>
-														<span
-															className={`my-task-status is-${getTaskStatus(task).toLowerCase().replace(' ', '-')}`}
-														>
-															{getTaskStatus(task)}
-														</span>
-														<span>{task.column?.title || 'Column'}</span>
-													</span>
-												</span>
-												<span className='my-task-actions'>
-													{task.dueDate && (
-														<span
-															className={`my-task-due is-${getDueDateState(task)}`}
-														>
-															<CalendarDays size={13} />
-															<span>
-																{formatDueDate(task.dueDate)}
-															</span>
-														</span>
-													)}
-													<span
-														className={`my-task-priority is-${task.priority || 'none'}`}
-													>
-														{formatPriority(task.priority)}
-													</span>
-												</span>
-												<span className='my-task-arrow'>
-													<ArrowUpRight size={17} />
-												</span>
-											</button>
-										))}
-									</div>
-								</section>
-							))}
+						<div className='mt-toolbar__selects'>
+							<Select aria-label={t('myTasks.priorityLabel')} value={priority} onChange={(event) => changeFilter(setPriority)(event.target.value)} options={priorityOptions} />
+							<Select aria-label={t('myTasks.boardLabel')} value={board} onChange={(event) => changeFilter(setBoard)(event.target.value)} options={boardOptions} />
+							{hasFilters && <Button variant='ghost' icon={RotateCcw} onClick={clearFilters}>{t('myTasks.reset')}</Button>}
 						</div>
-					) : loadError ? (
-						<div className='my-tasks-empty' role='alert'>
-							<AlertTriangle size={26} />
-							<strong>Your tasks could not be loaded</strong>
-							<span>{loadError}</span>
-							<button
-								type='button'
-								className='my-tasks-empty-action'
-								onClick={retryLoad}
-							>
-								<RotateCcw size={14} /> Try again
-							</button>
-						</div>
-					) : (
-						<div className='my-tasks-empty'>
-							<CheckCircle2 size={26} />
-							<strong>
-								{hasFilters
-									? 'No tasks match these filters'
-									: 'No tasks assigned yet'}
-							</strong>
-							<span>
-								{hasFilters
-									? 'Try a different search or clear the filters.'
-									: 'When someone assigns a task to you, it will appear here.'}
-							</span>
-							{hasFilters && (
-								<button
-									type='button'
-									className='my-tasks-empty-action'
-									onClick={clearFilters}
-								>
-									Clear filters
-								</button>
-							)}
-						</div>
-					)}
+						<span className='mt-toolbar__sheet-trigger'>
+							<IconButton
+								icon={SlidersHorizontal}
+								variant='secondary'
+								label={sheetFiltersActive ? t('myTasks.filtersActive') : t('myTasks.filters')}
+								onClick={() => setIsFilterSheetOpen(true)}
+							/>
+							{sheetFiltersActive && <span className='mt-toolbar__dot' aria-hidden='true' />}
+						</span>
+					</div>
+					<div className='mt-chips' role='group' aria-label={t('myTasks.show')}>
+						{['open', 'overdue', 'week', 'done'].map((key) => (
+							(key !== 'overdue' || counts.overdue > 0) && (
+								<Chip key={key} pressed={focus === key} onClick={() => setFocus(key)} className={cx(key === 'overdue' && 'mt-chip--danger')}>
+									{t(`myTasks.chips.${key}`)}<span className='ui-segmented__count'>{counts[key]}</span>
+								</Chip>
+							)
+						))}
+					</div>
+					{body}
 				</div>
 			</main>
+			<Modal
+				open={isFilterSheetOpen}
+				onClose={() => setIsFilterSheetOpen(false)}
+				title={t('myTasks.filters')}
+				footer={
+					<>
+						{sheetFiltersActive && <Button variant='secondary' onClick={() => { changeFilter(setPriority)('all'); changeFilter(setBoard)('all') }}>{t('myTasks.reset')}</Button>}
+						<Button onClick={() => setIsFilterSheetOpen(false)}>{t('myTasks.apply')}</Button>
+					</>
+				}
+			>
+				<div className='mt-sheet'>
+					<label className='ui-field__label' htmlFor='mt-sheet-priority'>{t('myTasks.priorityLabel')}</label>
+					<Select id='mt-sheet-priority' value={priority} onChange={(event) => changeFilter(setPriority)(event.target.value)} options={priorityOptions} />
+					<label className='ui-field__label' htmlFor='mt-sheet-board'>{t('myTasks.boardLabel')}</label>
+					<Select id='mt-sheet-board' value={board} onChange={(event) => changeFilter(setBoard)(event.target.value)} options={boardOptions} />
+				</div>
+			</Modal>
 		</div>
 	)
 }

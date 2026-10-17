@@ -44,9 +44,9 @@ const boards = [
 
 for (const board of boards) {
 	const { _id: boardId } = await demo.call('POST', '/board/boards', { name: board.name })
-	const invite = await demo.call('POST', `/board/boards/${boardId}/invites`, { email: TEAMMATE.email, role: 'member' }).catch(() => null)
+	const invite = await demo.call('POST', `/board/boards/${boardId}/invites`, { email: TEAMMATE.email, role: 'member' }).catch((error) => console.warn('invite failed:', error.message))
 	const inviteToken = invite?.inviteUrl && new URL(invite.inviteUrl).pathname.split('/').pop()
-	if (inviteToken) await teammate.call('POST', `/board/invites/${inviteToken}/accept`).catch(() => {})
+	if (inviteToken) await teammate.call('POST', `/board/invites/${inviteToken}/accept`).catch((error) => console.warn('accept failed:', error.message))
 	let columnIndex = 0
 	for (const [title, tasks] of Object.entries(board.columns)) {
 		const { _id: columnId } = await demo.call('POST', `/board/boards/${boardId}/columns`, { title, position: columnIndex++ })
@@ -56,6 +56,21 @@ for (const board of boards) {
 			await demo
 				.call('POST', `/board/columns/${columnId}/task`, { ...fields, position, assignees, checklist: checklist.map((text, i) => ({ text, completed: i === 0 })) })
 				.catch(() => demo.call('POST', `/board/columns/${columnId}/task`, { ...fields, position, checklist: [] }))
+		}
+	}
+}
+
+// A board the teammate owns and shares with the demo account, so "Shared" has something in it.
+{
+	const { _id: boardId } = await teammate.call('POST', '/board/boards', { name: 'Дизайн-система', visibility: 'workspace' })
+	const invite = await teammate.call('POST', `/board/boards/${boardId}/invites`, { email: DEMO.email, role: 'member' })
+	await demo.call('POST', `/board/invites/${new URL(invite.inviteUrl).pathname.split('/').pop()}/accept`)
+	const columns = { 'Бэклог': ['Цвета для графиков', 'Иконки для пустых состояний'], 'В работе': ['Компонент «Таблица»'], Готово: ['Токены отступов'] }
+	let position = 0
+	for (const [title, tasks] of Object.entries(columns)) {
+		const { _id: columnId } = await teammate.call('POST', `/board/boards/${boardId}/columns`, { title, position: position++ })
+		for (const [index, task] of tasks.entries()) {
+			await teammate.call('POST', `/board/columns/${columnId}/task`, { title: task, position: index, assignees: index === 0 ? [demo.id] : [], dueDate: index === 0 ? day(-2) : undefined })
 		}
 	}
 }

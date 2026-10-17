@@ -10,7 +10,7 @@ await page.request.post('http://localhost:5001/api/board/boards', { data: { name
 await page.goto(APP + '/workspaces')
 await page.waitForTimeout(1500)
 requests.length = 0
-await page.locator('.workspace-room', { hasText: boardName }).click()
+await page.locator('.board-card__open', { hasText: boardName }).click()
 await page.waitForURL(/\/workspaces\/[a-f0-9]{24}/)
 await page.waitForTimeout(1500)
 const boardLoads = requests.filter((r) => r.startsWith('GET') && (r.includes('/content') || r.includes('/columns')))
@@ -62,18 +62,32 @@ const taskId = await todo.locator('.task-card', { hasText: 'Ship the audit' }).g
 const assign = await page.request.patch(`http://localhost:5001/api/board/tasks/${taskId}`, { data: { assignees: [me._id] } })
 check('assign task via API', assign.status() === 200)
 
-// switching boards via the sidebar loads each board once and never shows the previous board's columns
+// switching boards loads each board once and never shows the previous board's columns
 const boardUrl = page.url()
 await page.request.post('http://localhost:5001/api/board/boards', { data: { name: secondName } })
 await page.goto(boardUrl); await page.waitForTimeout(1500)
 requests.length = 0
-await page.locator('.workspace-room', { hasText: secondName }).click()
+// Switch through the quick switcher, which changes the URL directly. Every frame is sampled:
+// the new board's title must never appear next to the previous board's columns.
+await page.evaluate(() => {
+	window.__frames = []
+	const start = performance.now()
+	const tick = () => {
+		window.__frames.push({ title: document.querySelector('.app-topbar__context')?.innerText || '', columns: document.querySelectorAll('.kanban-column').length })
+		if (performance.now() - start < 2500) requestAnimationFrame(tick)
+	}
+	requestAnimationFrame(tick)
+})
+await page.keyboard.press('Control+k')
+await page.locator('.quick-switcher input').fill(secondName)
+await page.keyboard.press('Enter')
 await page.waitForURL((url) => url.toString() !== boardUrl)
-const leakedColumns = await page.locator('.kanban-column').count()
 await page.waitForTimeout(1500)
 const contentLoads = requests.filter((r) => r.endsWith('/content'))
 check('switching boards loads the new board once', contentLoads.length === 1, contentLoads.join(', '))
-check('previous board columns are not shown on the new board', leakedColumns === 0 && (await page.locator('.kanban-column').count()) === 0)
+const frames = await page.evaluate(() => window.__frames)
+const leakedFrames = frames.filter((frame) => frame.title.includes(secondName) && frame.columns > 0)
+check('previous board columns are never shown under the new board', leakedFrames.length === 0 && frames.some((frame) => frame.title.includes(secondName)), `${leakedFrames.length} leaked of ${frames.length} frames`)
 requests.length = 0
 await page.goBack(); await page.waitForTimeout(1500)
 check('back button returns to the first board with its columns', page.url() === boardUrl && (await page.locator('.kanban-column').count()) === 2)

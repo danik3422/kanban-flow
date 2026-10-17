@@ -8,7 +8,7 @@
 		"seed:demo": "node scripts/seed-test-room-demo.js",
 		"migrate:provider-uids": "node scripts/migrate-provider-uids.js",
 		"migrate:password-flags": "node scripts/migrate-password-flags.js",
-		"test": "NODE_ENV=test node --test --test-force-exit"
+		"test": "NODE_ENV=test node --test --test-concurrency=1 --test-timeout=60000 --test-force-exit"
 	},
 	"keywords": [],
 	"author": "Danylo Syloats <mr.siloacd@gmail.com>",

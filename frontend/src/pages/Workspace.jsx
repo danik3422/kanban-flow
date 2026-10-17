@@ -24,7 +24,11 @@ import {
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { translateCurrent } from '../i18n/translate'
+import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
+import { useI18n } from '../i18n'
+import CreateBoardModal from '../components/app/CreateBoardModal'
+import { useBoardPrefs } from '../store/useBoardPrefs'
+import { useBoardStats } from '../store/useBoardStats'
 import { toast } from 'sonner'
 import InviteMemberModal from '../components/InviteMemberModal'
 import WorkspaceOverview from '../components/WorkspaceOverview'
@@ -119,6 +123,9 @@ const fetchColumns = async (boardId) => {
 
 const Workspace = () => {
 	const { authUser } = useAuthStore()
+	const { t: tr } = useI18n()
+	const markBoardOpened = useBoardPrefs((state) => state.markOpened)
+	const loadBoardPrefs = useBoardPrefs((state) => state.load)
 	const navigate = useNavigate()
 	const location = useLocation()
 	const { boardId } = useParams()
@@ -147,7 +154,8 @@ const Workspace = () => {
 	const [activeTaskColumn, setActiveTaskColumn] = useState(null)
 	const [newBoardName, setNewBoardName] = useState('')
 	const [newBoardVisibility, setNewBoardVisibility] = useState('private')
-	const [isPublicBoardConfirmOpen, setIsPublicBoardConfirmOpen] = useState(false)
+	const [isSubmittingBoard, setIsSubmittingBoard] = useState(false)
+	const [createBoardError, setCreateBoardError] = useState('')
 	const [isVisibilityOpen, setIsVisibilityOpen] = useState(false)
 	const [visibilityDraft, setVisibilityDraft] = useState('private')
 	const [isPublicVisibilityConfirmOpen, setIsPublicVisibilityConfirmOpen] = useState(false)
@@ -200,7 +208,6 @@ const Workspace = () => {
 	const [isLeaveBoardArmed, setIsLeaveBoardArmed] = useState(false)
 	const [leaveConfirmation, setLeaveConfirmation] = useState('')
 	const [isLeavingBoard, setIsLeavingBoard] = useState(false)
-	const [isRoomActionsOpen, setIsRoomActionsOpen] = useState(false)
 	const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
 	const [ownershipConfirmation, setOwnershipConfirmation] = useState('')
 	const [removeMemberTarget, setRemoveMemberTarget] = useState(null)
@@ -383,6 +390,20 @@ const Workspace = () => {
 		setCachedBoards(authUser._id, boards)
 	}, [boards, isLoading, authUser?._id])
 
+	// A new board id in the URL (search, notification link, back button) switches the
+	// selected board straight away, from the loaded list when it is there; the reset below
+	// then clears the old board before it can paint under the new address.
+	const [routedBoardId, setRoutedBoardId] = useState(boardId)
+	if (routedBoardId !== boardId) {
+		setRoutedBoardId(boardId)
+		if (boardId && selectedBoard?._id !== boardId) {
+			const nextBoard = boards.find((board) => board._id === boardId) || null
+			setSelectedBoard(nextBoard)
+			setBoardNameDraft(nextBoard?.name || '')
+			setIsEditingBoardName(false)
+		}
+	}
+
 	const selectedBoardId = selectedBoard?._id
 	const selectedBoardRole = selectedBoard?.role
 	// Every way of switching boards (sidebar, back button, notification link) lands here.
@@ -411,7 +432,6 @@ const Workspace = () => {
 		setIsDeleteBoardOpen(false)
 		setIsLeaveBoardOpen(false)
 		setIsVisibilityOpen(false)
-		setIsRoomActionsOpen(false)
 	}
 
 	useEffect(() => {
@@ -772,8 +792,8 @@ const Workspace = () => {
 	}
 
 	const createBoard = async (event) => {
-		event.preventDefault()
-		if (!newBoardName.trim()) return
+		event?.preventDefault()
+		if (!newBoardName.trim() || isSubmittingBoard) return
 		if (isDevAuthBypass) {
 			const board = {
 				...devBoard,
@@ -797,6 +817,8 @@ const Workspace = () => {
 			toast.success('Demo board created locally')
 			return
 		}
+		setIsSubmittingBoard(true)
+		setCreateBoardError('')
 		try {
 			const { data } = await axiosInstance.post('/board/boards', {
 				name: newBoardName.trim(),
@@ -811,25 +833,18 @@ const Workspace = () => {
 			setNewBoardName('')
 			setNewBoardVisibility('private')
 			setIsCreatingBoard(false)
-			toast.success('Board created')
+			useBoardStats.getState().load({ force: true })
+			toast.success(tr('boards.create.created'))
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not create board')
+			setCreateBoardError(translateServerMessageCurrent(error.response?.data?.message, 'boards.create.error'))
+		} finally {
+			setIsSubmittingBoard(false)
 		}
 	}
 
-	const handleBoardVisibilityChange = (event) => {
-		if (event.target.value === 'public') {
-			setIsPublicBoardConfirmOpen(true)
-			return
-		}
-		setNewBoardVisibility(event.target.value)
-	}
-
-	const closePublicBoardConfirmation = () => setIsPublicBoardConfirmOpen(false)
-
-	const confirmPublicBoard = () => {
-		setNewBoardVisibility('public')
-		setIsPublicBoardConfirmOpen(false)
+	const closeCreateBoard = () => {
+		setIsCreatingBoard(false)
+		setCreateBoardError('')
 	}
 
 	const saveBoardVisibility = async (visibility) => {
@@ -880,6 +895,23 @@ const Workspace = () => {
 		setIsSidebarOpen(false)
 		navigate(`/workspaces/${board._id}`)
 	}
+
+	// Remember opened boards for "Recent" in the sidebar and the switcher.
+	useEffect(() => {
+		loadBoardPrefs(authUser?._id)
+	}, [authUser?._id, loadBoardPrefs])
+	useEffect(() => {
+		if (selectedBoard?._id) markBoardOpened(selectedBoard._id)
+	}, [selectedBoard?._id, markBoardOpened])
+
+	// "New board" chosen on another page lands here with the dialog already open.
+	useEffect(() => {
+		if (!location.state?.createBoard) return
+		queueMicrotask(() => {
+			setIsCreatingBoard(true)
+			navigate(location.pathname, { replace: true, state: null })
+		})
+	}, [location.state, location.pathname, navigate])
 
 	const copyInviteUrl = async (url) => {
 		if (navigator.clipboard?.writeText) {
@@ -1804,7 +1836,7 @@ const Workspace = () => {
 								<div className='workspace-board-title-row'>
 											<span
 												className={`workspace-board-name ${canEditBoardName ? 'is-editable' : ''}`}
-												title={selectedBoard?.name || 'Room'}
+												title={selectedBoard?.name || tr('boards.title')}
 												onClick={() => canEditBoardName && setIsEditingBoardName(true)}
 												onKeyDown={(event) => {
 													if (canEditBoardName && (event.key === 'Enter' || event.key === ' ')) {
@@ -1833,64 +1865,22 @@ const Workspace = () => {
 											/>
 										) : (
 													<span className='workspace-board-name-text'>
-														{selectedBoard?.name || 'Rooms'}
+														{selectedBoard?.name || tr('boards.title')}
 													</span>
 										)}
 									</span>
-									{selectedBoard && !isEditingBoardName && (
-										<Popover
-											isOpen={isRoomActionsOpen}
-											onClose={() => setIsRoomActionsOpen(false)}
-											className='room-actions-menu'
-										>
-											<button
-												type='button'
-												className='workspace-board-actions-button'
-												aria-label='Room actions'
-												aria-expanded={isRoomActionsOpen}
-												title='Room actions'
-												onClick={() => setIsRoomActionsOpen((value) => !value)}
-											>
-												<MoreHorizontal size={16} />
-											</button>
-											{isRoomActionsOpen && (
-												<div className='room-actions-popover' role='menu'>
-													<button
-														type='button'
-														className='room-action-danger'
-														onClick={() => {
-															setIsRoomActionsOpen(false)
-															if (isBoardOwner) openDeleteBoardDialog()
-															else setIsLeaveBoardOpen(true)
-														}}
-													>
-														{isBoardOwner ? <Trash2 size={15} /> : <LogOut size={15} />}
-														{isBoardOwner ? 'Delete room' : 'Leave room'}
-													</button>
-												</div>
-											)}
-										</Popover>
-									)}
+									{/* Board actions live in the top bar's menu. */}
 								</div>
 							</div>
 				</WorkspaceTopbar>
 
 				{!boardId ? (
-					isLoading ? (
-						<div className='workspace-content rooms-overview'>
-							<div className='workspace-overview-loading' role='status' aria-live='polite'>
-								<div className='workspace-overview-loading-heading'><div className='workspace-overview-loading-heading-copy'><p className='eyebrow workspace-overview-loading-eyebrow'>Your rooms</p><h1 className='workspace-overview-loading-title'>Everything in one place.</h1><p className='heading-copy workspace-overview-loading-copy'>Choose a room to jump into a board, or create a new one for the next project.</p></div><span className='workspace-overview-loading-button' /></div>
-								<div className='workspace-overview-loading-summary'><span /><span /></div>
-								{[1, 2].map((group) => <div className='workspace-overview-loading-group' key={group}><div className='workspace-overview-loading-group-heading'><div><span /><span /></div><i /></div><div className='workspace-overview-loading-grid'>{[1, 2, 3].map((card) => <div className='workspace-overview-loading-card' key={card}><b /><div><span /><span /></div><i /></div>)}</div></div>)}
-							</div>
-						</div>
-					) : (
-						<WorkspaceOverview
-							boards={boards}
-							onOpenBoard={openOverviewBoard}
-							onCreateBoard={() => setIsCreatingBoard(true)}
-						/>
-					)
+					<WorkspaceOverview
+						boards={boards}
+						isLoading={isLoading}
+						onOpenBoard={openOverviewBoard}
+						onCreateBoard={() => setIsCreatingBoard(true)}
+					/>
 				) : (
 					<div className='workspace-content'>
 						{isBoardContentLoading ? (
@@ -3086,104 +3076,20 @@ const Workspace = () => {
 					</form>
 				</div>
 			)}
-			{isCreatingBoard && (
-				<div
-					className='modal-backdrop'
-					onMouseDown={() => setIsCreatingBoard(false)}
-				>
-					<form
-						className='modal-panel'
-						onSubmit={createBoard}
-						onMouseDown={(event) => event.stopPropagation()}
-					>
-						<div className='modal-title'>
-							<div>
-													<p className='eyebrow'>New room</p>
-													<h2>Create a room</h2>
-							</div>
-							<button
-								type='button'
-								className='icon-button'
-								onClick={() => setIsCreatingBoard(false)}
-								aria-label='Close'
-								title='Close'
-							>
-								<X size={18} />
-							</button>
-						</div>
-						<p>
-							Give this project a clear home. You can add columns and tasks
-							right away.
-						</p>
-						<label className='field-label' htmlFor='board-name'>
-							Board name
-						</label>
-						<input
-							id='board-name'
-							autoFocus
-							value={newBoardName}
-							onChange={(event) => setNewBoardName(event.target.value)}
-							placeholder='e.g. Product launch'
-						/>
-						<fieldset className='board-visibility-options'>
-							<legend>Who can access this room?</legend>
-							<label className={`board-visibility-option ${newBoardVisibility === 'private' ? 'is-selected' : ''}`}>
-								<input
-									type='radio'
-									name='board-visibility'
-									value='private'
-									checked={newBoardVisibility === 'private'}
-									onChange={handleBoardVisibilityChange}
-								/>
-								<span><strong>Private</strong><small>Only invited members can view and edit this room.</small></span>
-							</label>
-							<label className={`board-visibility-option ${newBoardVisibility === 'workspace' ? 'is-selected' : ''}`}>
-								<input
-									type='radio'
-									name='board-visibility'
-									value='workspace'
-									checked={newBoardVisibility === 'workspace'}
-									onChange={handleBoardVisibilityChange}
-								/>
-								<span><strong>Workspace</strong><small>Workspace members can view and edit this room.</small></span>
-							</label>
-							<label className={`board-visibility-option ${newBoardVisibility === 'public' ? 'is-selected' : ''}`}>
-								<input
-									type='radio'
-									name='board-visibility'
-									value='public'
-									checked={newBoardVisibility === 'public'}
-									onChange={handleBoardVisibilityChange}
-								/>
-								<span><strong>Public</strong><small>Anyone with access to the room can view it.</small></span>
-							</label>
-						</fieldset>
-						<button className='primary-button full-button' type='submit'>
-							<Plus size={18} /> Create board
-						</button>
-					</form>
-				</div>
-			)}
-			{isPublicBoardConfirmOpen && (
-				<div className='modal-backdrop public-board-confirm-backdrop' onMouseDown={closePublicBoardConfirmation}>
-					<div className='modal-panel public-board-confirmation' onMouseDown={(event) => event.stopPropagation()}>
-						<div className='modal-title'>
-							<div>
-								<p className='eyebrow'>Visibility</p>
-														<h2>Make this room public?</h2>
-							</div>
-							<button type='button' className='icon-button' onClick={closePublicBoardConfirmation} aria-label='Close' title='Close'>
-								<X size={18} />
-							</button>
-						</div>
-						<p>Public rooms are available to everyone on the internet.</p>
-						<div className='public-board-confirm-actions'>
-							<button type='button' className='quiet-button' onClick={closePublicBoardConfirmation}>Cancel</button>
-							<button type='button' className='primary-button' onClick={confirmPublicBoard}>Make public</button>
-						</div>
-					</div>
-				</div>
-			)}
+			<CreateBoardModal
+				open={isCreatingBoard}
+				onClose={closeCreateBoard}
+				name={newBoardName}
+				onNameChange={(value) => {
+					setNewBoardName(value)
+					setCreateBoardError('')
+				}}
+				visibility={newBoardVisibility}
+				onVisibilityChange={setNewBoardVisibility}
+				onSubmit={createBoard}
+				isSubmitting={isSubmittingBoard}
+				error={createBoardError}
+			/>
 			{isVisibilityOpen && selectedBoard && (
 				<Popover isOpen={isVisibilityOpen} onClose={() => setIsVisibilityOpen(false)} className='popover-shell room-visibility-dropdown' role='dialog' aria-label='Room visibility settings'>
 						<div className='popover-header room-visibility-dropdown-header'>

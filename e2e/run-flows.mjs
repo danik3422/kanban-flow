@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 
 const flowsDir = path.resolve(new URL('./flows', import.meta.url).pathname)
-const order = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10']
+const order = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12']
 const requested = process.argv.slice(2)
 const flows = requested.length ? ['s1', ...requested.filter((flow) => flow !== 's1')] : order
 

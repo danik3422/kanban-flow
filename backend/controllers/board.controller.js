@@ -73,8 +73,8 @@ const canManageBoard = async (board, userId) => {
 	)
 }
 
-const notifyTaskAssignees = async ({ userIds, task, board, actorId, type = 'task_assigned', title, message }) => {
-	await notifyTaskRecipients({ userIds, task, board, actorId, type, title, message })
+const notifyTaskAssignees = async ({ userIds, task, board, actorId, type = 'task_assigned', title, message, details }) => {
+	await notifyTaskRecipients({ userIds, task, board, actorId, type, title, message, details })
 }
 
 const validateBoardAssignees = async (board, assignees) => {
@@ -956,6 +956,102 @@ export const getUserBoards = async (req, res) => {
 	}
 }
 
+// Tasks have no "done" flag; by kanban convention the last column of a board holds
+// finished work (only on boards with two or more columns).
+const finishedColumnIdsOf = (columns) => {
+	const columnsByBoard = new Map()
+	for (const column of columns) {
+		const key = column.board.toString()
+		columnsByBoard.set(key, [...(columnsByBoard.get(key) || []), column])
+	}
+	const finished = new Set()
+	for (const boardColumns of columnsByBoard.values()) {
+		if (boardColumns.length < 2) continue
+		const last = boardColumns.reduce((latest, column) => ((column.position ?? 0) >= (latest.position ?? 0) ? column : latest))
+		finished.add(last._id.toString())
+	}
+	return finished
+}
+
+// Summary numbers for the board list: tasks, open overdue and open mine, members and last activity.
+// A handful of grouped queries cover every accessible board at once.
+export const getBoardsOverview = async (req, res) => {
+	try {
+		const userId = req.user._id
+		const memberBoardIds = await BoardMember.find({ user: userId }).distinct('board')
+		const boardIds = await Board.find({
+			$or: [{ createdBy: userId }, { _id: { $in: memberBoardIds } }],
+		}).distinct('_id')
+		if (!boardIds.length) return res.status(200).json([])
+
+		const columns = await Column.find({ board: { $in: boardIds } }).select('_id board position').lean()
+		const boardOfColumn = new Map(columns.map((column) => [column._id.toString(), column.board.toString()]))
+		const finishedColumnIds = finishedColumnIdsOf(columns)
+		const startOfToday = new Date()
+		startOfToday.setHours(0, 0, 0, 0)
+
+		const [taskGroups, memberGroups, activityGroups] = await Promise.all([
+			Task.aggregate([
+				{ $match: { column: { $in: columns.map((column) => column._id) } } },
+				{
+					$group: {
+						_id: '$column',
+						taskCount: { $sum: 1 },
+						overdueCount: { $sum: { $cond: [{ $and: [{ $ne: ['$dueDate', null] }, { $lt: ['$dueDate', startOfToday] }] }, 1, 0] } },
+						myTaskCount: { $sum: { $cond: [{ $in: [userId, { $ifNull: ['$assignees', []] }] }, 1, 0] } },
+					},
+				},
+			]),
+			BoardMember.aggregate([
+				{ $match: { board: { $in: boardIds } } },
+				{ $sort: { createdAt: 1 } },
+				{ $group: { _id: '$board', memberCount: { $sum: 1 }, users: { $push: '$user' } } },
+				{ $project: { memberCount: 1, users: { $slice: ['$users', 4] } } },
+			]),
+			BoardActivity.aggregate([
+				{ $match: { board: { $in: boardIds } } },
+				{ $group: { _id: '$board', lastActivityAt: { $max: '$createdAt' } } },
+			]),
+		])
+
+		const userIds = [...new Set(memberGroups.flatMap((group) => group.users.map((id) => id.toString())))]
+		const users = await User.find({ _id: { $in: userIds } }).select('name avatar').lean()
+		const userById = new Map(users.map((user) => [user._id.toString(), { _id: user._id, name: user.name || '', avatar: user.avatar || '' }]))
+
+		const summary = new Map(boardIds.map((id) => [id.toString(), {
+			boardId: id,
+			taskCount: 0,
+			overdueCount: 0,
+			myTaskCount: 0,
+			memberCount: 0,
+			members: [],
+			lastActivityAt: null,
+		}]))
+		for (const group of taskGroups) {
+			const entry = summary.get(boardOfColumn.get(group._id.toString()))
+			if (!entry) continue
+			entry.taskCount += group.taskCount
+			if (finishedColumnIds.has(group._id.toString())) continue
+			entry.overdueCount += group.overdueCount
+			entry.myTaskCount += group.myTaskCount
+		}
+		for (const group of memberGroups) {
+			const entry = summary.get(group._id.toString())
+			if (!entry) continue
+			entry.memberCount = group.memberCount
+			entry.members = group.users.map((id) => userById.get(id.toString())).filter(Boolean)
+		}
+		for (const group of activityGroups) {
+			const entry = summary.get(group._id.toString())
+			if (entry) entry.lastActivityAt = group.lastActivityAt
+		}
+		return res.status(200).json([...summary.values()])
+	} catch (error) {
+		console.error('Error building boards overview:', error)
+		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
 // Every accessible board with its members, for the Team page, in two queries.
 export const getTeam = async (req, res) => {
 	try {
@@ -1012,7 +1108,8 @@ export const getMyTasks = async (req, res) => {
 		const scopedBoardIds = board === 'all'
 			? accessibleBoardIds
 			: accessibleBoardIds.filter((boardId) => boardId === board)
-		const columns = await Column.find({ board: { $in: scopedBoardIds } }).select('_id title board').lean()
+		const columns = await Column.find({ board: { $in: scopedBoardIds } }).select('_id title board position').lean()
+		const finishedColumnIds = finishedColumnIdsOf(columns)
 		const query = {
 			assignees: req.user._id,
 			column: { $in: columns.map((column) => column._id) },
@@ -1048,7 +1145,19 @@ export const getMyTasks = async (req, res) => {
 			.limit(MY_TASKS_LIMIT)
 			.lean()
 
-		return res.status(200).json(tasks)
+		// Same rule as the board list, so "open", "overdue" and "done" agree across pages.
+		// doneColumnId lets the list finish a task by moving it there (null without a Done column).
+		const doneColumnByBoard = new Map(columns
+			.filter((column) => finishedColumnIds.has(column._id.toString()))
+			.map((column) => [column.board.toString(), column._id.toString()]))
+		return res.status(200).json(tasks.map((task) => {
+			const boardId = (task.column?.board?._id || task.column?.board)?.toString()
+			return {
+				...task,
+				isDone: finishedColumnIds.has((task.column?._id || task.column).toString()),
+				doneColumnId: doneColumnByBoard.get(boardId) || null,
+			}
+		}))
 	} catch (error) {
 		console.error('My tasks fetch failed:', error)
 		return res.status(500).json({ message: 'Could not load your tasks' })
@@ -1900,6 +2009,7 @@ export const updateTask = async (req, res) => {
 					type: 'task_moved',
 					title: 'Task moved',
 					message: `“${updatedTask.title}” moved from ${originalColumn?.title || 'previous column'} to ${targetColumn.title || 'new column'}.`,
+					details: { fromColumn: originalColumn?.title, toColumn: targetColumn.title },
 				})
 			}
 		}

@@ -10,11 +10,11 @@ const column = await (await page.request.post(`${API}/board/boards/${board._id}/
 
 await page.goto(`${APP}/workspaces/${board._id}`); await page.waitForTimeout(2500)
 check('a board page opens exactly one realtime connection', sockets.filter((s) => !s.closed).length === 1, `${sockets.length} opened`)
-await page.locator('a, button', { hasText: /^My tasks$/ }).first().click(); await page.waitForTimeout(1200)
-await page.locator('a, button', { hasText: /^Calendar$/ }).first().click(); await page.waitForTimeout(1200)
+await page.locator('.app-sidebar a[href="/my-tasks"]').click(); await page.waitForTimeout(1200)
+await page.locator('.app-sidebar a[href="/calendar"]').click(); await page.waitForTimeout(1200)
 await page.goBack(); await page.goBack(); await page.waitForTimeout(2000)
 check('moving between pages reuses the same connection', sockets.length === 1 && !sockets[0].closed, `${sockets.length} opened`)
-check('realtime indicator is live after returning to the board', (await page.locator('.realtime-status-connected').count()) === 1)
+check('realtime indicator is live after returning to the board', (await page.locator('.app-live--connected').count()) === 1)
 
 // a colleague assigns Alice a task: the bell updates live
 const bobEmail = `bell${Date.now()}@example.com`
@@ -30,14 +30,14 @@ const bobUser = await (await bob.request.get(`${API}/auth/get-user`)).json()
 const before = await page.locator('.notification-badge, [class*=notification] [class*=badge], [class*=bell] [class*=count]').count()
 await bob.request.post(`${API}/board/columns/${column._id}/task`, { data: { title: 'For Alice', assignees: [me._id, bobUser._id] } })
 await page.waitForTimeout(1500)
-check('Alice sees the assignment toast live', (await page.getByText('You were assigned a task').count()) > 0)
+check('Alice sees the assignment toast live', (await page.getByText(/Assigned to you|You were assigned a task/).count()) > 0)
 check('the board shows the colleague\'s new task live', (await page.locator('.task-card', { hasText: 'For Alice' }).count()) === 1)
 
 // logging out closes the connection immediately (no 3 s grace for the next account)
 await page.goto(`${APP}/my-tasks`); await page.waitForTimeout(1500)
 const currentDocumentSockets = sockets.slice(-1)
-await page.locator('.account-trigger, [aria-haspopup], button', { hasText: /Alice|Account/ }).first().click().catch(() => {})
-await page.getByRole('button', { name: /log ?out|sign out/i }).first().click()
+await page.locator('.app-account-trigger').click()
+await page.getByRole('menuitem', { name: /log ?out|sign out/i }).click()
 await page.waitForTimeout(800)
 check('logout closes the realtime connection right away', currentDocumentSockets.length === 1 && currentDocumentSockets[0].closed, currentDocumentSockets.map((s) => s.closed).join(','))
 console.log(before >= 0 ? '' : '')

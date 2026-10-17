@@ -59,7 +59,8 @@ const createBoardWithOwner = async () => {
 
 before(async () => {
 	mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })
-	await mongoose.connect(mongoServer.getUri())
+	// A database of its own, so another test run or a local stack can never share or wipe this data.
+	await mongoose.connect(mongoServer.getUri(), { dbName: `board-access-${process.pid}` })
 })
 
 beforeEach(async () => {
@@ -1824,5 +1825,107 @@ describe('input hardening', () => {
 			.send({ currentPassword: 'Password123!' })
 		assert.equal(accepted.status, 200)
 		assert.equal((await User.findById(user._id)).passkeys.length, 0)
+	})
+})
+
+describe('boards overview', () => {
+	it('summarises tasks, members and activity only for boards the user can access', async () => {
+		await Promise.all([Column.deleteMany({}), Task.deleteMany({})])
+		const { owner, board } = await createBoardWithOwner()
+		const teammate = await createUser('teammate@example.com', 'Teammate')
+		await BoardMember.create({ board: board._id, user: teammate._id, role: 'member' })
+		const [todo, done] = await Column.create([
+			{ title: 'To do', board: board._id, position: 0 },
+			{ title: 'Done', board: board._id, position: 1 },
+		])
+		const yesterday = new Date(Date.now() - 86_400_000)
+		const tomorrow = new Date(Date.now() + 86_400_000)
+		await Task.create([
+			{ title: 'Late', column: todo._id, dueDate: yesterday, assignees: [owner._id] },
+			{ title: 'Soon', column: todo._id, dueDate: tomorrow, assignees: [teammate._id] },
+			// Finished work in the last column is neither overdue nor waiting on its assignee.
+			{ title: 'Shipped', column: done._id, dueDate: yesterday, assignees: [owner._id] },
+		])
+		await BoardActivity.create({ board: board._id, user: owner._id, action: 'created', entityType: 'board', entityName: board.name })
+
+		// Someone else's board must not show up or leak counts.
+		const stranger = await createUser('stranger@example.com', 'Stranger')
+		const otherBoard = await Board.create({ name: 'Other', createdBy: stranger._id })
+		await BoardMember.create({ board: otherBoard._id, user: stranger._id, role: 'admin' })
+		const otherColumn = await Column.create({ title: 'Secret', board: otherBoard._id })
+		await Task.create({ title: 'Hidden', column: otherColumn._id, assignees: [owner._id] })
+
+		const response = await request(app).get('/api/board/boards/overview').set('Cookie', authCookie(owner._id))
+		assert.equal(response.status, 200)
+		assert.equal(response.body.length, 1)
+		const [entry] = response.body
+		assert.equal(entry.boardId, board._id.toString())
+		assert.equal(entry.taskCount, 3)
+		assert.equal(entry.overdueCount, 1, 'the overdue task in Done is not counted')
+		assert.equal(entry.myTaskCount, 1)
+		assert.equal(entry.memberCount, 2)
+		assert.deepEqual(entry.members.map((member) => member.name).sort(), ['Owner', 'Teammate'])
+		assert.ok(entry.lastActivityAt)
+		assert.equal(entry.members[0].email, undefined, 'member summaries expose only name and avatar')
+
+		const teammateView = await request(app).get('/api/board/boards/overview').set('Cookie', authCookie(teammate._id))
+		assert.equal(teammateView.body[0].myTaskCount, 1)
+
+		const outsider = await createUser('outsider@example.com')
+		const empty = await request(app).get('/api/board/boards/overview').set('Cookie', authCookie(outsider._id))
+		assert.deepEqual(empty.body, [])
+	})
+})
+
+describe('notification facts', () => {
+	it('stores the task, board, actor and columns so the app can word notifications in any language', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		await Board.updateOne({ _id: board._id }, { name: 'Launch' })
+		const member = await createUser('facts-member@example.com', 'Facts Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const [todo, doing] = await Column.create([
+			{ board: board._id, title: 'To do', position: 0 },
+			{ board: board._id, title: 'Doing', position: 1 },
+		])
+
+		const created = await request(app)
+			.post(`/api/board/columns/${todo._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Write copy', assignees: [member._id.toString(), owner._id.toString()] })
+		assert.equal(created.status, 201)
+		assert.equal(await Notification.countDocuments({ user: owner._id }), 0, 'nobody is notified about their own change')
+		const assigned = await Notification.findOne({ user: member._id, type: 'task_assigned' }).lean()
+		assert.deepEqual(assigned.data, { taskTitle: 'Write copy', boardName: 'Launch', actorName: 'Owner' })
+
+		const moved = await request(app)
+			.patch(`/api/board/tasks/${created.body._id}`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ column: doing._id.toString() })
+		assert.equal(moved.status, 200)
+		const movedNotification = await Notification.findOne({ user: member._id, type: 'task_moved' }).lean()
+		assert.equal(movedNotification?.data?.fromColumn, 'To do')
+		assert.equal(movedNotification?.data?.toColumn, 'Doing')
+
+		const listed = await request(app).get('/api/notifications').set('Cookie', authCookie(member._id))
+		assert.ok(listed.body.every((notification) => notification.data?.taskTitle === 'Write copy'))
+	})
+})
+
+describe('my tasks done state', () => {
+	it('marks tasks in the last column as done, like the board list counts them', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const [todo, done] = await Column.create([
+			{ board: board._id, title: 'To do', position: 0 },
+			{ board: board._id, title: 'Done', position: 1 },
+		])
+		await Task.create([
+			{ column: todo._id, title: 'Open one', assignees: [owner._id] },
+			{ column: done._id, title: 'Finished one', assignees: [owner._id] },
+		])
+		const response = await request(app).get('/api/board/my-tasks').set('Cookie', authCookie(owner._id))
+		assert.equal(response.status, 200)
+		const byTitle = Object.fromEntries(response.body.map((task) => [task.title, task.isDone]))
+		assert.deepEqual(byTitle, { 'Open one': false, 'Finished one': true })
+		assert.ok(response.body.every((task) => task.doneColumnId === done._id.toString()), 'each task knows where Done is')
 	})
 })

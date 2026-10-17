@@ -134,7 +134,7 @@ const Team = () => {
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
-				onCreateBoard={() => navigate('/workspaces')}
+				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
 			<main className='workspace-main team-page-main flex-1 overflow-auto'>

@@ -14,6 +14,17 @@ const notificationSchema = new mongoose.Schema(
 		},
 		title: { type: String, required: true },
 		message: { type: String, required: true },
+		// The facts behind the text, so the app can show it in the reader's language.
+		data: {
+			type: new mongoose.Schema({
+				taskTitle: { type: String, maxlength: 200 },
+				boardName: { type: String, maxlength: 100 },
+				actorName: { type: String, maxlength: 120 },
+				fromColumn: { type: String, maxlength: 60 },
+				toColumn: { type: String, maxlength: 60 },
+			}, { _id: false }),
+			default: undefined,
+		},
 		board: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' },
 		task: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
 		readAt: { type: Date, default: null },

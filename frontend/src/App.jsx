@@ -163,7 +163,7 @@ export const App = () => {
 		// Same-origin paths only: "//host" and "/\host" both resolve to another site.
 		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//') && !requestedRedirect.includes('\\')
 			? requestedRedirect
-			: '/'
+			: '/workspaces'
 
 	if (isCheckingAuth) return <AppLoader />
 

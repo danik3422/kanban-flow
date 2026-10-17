@@ -390,7 +390,7 @@ const CalendarPage = () => {
         boards={boards}
         selectedBoardId={null}
         onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
-        onCreateBoard={() => navigate('/workspaces')}
+        onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
         isCollapsed={isSidebarCollapsed}
       />
       <main className='workspace-main flex-1 min-h-0 flex flex-col overflow-hidden'>

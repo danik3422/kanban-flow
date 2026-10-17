@@ -1,35 +1,71 @@
-import { ArrowRightLeft, Bell, CheckCheck, ClipboardList, MessageCircle, Trash2, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowRightLeft, Bell, BellOff, Check, CheckCheck, ClipboardList, MessageCircle, PencilLine, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useI18n } from '../i18n'
+import { translateCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { isDevAuthBypass } from '../lib/devMode'
 import { acquireSocket, releaseSocket } from '../lib/socket'
-import Popover from './Popover'
+import { Button, EmptyState, IconButton, Modal, SegmentedControl, Skeleton } from '../ui'
+import { cx } from '../ui/utils'
+import { describeNotification } from '../utils/notificationText'
+import { relativeTime } from '../utils/relativeTime'
+import './app/notifications.css'
+
+const TYPE_LOOK = {
+	task_assigned: { icon: ClipboardList, tone: 'accent' },
+	task_commented: { icon: MessageCircle, tone: 'info' },
+	task_moved: { icon: ArrowRightLeft, tone: 'warning' },
+	task_updated: { icon: PencilLine, tone: 'neutral' },
+}
+
+const PHONE_QUERY = '(max-width: 720px)'
+const subscribePhone = (callback) => {
+	const query = window.matchMedia(PHONE_QUERY)
+	query.addEventListener('change', callback)
+	return () => query.removeEventListener('change', callback)
+}
+const isPhoneWidth = () => window.matchMedia(PHONE_QUERY).matches
+
+const byNewest = (left, right) => new Date(right.createdAt) - new Date(left.createdAt)
+const mergeNotifications = (...lists) => {
+	const byId = new Map()
+	lists.flat().forEach((item) => byId.set(item._id, { ...byId.get(item._id), ...item }))
+	return [...byId.values()].sort(byNewest)
+}
+
+const dayGroup = (date) => {
+	const startOfToday = new Date()
+	startOfToday.setHours(0, 0, 0, 0)
+	const time = new Date(date).getTime()
+	if (time >= startOfToday.getTime()) return 'today'
+	if (time >= startOfToday.getTime() - 86400000) return 'yesterday'
+	return 'earlier'
+}
 
 const NotificationCenter = () => {
+	const { t, language } = useI18n()
 	const navigate = useNavigate()
+	const isPhone = useSyncExternalStore(subscribePhone, isPhoneWidth, () => false)
 	const [notifications, setNotifications] = useState([])
 	const [isOpen, setIsOpen] = useState(false)
 	const [isLoading, setIsLoading] = useState(!isDevAuthBypass)
 	const [filter, setFilter] = useState('all')
+	const wrapperRef = useRef(null)
+	const triggerRef = useRef(null)
+	const panelRef = useRef(null)
 
 	useEffect(() => {
-		if (isDevAuthBypass) return
+		if (isDevAuthBypass) return undefined
 		const loadNotifications = async () => {
 			try {
 				const { data } = await axiosInstance.get('/notifications')
 				if (!Array.isArray(data)) throw new Error('Unexpected notifications response')
-				setNotifications((current) => {
-					const nextById = new Map([...data.map((item) => [item._id, item]), ...current.map((item) => [item._id, item])])
-					return [...nextById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
-				})
+				setNotifications((current) => mergeNotifications(data, current))
 			} catch (error) {
-				if ([404, 204].includes(error.response?.status)) {
-					setNotifications([])
-				} else if (error.response?.status !== 401) {
-					toast.error('Could not load notifications')
-				}
+				if ([404, 204].includes(error.response?.status)) setNotifications([])
+				else if (error.response?.status !== 401) toast.error(translateCurrent('app.notifications.loadError'))
 			} finally {
 				setIsLoading(false)
 			}
@@ -44,13 +80,9 @@ const NotificationCenter = () => {
 			hasConnected = true
 		}
 		const handleNotification = (notification) => {
-			setNotifications((current) => {
-				const merged = [notification, ...current]
-				const uniqueById = new Map()
-				merged.forEach((item) => uniqueById.set(item._id, item))
-				return [...uniqueById.values()].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
-			})
-			toast.info(notification.title)
+			setNotifications((current) => mergeNotifications([notification], current))
+			const text = describeNotification(translateCurrent, notification)
+			toast.info(text.title, { description: [text.message, text.actor].filter(Boolean).join(' · ') })
 		}
 		socket.on('connect', handleConnect)
 		socket.on('notification:new', handleNotification)
@@ -61,54 +93,58 @@ const NotificationCenter = () => {
 		}
 	}, [])
 
-	const unreadCount = notifications.filter((notification) => !notification.readAt).length
-	const visibleNotifications = notifications
-		.filter((notification) => filter === 'all' || !notification.readAt)
-		.slice(0, 20)
-	const notificationIcon = (type) => {
-		if (type === 'task_commented') return MessageCircle
-		if (type === 'task_moved') return ArrowRightLeft
-		return ClipboardList
+	const close = (restoreFocus = true) => {
+		setIsOpen(false)
+		if (restoreFocus) triggerRef.current?.focus({ preventScroll: true })
 	}
+
+	// Desktop panel: close on Escape or a click outside, and start keyboard focus inside it.
+	useEffect(() => {
+		if (!isOpen || isPhone) return undefined
+		panelRef.current?.querySelector('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true })
+		const handlePointerDown = (event) => {
+			if (!wrapperRef.current?.contains(event.target)) setIsOpen(false)
+		}
+		const handleKeyDown = (event) => {
+			if (event.key === 'Escape') {
+				event.stopPropagation()
+				setIsOpen(false)
+				triggerRef.current?.focus({ preventScroll: true })
+			}
+		}
+		document.addEventListener('pointerdown', handlePointerDown)
+		document.addEventListener('keydown', handleKeyDown)
+		return () => {
+			document.removeEventListener('pointerdown', handlePointerDown)
+			document.removeEventListener('keydown', handleKeyDown)
+		}
+	}, [isOpen, isPhone])
+
+	const unreadCount = notifications.filter((notification) => !notification.readAt).length
+	const visible = notifications.filter((notification) => filter === 'all' || !notification.readAt).slice(0, 50)
 
 	const markRead = async (notification) => {
 		if (notification.readAt) return
+		const readAt = new Date().toISOString()
+		setNotifications((current) => current.map((item) => (item._id === notification._id ? { ...item, readAt } : item)))
 		try {
 			await axiosInstance.patch(`/notifications/${notification._id}/read`)
-			setNotifications((current) =>
-				current.map((item) =>
-					item._id === notification._id
-						? { ...item, readAt: new Date().toISOString() }
-						: item,
-				),
-			)
 		} catch {
-			toast.error('Could not update notification')
-		}
-	}
-
-	const openNotification = async (notification) => {
-		await markRead(notification)
-		if (notification.board && notification.task) {
-			setIsOpen(false)
-			navigate(`/workspaces/${notification.board}`, {
-				state: { notificationTaskId: notification.task },
-			})
+			setNotifications((current) => current.map((item) => (item._id === notification._id ? { ...item, readAt: null } : item)))
+			toast.error(t('app.notifications.updateError'))
 		}
 	}
 
 	const markAllRead = async () => {
 		if (!unreadCount) return
+		const previous = notifications
+		const readAt = new Date().toISOString()
+		setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || readAt })))
 		try {
 			await axiosInstance.patch('/notifications/read-all')
-			setNotifications((current) =>
-				current.map((notification) => ({
-					...notification,
-					readAt: notification.readAt || new Date().toISOString(),
-				})),
-			)
 		} catch {
-			toast.error('Could not update notifications')
+			setNotifications(previous)
+			toast.error(t('app.notifications.updateError'))
 		}
 	}
 
@@ -117,69 +153,144 @@ const NotificationCenter = () => {
 			await axiosInstance.delete(`/notifications/${notification._id}`)
 			setNotifications((current) => current.filter((item) => item._id !== notification._id))
 		} catch {
-			toast.error('Could not delete notification')
+			toast.error(t('app.notifications.deleteError'))
 		}
 	}
 
+	const openNotification = async (notification) => {
+		markRead(notification)
+		if (notification.board && notification.task) {
+			close(false)
+			navigate(`/workspaces/${notification.board}`, { state: { notificationTaskId: notification.task } })
+		}
+	}
+
+	const groups = ['today', 'yesterday', 'earlier']
+		.map((key) => ({ key, items: visible.filter((notification) => dayGroup(notification.createdAt) === key) }))
+		.filter((group) => group.items.length)
+
+	const toolbar = (
+		<div className='notify__toolbar'>
+			<SegmentedControl
+				label={t('app.notifications.filter')}
+				value={filter}
+				onChange={setFilter}
+				options={[
+					{ value: 'all', label: <>{t('app.notifications.all')}<span className='ui-segmented__count'>{notifications.length}</span></> },
+					{ value: 'unread', label: <>{t('app.notifications.unread')}<span className='ui-segmented__count'>{unreadCount}</span></> },
+				]}
+			/>
+		</div>
+	)
+	const markAllButton = unreadCount > 0 && (
+		<Button variant='ghost' size='sm' icon={CheckCheck} onClick={markAllRead}>{t('app.notifications.markAll')}</Button>
+	)
+
+	let body
+	if (isLoading) {
+		body = (
+			<div className='notify__loading' role='status' aria-label={t('app.notifications.loading')}>
+				{[0, 1, 2].map((index) => (
+					<div key={index} className='notify__skeleton'>
+						<Skeleton width={36} height={36} radius={999} />
+						<span><Skeleton width='70%' height={14} /><Skeleton width='90%' height={12} /></span>
+					</div>
+				))}
+			</div>
+		)
+	} else if (!visible.length) {
+		body = filter === 'unread' || notifications.length ? (
+			<EmptyState icon={CheckCheck} title={t('app.notifications.emptyUnreadTitle')} description={t('app.notifications.emptyUnreadText')} />
+		) : (
+			<EmptyState icon={BellOff} title={t('app.notifications.emptyTitle')} description={t('app.notifications.emptyText')} />
+		)
+	} else {
+		body = (
+			<div className='notify__list'>
+				{groups.map((group) => (
+					<section key={group.key} aria-labelledby={`notify-group-${group.key}`}>
+						<h3 className='notify__group' id={`notify-group-${group.key}`}>{t(`app.notifications.${group.key}`)}</h3>
+						<ul>
+							{group.items.map((notification) => {
+								const { title, message, context, actor } = describeNotification(t, notification)
+								const summary = [title, message, context, actor].filter(Boolean).join('. ')
+								const look = TYPE_LOOK[notification.type] || TYPE_LOOK.task_updated
+								const Icon = look.icon
+								const unread = !notification.readAt
+								return (
+									<li key={notification._id} className={cx('notify-item', unread && 'is-unread')}>
+										<button
+											type='button'
+											className='notify-item__main'
+											onClick={() => openNotification(notification)}
+											aria-label={unread ? t('app.notifications.unreadPrefix', { title: summary }) : summary}
+											data-i18n-ignore
+										>
+											<span className={`notify-item__icon notify-item__icon--${look.tone}`} aria-hidden='true'><Icon size={16} /></span>
+											<span className='notify-item__text'>
+												<span className='notify-item__title'>{title}</span>
+												{message && <span className='notify-item__message'>{message}</span>}
+												{context && <span className='notify-item__context'>{context}</span>}
+												<span className='notify-item__time'>{[actor, relativeTime(notification.createdAt, language, t('boards.justNow'))].filter(Boolean).join(' · ')}</span>
+											</span>
+											{unread && <span className='notify-item__dot' aria-hidden='true' />}
+										</button>
+										<span className='notify-item__actions'>
+											{unread && <IconButton icon={Check} size='sm' label={t('app.notifications.markRead')} onClick={() => markRead(notification)} />}
+											<IconButton icon={Trash2} size='sm' label={t('app.notifications.delete')} onClick={() => deleteNotification(notification)} />
+										</span>
+									</li>
+								)
+							})}
+						</ul>
+					</section>
+				))}
+			</div>
+		)
+	}
+
+	const subtitle = unreadCount ? t('app.notifications.waiting', { count: unreadCount }) : t('app.notifications.caughtUp')
+
 	return (
-		<Popover isOpen={isOpen} onClose={() => setIsOpen(false)} className='notification-center'>
+		<div className='notify' ref={wrapperRef}>
 			<button
+				ref={triggerRef}
 				type='button'
 				className='notification-trigger'
-				onClick={() => setIsOpen((value) => !value)}
-				aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+				onClick={() => (isOpen ? close() : setIsOpen(true))}
+				aria-label={unreadCount ? t('app.notifications.labelUnread', { count: unreadCount }) : t('app.notifications.label')}
+				title={t('app.notifications.label')}
 				aria-expanded={isOpen}
+				aria-haspopup='dialog'
 			>
-				<Bell size={18} />
-				{unreadCount > 0 && <span className='notification-badge'>{unreadCount > 9 ? '9+' : unreadCount}</span>}
+				<Bell size={18} aria-hidden='true' />
+				{unreadCount > 0 && <span className='notification-badge' aria-hidden='true'>{unreadCount > 9 ? '9+' : unreadCount}</span>}
 			</button>
-			{isOpen && (
-				<div className='popover-shell notification-popover' role='dialog' aria-label='Notifications'>
-					<div className='popover-header notification-popover-header'>
-						<div className='notification-heading-copy'><div className='notification-heading-title'><strong>Notifications</strong></div><small>{unreadCount ? `${unreadCount} waiting for you` : 'All caught up'}</small></div>
-						<button type='button' className='icon-button' onClick={() => setIsOpen(false)} aria-label='Close notifications' title='Close'>
-							<X size={16} />
-						</button>
-					</div>
-					<div className='notification-tabs' role='tablist' aria-label='Notification filter'>
-						<button type='button' role='tab' aria-selected={filter === 'all'} className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All <b>{notifications.length}</b></button>
-						<button type='button' role='tab' aria-selected={filter === 'unread'} className={filter === 'unread' ? 'is-active' : ''} onClick={() => setFilter('unread')}>Unread <b>{unreadCount}</b></button>
-					</div>
-					{isLoading ? (
-						<p className='notification-empty'>Loading notifications...</p>
-					) : visibleNotifications.length ? (
-						<div className='notification-list'>
-							{visibleNotifications.map((notification) => (
-								<div
-									key={notification._id}
-									className={`notification-item ${notification.readAt ? '' : 'is-unread'}`}
-									onClick={() => openNotification(notification)}
-									onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNotification(notification) } }}
-									role='button'
-									tabIndex='0'
-									aria-label={`${notification.readAt ? '' : 'Unread: '}${notification.title}`}
-								>
-									<span className='notification-item-icon'>{(() => { const Icon = notificationIcon(notification.type); return <Icon size={16} /> })()}</span>
-									<span className='notification-item-content'>
-										<strong>{notification.title}</strong>
-										<small>{notification.message}</small>
-										<em>{new Date(notification.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</em>
-									</span>
-									<button type='button' className='notification-delete' onClick={(event) => { event.stopPropagation(); deleteNotification(notification) }} aria-label={`Delete ${notification.title}`} title='Delete notification'><Trash2 size={14} /></button>
-								</div>
-							))}
+			{isPhone ? (
+				<Modal open={isOpen} onClose={() => close()} title={t('app.notifications.label')} description={subtitle} className='notify-sheet'>
+					{toolbar}
+					{markAllButton && <div className='notify__sheet-actions'>{markAllButton}</div>}
+					{body}
+				</Modal>
+			) : (
+				isOpen && (
+					<div className='notify__panel' role='dialog' aria-label={t('app.notifications.label')} ref={panelRef}>
+						<div className='notify__header'>
+							<div>
+								<h2 className='notify__title'>{t('app.notifications.label')}</h2>
+								<p className='notify__subtitle'>{subtitle}</p>
+							</div>
+							<span className='notify__header-actions'>
+								{markAllButton}
+								<IconButton icon={X} size='sm' label={t('app.notifications.close')} onClick={() => close()} />
+							</span>
 						</div>
-					) : (
-						<p className='notification-empty'>{filter === 'unread' ? 'You are all caught up.' : 'No notifications yet.'}</p>
-					)}
-					{unreadCount > 0 && (
-						<button type='button' className='notification-mark-all' onClick={markAllRead}>
-							<CheckCheck size={15} /> Mark all as read
-						</button>
-					)}
-				</div>
+						{toolbar}
+						<div className='notify__scroll'>{body}</div>
+					</div>
+				)
 			)}
-		</Popover>
+		</div>
 	)
 }
 

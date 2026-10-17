@@ -29,10 +29,12 @@ export const getDueDateState = (dueDate, now = new Date()) => {
 	return dueKey === todayKey ? 'today' : 'upcoming'
 }
 
-export const formatDueDate = (dueDate, options = { month: 'short', day: 'numeric' }) => {
+// Pass the interface locale (intlLocale(language)) so dates follow the app language,
+// not the browser's.
+export const formatDueDate = (dueDate, options = { month: 'short', day: 'numeric' }, locale = undefined) => {
 	const dueKey = getDueDateKey(dueDate)
 	if (!dueKey) return ''
-	return new Intl.DateTimeFormat(undefined, { ...options, timeZone: 'UTC' }).format(
+	return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(
 		new Date(`${dueKey}T00:00:00Z`),
 	)
 }

@@ -23,6 +23,7 @@ import {
 	getMyTasks,
 	getTeam,
 	getUserBoards,
+	getBoardsOverview,
 	leaveBoard,
 	removeBoard,
 	removeBoardMember,
@@ -74,6 +75,7 @@ for (const param of ['id', 'memberId', 'inviteId']) {
 
 // Boards
 router.get('/boards', verifiedAuthMiddleware, getUserBoards)
+router.get('/boards/overview', verifiedAuthMiddleware, getBoardsOverview)
 router.get('/my-tasks', verifiedAuthMiddleware, getMyTasks)
 router.get('/team', verifiedAuthMiddleware, getTeam)
 router.get('/public/:token', getPublicBoard)

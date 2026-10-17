@@ -1,246 +1,159 @@
-import {
-	CalendarDays,
-	ChevronDown,
-	ClipboardList,
-	Home,
-	Layers3,
-	Plus,
-	Search,
-	Users,
-} from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { LogoMark } from './BrandMark'
+import { CalendarDays, ClipboardList, LayoutGrid, Plus, Users } from 'lucide-react'
+import { useEffect, useSyncExternalStore } from 'react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useI18n } from '../i18n'
+import { useAuthStore } from '../store/useAuthStore'
+import { useBoardPrefs } from '../store/useBoardPrefs'
+import { selectMyOpenTasks, useBoardStats } from '../store/useBoardStats'
+import { Button, IconButton } from '../ui'
+import { cx } from '../ui/utils'
+import BoardTile from './app/BoardTile'
+import './app/app-shell.css'
+import BrandMark, { LogoMark } from './BrandMark'
 
-const MIN_WIDTH = 220
-const MAX_WIDTH = 286
-const SIDEBAR_WIDTH_KEY = 'kanban-sidebar-width'
+const MAX_RECENT = 5
+const MAX_STARRED = 8
+// Between phone and desktop the sidebar shows as a narrow rail of icons.
+const RAIL_QUERY = '(max-width: 1023px)'
 
-const readStoredWidth = () => {
-	if (typeof window === 'undefined') return 286
-	const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY))
-	return Number.isFinite(storedWidth)
-		? Math.min(Math.max(storedWidth, MIN_WIDTH), MAX_WIDTH)
-		: 286
+const subscribeRail = (callback) => {
+	const query = window.matchMedia(RAIL_QUERY)
+	query.addEventListener('change', callback)
+	return () => query.removeEventListener('change', callback)
+}
+const isRailWidth = () => window.matchMedia(RAIL_QUERY).matches
+
+const NAV_ITEMS = [
+	{ key: 'boards', to: '/workspaces', icon: LayoutGrid },
+	{ key: 'myTasks', to: '/my-tasks', icon: ClipboardList },
+	{ key: 'calendar', to: '/calendar', icon: CalendarDays },
+	{ key: 'team', to: '/team', icon: Users },
+]
+
+const useNavigationData = (boards) => {
+	const authUser = useAuthStore((state) => state.authUser)
+	const { starred, recent, load } = useBoardPrefs()
+	const loadStats = useBoardStats((state) => state.load)
+	const myOpenTasks = useBoardStats(selectMyOpenTasks)
+
+	useEffect(() => {
+		load(authUser?._id)
+	}, [authUser?._id, load])
+
+	useEffect(() => {
+		if (authUser?._id) loadStats()
+	}, [authUser?._id, loadStats])
+
+	const byId = new Map(boards.map((board) => [board._id, board]))
+	const starredBoards = starred.map((id) => byId.get(id)).filter(Boolean).slice(0, MAX_STARRED)
+	const recentBoards = recent
+		.map((entry) => byId.get(entry.id))
+		.filter((board) => board && !starred.includes(board._id))
+		.slice(0, MAX_RECENT)
+	return { starredBoards, recentBoards, myOpenTasks }
 }
 
-const RoomGroup = ({
-	title,
-	items,
-	isOpen,
-	onToggle,
-	search,
-	selectedBoardId,
-	onBoardSelect,
-}) => {
-	const filteredItems = items.filter((board) =>
-		board.name.toLowerCase().includes(search.toLowerCase()),
+/**
+ * The app's navigation: a sidebar on desktop (a rail of icons on tablets) and a
+ * bottom bar on phones. Pages pass their boards and how to open or create one.
+ */
+const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreateBoard, isCollapsed = false }) => {
+	const { t } = useI18n()
+	const location = useLocation()
+	const navigate = useNavigate()
+	const isRail = useSyncExternalStore(subscribeRail, isRailWidth, () => false)
+	const collapsed = isCollapsed || isRail
+	const { starredBoards, recentBoards, myOpenTasks } = useNavigationData(boards)
+
+	const createBoard = () => (onCreateBoard ? onCreateBoard() : navigate('/workspaces', { state: { createBoard: true } }))
+	const isActive = (to) => (to === '/workspaces' ? location.pathname.startsWith('/workspaces') : location.pathname === to)
+
+	const boardLink = (board) => (
+		<li key={board._id}>
+			<button
+				type='button'
+				className={cx('app-sidebar__board', selectedBoardId === board._id && 'is-active')}
+				onClick={() => onBoardSelect?.(board)}
+				aria-current={selectedBoardId === board._id ? 'page' : undefined}
+				title={collapsed ? board.name : undefined}
+			>
+				<BoardTile board={board} size={collapsed ? 28 : 20} />
+				<span className='app-sidebar__label' data-i18n-ignore>{board.name}</span>
+			</button>
+		</li>
 	)
 
-	return (
-		<div className='workspace-room-group'>
-			<button className='workspace-room-group-heading' onClick={onToggle}>
-				<span>{title}</span>
-				<span className='workspace-room-group-meta'>
-					<b>{items.length}</b>
-					<ChevronDown size={14} className={isOpen ? 'rotate-180' : ''} />
-				</span>
-			</button>
-			{isOpen && (
-				<div className='workspace-room-list'>
-					{filteredItems.map((board) => (
-						<button
-							key={board._id}
-							onClick={() => onBoardSelect(board)}
-							className={`workspace-room ${selectedBoardId === board._id ? 'active' : ''}`}
-							title={board.name}
-						>
-							<span className='workspace-room-icon'>
-								<Layers3 size={15} />
-							</span>
-											<span className='workspace-room-copy'>
-												<span className='workspace-room-name'>{board.name}</span>
-												<span className='workspace-room-dot' />
-											</span>
-						</button>
-					))}
-					{!filteredItems.length && (
-						<div className='workspace-rooms-empty'>
-							{search ? 'No rooms match your search.' : 'No rooms here yet.'}
-						</div>
-					)}
-				</div>
-			)}
+	const section = (title, items) => items.length > 0 && (
+		<div className='app-sidebar__section'>
+			<h2 className='app-sidebar__section-title'>{title}</h2>
+			<ul>{items.map(boardLink)}</ul>
 		</div>
 	)
-}
-
-const WorkspaceSidebar = ({
-	isOpen,
-	onClose,
-	boards = [],
-	selectedBoardId,
-	onBoardSelect,
-	onCreateBoard,
-	isCollapsed = false,
-}) => {
-	const [width, setWidth] = useState(readStoredWidth)
-	const [roomSearch, setRoomSearch] = useState('')
-	const [isOwnedOpen, setIsOwnedOpen] = useState(true)
-	const [isSharedOpen, setIsSharedOpen] = useState(true)
-	const isDragging = useRef(false)
-	const sidebarRef = useRef(null)
-	const [isResizing, setIsResizing] = useState(false)
-	const location = useLocation()
-	const effectiveWidth = Math.min(width, MAX_WIDTH)
-	const handleBoardSelect = (board) => {
-		onBoardSelect(board)
-		onClose?.()
-	}
-
-	useEffect(() => {
-		window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(effectiveWidth))
-	}, [effectiveWidth])
-
-	useEffect(() => {
-		const handleMouseMove = (event) => {
-			if (!isDragging.current) return
-			setWidth(Math.min(Math.max(event.clientX, MIN_WIDTH), MAX_WIDTH))
-		}
-		const handleMouseUp = () => {
-			isDragging.current = false
-			setIsResizing(false)
-			document.body.classList.remove('sidebar-resizing')
-			document.body.style.cursor = ''
-		}
-		const handleSelectStart = (event) => {
-			if (isDragging.current) event.preventDefault()
-		}
-		document.addEventListener('mousemove', handleMouseMove)
-		document.addEventListener('mouseup', handleMouseUp)
-		document.addEventListener('selectstart', handleSelectStart)
-		return () => {
-			document.removeEventListener('mousemove', handleMouseMove)
-			document.removeEventListener('mouseup', handleMouseUp)
-			document.removeEventListener('selectstart', handleSelectStart)
-			document.body.classList.remove('sidebar-resizing')
-		}
-	}, [])
-
-	const ownedBoards = boards.filter(
-		(board) => board.access === 'owned' || !board.access,
-	)
-	const sharedBoards = boards.filter((board) => board.access === 'invited')
-	const navItems = [
-		{ icon: <Home size={17} />, label: 'Workspace', to: '/workspaces' },
-		{ icon: <ClipboardList size={17} />, label: 'My tasks', to: '/my-tasks' },
-		{ icon: <CalendarDays size={17} />, label: 'Calendar', to: '/calendar' },
-		{ icon: <Users size={17} />, label: 'Team', to: '/team' },
-	]
 
 	return (
 		<>
-			<div
-				className={`workspace-overlay md:hidden ${isOpen ? 'is-open' : ''}`}
-				onClick={onClose}
-			/>
-			<aside
-				ref={sidebarRef}
-				style={{ width: isCollapsed ? 76 : effectiveWidth }}
-				className={`workspace-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''} h-full z-40 transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}
-			>
-				<div className='workspace-sidebar-main'>
-					<div className='workspace-brand-row'>
-						<Link to='/workspaces' className='workspace-brand'>
-							<LogoMark size={27} />
-							<span>KanbanHub</span>
-						</Link>
-					</div>
-					<div className='workspace-space-label'>
-						<span>Workspace</span>
-						<span className='workspace-private'>Private</span>
-					</div>
-					<nav className='workspace-primary-nav'>
-						{navItems.map((item) =>
-							item.disabled ? (
-								<button
-									key={item.label}
-									className='workspace-nav-item workspace-nav-disabled'
-									disabled
-									title={item.label}
+			<aside className={cx('app-sidebar', collapsed && 'is-collapsed')} aria-label={t('app.nav.label')}>
+				<Link to='/workspaces' className='app-sidebar__brand' aria-label={t('common.homeLink')}>
+					{collapsed ? <LogoMark size={32} /> : <BrandMark />}
+				</Link>
+				<nav className='app-sidebar__nav'>
+					<ul>
+						{NAV_ITEMS.map(({ key, to, icon: Icon }) => (
+							<li key={key}>
+								<NavLink
+									to={to}
+									className={() => cx('app-sidebar__link', isActive(to) && 'is-active')}
+									aria-current={isActive(to) ? 'page' : undefined}
+									title={collapsed ? t(`app.nav.${key}`) : undefined}
 								>
-									{item.icon}
-									<span>{item.label}</span>
-									<small>Soon</small>
-								</button>
-							) : (
-								<Link
-									key={item.label}
-									to={item.to}
-									onClick={onClose}
-									className={`workspace-nav-item ${location.pathname === item.to ? 'active' : ''}`}
-									title={item.label}
-								>
-									{item.icon}
-									<span>{item.label}</span>
-								</Link>
-							),
-						)}
-					</nav>
-					<div className='workspace-rooms-heading'>
-						<span>Rooms</span>
-						<button
-							onClick={onCreateBoard}
-							aria-label='Create a room'
-							title='Create a room'
-						>
-							<Plus size={16} />
-						</button>
-					</div>
-					<label className='workspace-room-search'>
-						<Search size={15} />
-						<input
-							value={roomSearch}
-							onChange={(event) => setRoomSearch(event.target.value)}
-							placeholder='Find a room'
-							aria-label='Find a room'
-						/>
-					</label>
-					<RoomGroup
-						title='My boards'
-						items={ownedBoards}
-						isOpen={isOwnedOpen}
-						onToggle={() => setIsOwnedOpen((value) => !value)}
-						search={roomSearch}
-						selectedBoardId={selectedBoardId}
-						onBoardSelect={handleBoardSelect}
-					/>
-					<RoomGroup
-						title='Shared with me'
-						items={sharedBoards}
-						isOpen={isSharedOpen}
-						onToggle={() => setIsSharedOpen((value) => !value)}
-						search={roomSearch}
-						selectedBoardId={selectedBoardId}
-						onBoardSelect={handleBoardSelect}
-					/>
-					<button className='workspace-create-room' onClick={onCreateBoard}>
-						<Plus size={16} /> New room
-					</button>
+									<Icon size={18} aria-hidden='true' />
+									<span className='app-sidebar__label'>{t(`app.nav.${key}`)}</span>
+									{key === 'myTasks' && myOpenTasks > 0 && (
+										<span className='app-sidebar__count' title={t('app.nav.myTasksCount', { count: myOpenTasks })}>
+											{myOpenTasks > 99 ? '99+' : myOpenTasks}
+										</span>
+									)}
+								</NavLink>
+							</li>
+						))}
+					</ul>
+				</nav>
+				<div className='app-sidebar__boards'>
+					{section(t('app.nav.starred'), starredBoards)}
+					{section(t('app.nav.recent'), recentBoards)}
+					{!collapsed && !starredBoards.length && !recentBoards.length && boards.length > 0 && (
+						<p className='app-sidebar__hint'>{t('app.nav.starHint')}</p>
+					)}
+				</div>
+				<div className='app-sidebar__footer'>
+					{collapsed ? (
+						<IconButton icon={Plus} label={t('app.nav.newBoard')} variant='secondary' onClick={createBoard} />
+					) : (
+						<Button variant='secondary' size='sm' icon={Plus} block onClick={createBoard}>{t('app.nav.newBoard')}</Button>
+					)}
 				</div>
 			</aside>
-			<div
-				onMouseDown={(event) => {
-					if (!isCollapsed && window.innerWidth >= 768) {
-						event.preventDefault()
-						isDragging.current = true
-						setIsResizing(true)
-						document.body.classList.add('sidebar-resizing')
-						document.body.style.cursor = 'col-resize'
-					}
-				}}
-				className={`workspace-resize-handle hidden md:block ${isCollapsed ? 'is-disabled' : ''}`}
-			/>
+
+			<nav className='app-bottom-nav' aria-label={t('app.nav.label')}>
+				{NAV_ITEMS.slice(0, 2).map(({ key, to, icon: Icon }) => (
+					<Link key={key} to={to} className={cx('app-bottom-nav__item', isActive(to) && 'is-active')} aria-current={isActive(to) ? 'page' : undefined}>
+						<span className='app-bottom-nav__icon'>
+							<Icon size={22} aria-hidden='true' />
+							{key === 'myTasks' && myOpenTasks > 0 && <span className='app-bottom-nav__badge' aria-hidden='true'>{myOpenTasks > 9 ? '9+' : myOpenTasks}</span>}
+						</span>
+						<span className='app-bottom-nav__label'>{t(`app.nav.${key}`)}</span>
+					</Link>
+				))}
+				<button type='button' className='app-bottom-nav__primary' onClick={createBoard} aria-label={t('app.nav.newBoard')}>
+					<Plus size={24} aria-hidden='true' />
+				</button>
+				{NAV_ITEMS.slice(2).map(({ key, to, icon: Icon }) => (
+					<Link key={key} to={to} className={cx('app-bottom-nav__item', isActive(to) && 'is-active')} aria-current={isActive(to) ? 'page' : undefined}>
+						<span className='app-bottom-nav__icon'><Icon size={22} aria-hidden='true' /></span>
+						<span className='app-bottom-nav__label'>{t(`app.nav.${key}`)}</span>
+					</Link>
+				))}
+			</nav>
 		</>
 	)
 }

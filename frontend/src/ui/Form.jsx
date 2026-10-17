@@ -129,6 +129,26 @@ export const SegmentedControl = ({ options, value, onChange, label, block = fals
 	</div>
 )
 
+/** A single choice shown as cards: icon, title and a one-line explanation per option. */
+export const RadioCards = ({ legend, name, options, value, onChange, className }) => (
+	<fieldset className={cx('ui-radio-cards', className)}>
+		{legend && <legend className='ui-field__label'>{legend}</legend>}
+		{options.map((option) => {
+			const Icon = option.icon
+			return (
+				<label key={option.value} className={cx('ui-radio-card', value === option.value && 'is-selected')}>
+					<input type='radio' name={name} value={option.value} checked={value === option.value} onChange={() => onChange(option.value)} />
+					{Icon && <span className='ui-radio-card__icon' aria-hidden='true'><Icon size={18} /></span>}
+					<span className='ui-radio-card__text'>
+						<span className='ui-radio-card__title'>{option.label}</span>
+						{option.description && <span className='ui-radio-card__description'>{option.description}</span>}
+					</span>
+				</label>
+			)
+		})}
+	</fieldset>
+)
+
 /** Toggle chip for filters. */
 export const Chip = ({ pressed, children, className, ...props }) => (
 	<button type='button' aria-pressed={pressed} className={cx('ui-chip', className)} {...props}>

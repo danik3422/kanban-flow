@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance } from '../lib/axios'
 import { clearBoardsCache } from '../lib/boardsCache'
+import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
 import { devUser, isDevAuthBypass } from '../lib/devMode'
 import { firebaseEnabled, isFirebaseLoaded, loadFirebase } from '../lib/firebase'
@@ -13,6 +14,7 @@ export const useAuthStore = create((set, get) => ({
 	authUser: null,
 	clearAuth: () => {
 		resetSocket()
+		useBoardStats.getState().reset()
 		set({ authUser: null })
 	},
 	isSigningIn: false,
@@ -112,6 +114,7 @@ export const useAuthStore = create((set, get) => ({
 			await axiosInstance.post('/auth/logout')
 			resetSocket()
 			clearBoardsCache()
+			useBoardStats.getState().reset()
 			// Only sign out of Firebase if this visit loaded it; never download it just for that.
 			if (isFirebaseLoaded()) loadFirebase().then((firebase) => firebase?.signOut(firebase.auth)).catch(() => {})
 			set({ authUser: null })

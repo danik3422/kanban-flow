@@ -15,9 +15,12 @@ const requests = []
 alice.on('request', (r) => { if (r.url().includes('/api/board/')) requests.push(new URL(r.url()).pathname) })
 await alice.goto(`${APP}/team`); await alice.waitForTimeout(2500)
 // Dev StrictMode runs effects twice, so assert the shape: only the team endpoint, never one call per board.
-const teamRequests = requests.filter((p) => p !== '/api/notifications')
+// The sidebar's one summary call for every board (task badge) is expected; per-board calls are not.
+const teamRequests = requests.filter((p) => p !== '/api/notifications' && p !== '/api/board/boards/overview')
 check('team loads without a request per board', teamRequests.length > 0 && teamRequests.every((p) => p === '/api/board/team'), teamRequests.join(','))
 check('team lists the colleague', (await alice.getByText('Carol Team').count()) > 0)
-const shared = await alice.locator('.workspace-room-group', { hasText: /shared with me/i }).innerText()
-check('sidebar still groups shared rooms', shared.includes(board.name), shared.replace(/\s+/g, ' ').slice(0, 120))
+await alice.goto(`${APP}/workspaces`); await alice.waitForSelector('.board-card')
+await alice.getByRole('radio', { name: /shared/i }).click()
+const shared = await alice.locator('.board-grid').innerText()
+check('the Shared filter lists boards others shared', shared.includes(board.name), shared.replace(/\s+/g, ' ').slice(0, 120))
 await browser.close(); done()

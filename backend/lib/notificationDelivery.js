@@ -16,8 +16,12 @@ export const notifyTaskRecipients = async ({
 	type = 'task_assigned',
 	title,
 	message,
+	details = {},
 }) => {
+	// People are not notified about their own changes.
 	const uniqueUserIds = [...new Set(userIds.map((userId) => userId.toString()))]
+		.filter((userId) => !actorId || userId !== actorId.toString())
+	if (!uniqueUserIds.length) return
 	const activeMemberIds = await BoardMember.find({
 		board: board._id,
 		user: { $in: uniqueUserIds },
@@ -34,12 +38,22 @@ export const notifyTaskRecipients = async ({
 		taskNotifications: { $ne: false },
 	}).select('_id email emailNotifications').lean()
 
+	const actor = actorId ? await User.findById(actorId).select('name email').lean() : null
+	const data = {
+		taskTitle: String(task.title || '').slice(0, 200),
+		boardName: String(board.name || '').slice(0, 100),
+		...(actor && { actorName: String(actor.name || actor.email || '').slice(0, 120) }),
+		...(details.fromColumn && { fromColumn: String(details.fromColumn).slice(0, 60) }),
+		...(details.toColumn && { toColumn: String(details.toColumn).slice(0, 60) }),
+	}
+
 	await Promise.all(users.map(async (user) => {
 		const notification = await Notification.create({
 			user: user._id,
 			type,
 			title: title || 'You were assigned a task',
 			message: message || `You were assigned “${task.title}” in ${board.name}.`,
+			data,
 			board: board._id,
 			task: task._id,
 		})

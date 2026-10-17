@@ -41,6 +41,9 @@
 	opacity: 0.55;
 	cursor: not-allowed;
 }
+/* Filled buttons lose their color when disabled; dimming alone still reads as active on dark. */
+.ui-btn.ui-btn--primary:disabled:not([aria-busy='true']),
+.ui-btn.ui-btn--danger:disabled:not([aria-busy='true']) { background: var(--ui-surface-3); color: var(--ui-text-muted); border-color: transparent; box-shadow: none; opacity: 1; }
 .ui-btn--sm { --btn-h: var(--ui-control-h-sm); padding: 0 var(--ui-space-3); font-size: var(--ui-text-sm); }
 .ui-btn--lg { --btn-h: var(--ui-control-h-lg); padding: 0 var(--ui-space-6); font-size: var(--ui-text-lg); }
 .ui-btn--block { width: 100%; }
@@ -439,6 +442,8 @@ select.ui-control.ui-control {
 	z-index: 1100;
 	min-width: 200px;
 	max-width: min(320px, calc(100vw - 16px));
+	max-height: calc(100dvh - 16px);
+	overflow-y: auto;
 	padding: var(--ui-space-1);
 	border: 1px solid var(--ui-border);
 	border-radius: var(--ui-radius-lg);
@@ -471,6 +476,9 @@ select.ui-control.ui-control {
 .ui-menu__item svg { color: var(--ui-text-muted); flex: 0 0 auto; }
 .ui-menu__item--danger svg { color: currentColor; }
 .ui-menu__separator { height: 1px; margin: var(--ui-space-1) 0; background: var(--ui-border); }
+.ui-menu__header { display: flex; flex-direction: column; gap: 2px; padding: var(--ui-space-2) var(--ui-space-3) var(--ui-space-3); }
+.ui-menu__header-title { overflow: hidden; color: var(--ui-text); font-size: var(--ui-text-md); font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.ui-menu__header-subtitle { overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-sm); white-space: nowrap; text-overflow: ellipsis; }
 .ui-menu__label { padding: var(--ui-space-2) var(--ui-space-3) var(--ui-space-1); font-size: var(--ui-text-xs); font-weight: 600; color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
 .ui-visually-hidden {
@@ -480,4 +488,49 @@ select.ui-control.ui-control {
 	overflow: hidden;
 	clip: rect(0 0 0 0);
 	white-space: nowrap;
+}
+
+/* Radio cards */
+.ui-radio-cards { display: flex; flex-direction: column; gap: var(--ui-space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.ui-radio-cards > legend { margin-bottom: var(--ui-space-2); padding: 0; }
+.ui-radio-card {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: var(--ui-space-3);
+	min-height: 56px;
+	padding: var(--ui-space-3);
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius-lg);
+	background: var(--ui-surface);
+	cursor: pointer;
+	transition: border-color var(--ui-duration) var(--ui-ease), background var(--ui-duration) var(--ui-ease);
+}
+.ui-radio-card:hover { border-color: var(--ui-border-strong); }
+.ui-radio-card.is-selected { border-color: var(--ui-accent); background: var(--ui-accent-soft); box-shadow: inset 0 0 0 1px var(--ui-accent); }
+.ui-radio-card input { position: absolute; opacity: 0; pointer-events: none; }
+.ui-radio-card:has(input:focus-visible) { box-shadow: var(--ui-focus-ring); }
+.ui-radio-card__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--ui-radius-md); background: var(--ui-surface-2); color: var(--ui-text-2); flex: 0 0 auto; }
+.ui-radio-card.is-selected .ui-radio-card__icon { background: var(--ui-surface); color: var(--ui-accent-soft-text); }
+.ui-radio-card__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ui-radio-card__title { font-weight: 600; color: var(--ui-text); }
+.ui-radio-card__description { color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.4; }
+.ui-radio-card.is-selected .ui-radio-card__description { color: var(--ui-accent-soft-text); }
+
+/* A count inside a segment reads after its label, quieter. */
+.ui-segmented__count { margin-left: 6px; color: var(--ui-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Mouse clicks leave no browser outline (Firefox draws a dotted one inside buttons);
+   keyboard focus keeps the ring defined with :focus-visible above. */
+.ui-btn:focus:not(:focus-visible),
+.ui-icon-btn:focus:not(:focus-visible),
+.ui-segmented__option:focus:not(:focus-visible),
+.ui-menu__item:focus:not(:focus-visible) { outline: none; }
+.ui-btn::-moz-focus-inner,
+.ui-icon-btn::-moz-focus-inner,
+.ui-segmented__option::-moz-focus-inner { border: 0; }
+
+/* Toggle segments are full touch targets on phones. */
+@media (max-width: 720px) {
+	.ui-segmented__option { min-height: 44px; }
 }

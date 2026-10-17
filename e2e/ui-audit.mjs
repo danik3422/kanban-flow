@@ -203,9 +203,10 @@ const inspectPage = ({ isMobile, checkTranslation, allowlist }) => {
 			if (words.length && !/@|https?:\/\//.test(text) && !words.every((word) => allow.test(word))) texts.add(text.slice(0, 60))
 		}
 		for (const element of document.querySelectorAll('[placeholder], [aria-label], [title]')) {
-			if (!isOnScreen(element)) continue
+			if (!isOnScreen(element) || element.closest('[data-i18n-ignore]')) continue
 			for (const attribute of ['placeholder', 'aria-label', 'title']) {
-				const value = element.getAttribute(attribute)?.trim()
+				// Names in quotes are user content (a board or person), not interface text.
+				const value = element.getAttribute(attribute)?.replace(/[«“"][^»”"]*[»”"]/g, '').trim()
 				const words = value?.match(/[A-Za-z]{2,}/g) || []
 				if (words.length && !/@/.test(value) && !words.every((word) => allow.test(word))) texts.add(`[${attribute}] ${value.slice(0, 60)}`)
 			}

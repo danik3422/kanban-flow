@@ -29,6 +29,8 @@ export const Modal = ({ open, onClose, title, description, size = 'md', footer, 
 		const previouslyFocused = document.activeElement
 		openModals += 1
 		document.body.style.overflow = 'hidden'
+		// Lets fixed page chrome (the phone bottom bar) step aside while a dialog is open.
+		document.body.classList.add('has-modal')
 		const focusTarget = initialFocusRef?.current || panelRef.current?.querySelector(FOCUSABLE) || panelRef.current
 		focusTarget?.focus({ preventScroll: true })
 
@@ -55,7 +57,10 @@ export const Modal = ({ open, onClose, title, description, size = 'md', footer, 
 		return () => {
 			document.removeEventListener('keydown', handleKeyDown)
 			openModals -= 1
-			if (openModals === 0) document.body.style.overflow = ''
+			if (openModals === 0) {
+				document.body.style.overflow = ''
+				document.body.classList.remove('has-modal')
+			}
 			if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus({ preventScroll: true })
 		}
 	}, [open, initialFocusRef])
@@ -234,6 +239,15 @@ export const Menu = ({ trigger, items, align = 'end', label }) => {
 						{items.filter(Boolean).map((item, index) => {
 							if (item.separator) return <div key={`separator-${index}`} className='ui-menu__separator' role='separator' />
 							if (item.heading) return <div key={`heading-${index}`} className='ui-menu__label'>{item.heading}</div>
+							// A non-interactive header, e.g. who is signed in.
+							if (item.header) {
+								return (
+									<div key={`header-${index}`} className='ui-menu__header' data-i18n-ignore>
+										<span className='ui-menu__header-title'>{item.header.title}</span>
+										{item.header.subtitle && <span className='ui-menu__header-subtitle'>{item.header.subtitle}</span>}
+									</div>
+								)
+							}
 							const Icon = item.icon
 							const content = (
 								<>
