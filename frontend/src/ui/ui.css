@@ -289,7 +289,9 @@ select.ui-control.ui-control {
 	line-height: 1;
 	user-select: none;
 }
-.ui-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+/* The photo always fills the circle exactly, whatever its shape; the avatar itself does not
+   clip, so the presence dot can sit on the edge. */
+.ui-avatar img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; border-radius: inherit; object-fit: cover; }
 /* The presence dot sits on the edge, so the avatar itself must not clip. */
 .ui-avatar__status {
 	position: absolute;

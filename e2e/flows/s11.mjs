@@ -37,6 +37,27 @@ check('cards show task counts from the server', /2 tasks/.test(alphaStats), alph
 check('overdue and mine leave out finished work in the last column', /1 overdue/.test(alphaStats) && /1 assigned to me/.test(alphaStats), alphaStats.replace(/\s+/g, ' '))
 check('the sidebar counts my open tasks', (await page.locator('.app-sidebar__link', { hasText: 'My tasks' }).locator('.app-sidebar__count').innerText()) === '3')
 
+// Photos of any shape stay inside their avatar circle (a tall phone photo once stretched into an oval).
+const overflowing = await page.evaluate(async () => {
+	const photo = (width, height) => `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#c0392b"/></svg>`)}`
+	const avatars = [...document.querySelectorAll('.ui-avatar')]
+	avatars.forEach((avatar, index) => {
+		const img = document.createElement('img')
+		img.src = index % 2 ? photo(300, 600) : photo(600, 300)
+		img.alt = ''
+		avatar.prepend(img)
+	})
+	await new Promise((resolve) => setTimeout(resolve, 300))
+	const result = avatars.filter((avatar) => {
+		const box = avatar.getBoundingClientRect()
+		const image = avatar.querySelector('img').getBoundingClientRect()
+		return Math.abs(image.width - box.width) > 1 || Math.abs(image.height - box.height) > 1
+	}).length
+	avatars.forEach((avatar) => avatar.querySelector('img')?.remove())
+	return `${result} of ${avatars.length}`
+})
+check('avatar photos of any shape fill their circle exactly', overflowing.startsWith('0 of') && !overflowing.endsWith(' 0'), overflowing)
+
 // Search, "/" shortcut and the empty state.
 await page.locator('body').click({ position: { x: 900, y: 700 } })
 await page.keyboard.press('/')
