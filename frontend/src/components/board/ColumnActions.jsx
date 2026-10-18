@@ -7,6 +7,8 @@ import { Button, Field, IconButton, Input, Modal, Select } from '../../ui'
 import { cx } from '../../ui/utils'
 import { COLUMN_COLOR_KEYS, COLUMN_COLORS } from '../../utils/columnColors'
 import { SORT_OPTIONS } from '../../utils/taskSorting'
+import { canAutoFocusTyping } from '../../utils/autoFocus'
+
 
 const PANEL_WIDTH = 304
 
@@ -108,7 +110,7 @@ const ColumnActions = ({ open, anchor, column, columns, canManage, isWatching, i
 		content = (
 			<form className='bc-menu__form' onSubmit={(event) => { event.preventDefault(); if (copyTitle.trim()) run('copy', copyTitle.trim()) }}>
 				<Field label={t('columns.menu.copyName')}>
-					<Input value={copyTitle} onChange={(event) => setCopyTitle(event.target.value)} maxLength={60} autoFocus />
+					<Input value={copyTitle} onChange={(event) => setCopyTitle(event.target.value)} maxLength={60} autoFocus={canAutoFocusTyping()} />
 				</Field>
 				<p className='bc-menu__hint'>{t('columns.menu.copyHint', { count: column.tasks.length })}</p>
 				<Button type='submit' block disabled={!copyTitle.trim()}>{t('columns.menu.copySubmit')}</Button>

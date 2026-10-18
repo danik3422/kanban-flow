@@ -11,6 +11,11 @@ const boardModel = new mongoose.Schema(
 			ref: 'User',
 			required: true,
 		},
+		// The board's labels: a name and a colour. Cards keep label names.
+		labels: [{
+			name: { type: String, required: true, maxlength: 40 },
+			color: { type: String, default: 'gray' },
+		}],
 		// "About this board": what it is for, shown in the board menu.
 		description: { type: String, default: '', maxlength: 1000 },
 		visibility: {

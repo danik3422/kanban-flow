@@ -1,7 +1,8 @@
-import { Check, ChevronDown, Filter, Globe2, Layers, LockKeyhole, MoreHorizontal, Star, UserPlus, UsersRound } from 'lucide-react'
+import { Check, ChevronDown, CircleUserRound, Filter, Globe2, Layers, LockKeyhole, MoreHorizontal, Star, SquareKanban, UserPlus, UsersRound } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useI18n } from '../../../i18n'
-import { AvatarGroup, Button, IconButton, Menu } from '../../../ui'
+import { Avatar, Badge, Button, IconButton, Menu } from '../../../ui'
+import { intlLocale } from '../../../i18n/translate'
 import { cx } from '../../../ui/utils'
 import './board-header.css'
 
@@ -123,16 +124,69 @@ export const BoardTitle = ({ board, canEdit, onRename, isStarred, onToggleStar, 
 	)
 }
 
+const localTime = (timeZone, language) => {
+	try {
+		return new Intl.DateTimeFormat(intlLocale(language), { hour: '2-digit', minute: '2-digit', timeZone }).format(new Date())
+	} catch {
+		return ''
+	}
+}
+
+/** One face on the board: a click shows who they are, with their profile and cards. */
+const PersonButton = ({ person, onOpenProfile, onShowCards }) => {
+	const { t, language } = useI18n()
+	const time = person.timezone ? localTime(person.timezone, language) : ''
+	return (
+		<Menu
+			label={person.name}
+			trigger={(props) => (
+				<button type='button' className='bh-person-button' {...props} aria-label={person.name}>
+					<Avatar name={person.name} src={person.avatar} size={28} status={person.status} decorative />
+				</button>
+			)}
+			items={[
+				{
+					header: {
+						avatar: <Avatar name={person.name} src={person.avatar} size={52} status={person.status} decorative />,
+						title: person.name,
+						subtitle: (
+							<>
+								{person.jobTitle && <span className='bh-card-line'>{person.jobTitle}</span>}
+								<span className='bh-card-line'>{person.email}</span>
+							</>
+						),
+						meta: (
+							<>
+								<Badge tone={person.role === 'owner' ? 'accent' : 'neutral'}>{t(`boardHeader.roles.${person.role}`)}</Badge>
+								{person.status === 'online' && <Badge tone='success'>{t('boardHeader.online')}</Badge>}
+								{time && <span>{t('boardHeader.localTime', { time })}</span>}
+							</>
+						),
+					},
+				},
+				{ separator: true },
+				{ label: person.isMe ? t('boardHeader.myProfile') : t('boardHeader.openProfile'), icon: CircleUserRound, onSelect: () => onOpenProfile(person) },
+				{ label: person.isMe ? t('boardHeader.myCards') : t('boardHeader.theirCards', { name: person.name }), icon: SquareKanban, onSelect: () => onShowCards(person) },
+			]}
+		/>
+	)
+}
+
 /** Right side: who is on the board, Filter, Share and the board menu. */
-export const BoardActions = ({ people, filterCount, onFilter, onShare, onMenu }) => {
+export const BoardActions = ({ people, filterCount, onFilter, onShare, onMenu, onOpenProfile, onShowCards }) => {
 	const { t } = useI18n()
 	const filtered = filterCount > 0
+	const shown = people.slice(0, 4)
+	const hidden = people.length - shown.length
 	return (
 		<div className='bh-actions'>
 			{people.length > 0 && (
-				<button type='button' className='bh-people' onClick={onShare} aria-label={`${t('boardHeader.people')}: ${people.map((person) => person.name).join(', ')}`}>
-					<AvatarGroup people={people} max={4} size={28} />
-				</button>
+				<div className='bh-people' role='group' aria-label={t('boardHeader.people')}>
+					{shown.map((person) => <PersonButton key={person._id} person={person} onOpenProfile={onOpenProfile} onShowCards={onShowCards} />)}
+					{hidden > 0 && (
+						<button type='button' className='bh-person-button bh-person-more' onClick={onShare} aria-label={t('boardHeader.morePeople', { count: hidden })}>+{hidden}</button>
+					)}
+				</div>
 			)}
 			<Button
 				variant='secondary'

@@ -1,4 +1,4 @@
-import { Check, Languages, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
+import { Languages, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../../i18n'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -28,22 +28,37 @@ const AccountMenu = () => {
 				{ label: t('app.account.profile'), icon: UserRound, onSelect: () => navigate('/profile') },
 				{ label: t('app.account.settings'), icon: Settings2, onSelect: () => navigate('/settings') },
 				{ separator: true },
-				{ heading: t('app.account.theme') },
-				...['light', 'dark', 'system'].map((option) => ({
-					label: t(`theme.${option}`),
-					icon: option === theme ? Check : THEME_ICONS[option],
-					checked: option === theme,
-					onSelect: () => applyTheme(option),
-				})),
-				{ separator: true },
-				{ heading: t('app.account.language') },
-				...SUPPORTED_LANGUAGES.map((code) => ({
-					label: LANGUAGE_NAMES[code],
-					icon: code === language ? Check : Languages,
-					checked: code === language,
-					lang: code,
-					onSelect: () => setLanguage(code),
-				})),
+				{
+					group: {
+						id: 'theme',
+						label: t('app.account.theme'),
+						icon: THEME_ICONS[theme] || Monitor,
+						value: t(`theme.${theme}`),
+						items: ['light', 'dark', 'system'].map((option) => ({
+							label: t(`theme.${option}`),
+							icon: THEME_ICONS[option],
+							checked: option === theme,
+							mark: 'end',
+							onSelect: () => applyTheme(option),
+						})),
+					},
+				},
+				{
+					group: {
+						id: 'language',
+						label: t('app.account.language'),
+						icon: Languages,
+						value: LANGUAGE_NAMES[language],
+						valueLang: language,
+						items: SUPPORTED_LANGUAGES.map((code) => ({
+							label: LANGUAGE_NAMES[code],
+							checked: code === language,
+							mark: 'end',
+							lang: code,
+							onSelect: () => setLanguage(code),
+						})),
+					},
+				},
 				{ separator: true },
 				{ label: t('app.account.logout'), icon: LogOut, tone: 'danger', onSelect: logout },
 			]}

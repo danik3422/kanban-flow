@@ -148,8 +148,6 @@ const BoardColumn = ({
 	onToggleCollapse,
 	onOpenMenu,
 	onHeaderPointerDown,
-	onDragOver,
-	onDrop,
 	children,
 }) => {
 	const { t } = useI18n()
@@ -174,8 +172,6 @@ const BoardColumn = ({
 		'data-column-id': column._id,
 		'data-color': column.color || undefined,
 		style: tint ? { '--bc-tint': tint } : undefined,
-		onDragOver,
-		onDrop,
 	}
 
 	if (isCollapsed) {

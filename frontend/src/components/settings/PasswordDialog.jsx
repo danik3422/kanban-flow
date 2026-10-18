@@ -6,6 +6,8 @@ import { translateServerMessageCurrent } from '../../i18n/translate'
 import { axiosInstance } from '../../lib/axios'
 import { Button, Field, Modal, PasswordInput } from '../../ui'
 import { meetsPasswordRules } from '../../utils/password'
+import { canAutoFocusTyping } from '../../utils/autoFocus'
+
 
 const EMPTY = { current: '', next: '', repeat: '' }
 
@@ -82,11 +84,11 @@ const PasswordDialog = ({ open, mode, providerLabel, onClose, onAddPassword }) =
 			<form id='st-password-form' className='st-dialog' onSubmit={submit} noValidate>
 				{!isAdd && (
 					<Field label={t('settings.password.current')} error={errors.current}>
-						<PasswordInput id='st-password-current' value={form.current} onChange={update('current')} autoComplete='current-password' autoFocus />
+						<PasswordInput id='st-password-current' value={form.current} onChange={update('current')} autoComplete='current-password' autoFocus={canAutoFocusTyping()} />
 					</Field>
 				)}
 				<Field label={t('settings.password.next')} error={errors.next}>
-					<PasswordInput id='st-password-next' value={form.next} onChange={update('next')} autoComplete='new-password' autoFocus={isAdd} aria-describedby='st-password-rules' />
+					<PasswordInput id='st-password-next' value={form.next} onChange={update('next')} autoComplete='new-password' autoFocus={canAutoFocusTyping() && (isAdd)} aria-describedby='st-password-rules' />
 				</Field>
 				<PasswordRules password={form.next} id='st-password-rules' />
 				<Field label={t('settings.password.repeat')} error={errors.repeat}>

@@ -8,6 +8,7 @@ const BOARD_EVENTS = [
 	'activity:new',
 	'task:created',
 	'task:updated',
+	'task:comments-changed',
 	'task:deleted',
 	'column:tasks-reordered',
 	'column:updated',

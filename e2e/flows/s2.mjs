@@ -37,19 +37,19 @@ await addCard('Ship the audit fixes')
 await page.waitForTimeout(900)
 check('task created', (await todo.locator('.task-card').count()) === 1)
 
-// open details, set today's due date, save → only dueDate must be sent
+// open the card, pick today in the dates panel → only the dates are sent
 await todo.locator('.task-card').first().click()
-await page.waitForSelector('#task-due-date')
-const now = new Date()
-const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-await page.fill('#task-due-date', today)
+await page.waitForSelector('.cm-modal')
+await page.getByRole('button', { name: 'Dates', exact: true }).click()
+await page.locator('.cp').getByRole('button', { name: 'Today', exact: true }).click()
 const patch = page.waitForRequest((r) => r.method() === 'PATCH' && r.url().includes('/board/tasks/'))
-await page.getByRole('button', { name: 'Save changes' }).click()
+await page.locator('.cp').getByRole('button', { name: 'Save', exact: true }).click()
 const body = JSON.parse((await patch).postData())
-check('task save sends only edited fields', JSON.stringify(Object.keys(body)) === '["dueDate"]', JSON.stringify(body))
+check('task save sends only the dates', Object.keys(body).every((key) => ['dueDate', 'startDate'].includes(key)) && Boolean(body.dueDate), JSON.stringify(body))
 await page.waitForTimeout(900)
-const dueClass = await todo.locator('.task-due-icon').first().getAttribute('class').catch(() => '')
-check('card marks a task due today as "today"', dueClass?.includes('today'), dueClass)
+await page.keyboard.press('Escape')
+await page.waitForTimeout(300)
+check('card marks a task due today as "today"', (await todo.locator('.ct-due--today').count()) === 1)
 
 // realtime: second tab sees a task created in the first one
 const other = await ctx.newPage(); watch(other, 'alice-tab2')

@@ -147,7 +147,10 @@ app.disable('x-powered-by')
 app.set('trust proxy', env.trustProxy)
 app.use(helmet())
 // Avatar payloads are compressed client-side, but base64 adds overhead.
-app.use(express.json({ limit: '200kb' }))
+// Card images are the one upload large enough to need more room.
+const jsonBody = express.json({ limit: '200kb' })
+const imageBody = express.json({ limit: '8mb' })
+app.use((req, res, next) => (req.path.endsWith('/attachments/image') ? imageBody : jsonBody)(req, res, next))
 app.use(cookieParser())
 app.use(
 	cors({

@@ -2,10 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/svg+xml" href="/kanban-mark.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="mask-icon" href="/kanban-mark.svg" color="#0f766e" />
+    <!-- ?v= busts Safari's sticky favicon cache; PNGs first because Safari ignores SVG tab icons. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=3" />
+    <link rel="icon" href="/favicon.ico?v=3" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/kanban-mark.svg?v=3" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg?v=3" color="#0f766e" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Fonts load without blocking the first paint; system fonts show until they arrive. -->
@@ -33,20 +36,105 @@
       html[data-theme='dark'] { background: #0e1513; }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="KanbanHub helps teams turn ideas into visible progress, aligned work, and clear momentum." />
-    <meta name="robots" content="index,follow" />
+    <!-- Defaults for the home page; src/lib/seo.js rewrites these per route and language. -->
+    <title>KanbanHub — Free, open-source kanban boards</title>
+    <meta name="description" content="Plan work on boards with lists, cards, checklists, due dates and time tracking. Free and open source, with real-time sync and no trackers or ads." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="https://kanbanhub.app/" />
+    <meta name="application-name" content="KanbanHub" />
+    <meta name="apple-mobile-web-app-title" content="KanbanHub" />
+    <meta name="author" content="Danylo Syloats" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="author" href="https://github.com/danik3422" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="KanbanHub" />
-    <meta property="og:title" content="KanbanHub — Make progress visible" />
-    <meta property="og:description" content="A focused workspace for turning ideas into visible progress." />
-    <meta property="og:image" content="/icon-512.png" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="KanbanHub — Make progress visible" />
-    <meta name="twitter:description" content="A focused workspace for turning ideas into visible progress." />
-    <link rel="canonical" />
-    <title>KanbanHub — Make progress visible</title>
+    <meta property="og:title" content="KanbanHub — Free, open-source kanban boards" />
+    <meta property="og:description" content="Plan work on boards with lists, cards, checklists, due dates and time tracking. Free and open source, with real-time sync and no trackers or ads." />
+    <meta property="og:url" content="https://kanbanhub.app/" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="uk_UA" />
+    <meta property="og:locale:alternate" content="ru_RU" />
+    <meta property="og:image" content="https://kanbanhub.app/og-image.png" />
+    <meta property="og:image:secure_url" content="https://kanbanhub.app/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="KanbanHub — Make progress visible. Free, open-source kanban. No trackers." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="KanbanHub — Free, open-source kanban boards" />
+    <meta name="twitter:description" content="Plan work on boards with lists, cards, checklists, due dates and time tracking. Free and open source, with real-time sync and no trackers or ads." />
+    <meta name="twitter:image" content="https://kanbanhub.app/og-image.png" />
+    <meta name="twitter:image:alt" content="KanbanHub — Make progress visible. Free, open-source kanban. No trackers." />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://kanbanhub.app/#website",
+            "url": "https://kanbanhub.app/",
+            "name": "KanbanHub",
+            "description": "Free, open-source kanban boards for small teams and individuals.",
+            "inLanguage": ["en", "uk", "ru"],
+            "publisher": { "@id": "https://kanbanhub.app/#author" }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://kanbanhub.app/#author",
+            "name": "Danylo Syloats",
+            "url": "https://github.com/danik3422",
+            "sameAs": ["https://github.com/danik3422"]
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://kanbanhub.app/#app",
+            "name": "KanbanHub",
+            "url": "https://kanbanhub.app/",
+            "description": "Free, open-source kanban app for small teams and individuals: boards with lists, cards, checklists, due dates, time tracking, a calendar and real-time updates. No analytics, no trackers, no ads.",
+            "image": "https://kanbanhub.app/og-image.png",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "Project management",
+            "operatingSystem": "Web browser",
+            "browserRequirements": "Requires JavaScript. Works in modern browsers on phone and desktop.",
+            "inLanguage": ["en", "uk", "ru"],
+            "isAccessibleForFree": true,
+            "author": { "@id": "https://kanbanhub.app/#author" },
+            "publisher": { "@id": "https://kanbanhub.app/#author" },
+            "sameAs": ["https://github.com/danik3422/kanban-flow"],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            "featureList": [
+              "Boards with lists and cards",
+              "Labels, covers, start and due dates, checklists and attachments",
+              "Card members, comments with edit history",
+              "Time tracking with timers, manual time, estimates and per-person totals",
+              "Calendar and My tasks views",
+              "Invites by email or link, roles and public read-only board links",
+              "Real-time updates",
+              "In-app, email and desktop notifications",
+              "Passkeys, Google, Microsoft and Apple sign-in, device sessions",
+              "Light and dark theme",
+              "English, Ukrainian and Russian interface"
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
+    <noscript>
+      <main style="max-width: 40rem; margin: 3rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; line-height: 1.5; color: #10201c;">
+        <h1>KanbanHub — Make progress visible</h1>
+        <p>KanbanHub is a free, open-source kanban app for small teams and individuals. Plan work on boards with lists and cards, add checklists, due dates and attachments, track time, and see everything on a calendar. Changes show up for everyone in real time.</p>
+        <p>No analytics, no trackers, no ads, and your data is never sold. Available in English, Ukrainian and Russian, on phone and desktop.</p>
+        <p>KanbanHub needs JavaScript to run. Please enable it, or read more <a href="/about">about KanbanHub</a> and the <a href="https://github.com/danik3422/kanban-flow">source code on GitHub</a>.</p>
+        <p><a href="/signup">Sign up free</a> · <a href="/login">Log in</a></p>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

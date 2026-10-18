@@ -5,6 +5,8 @@ import { Avatar, Button, Checkbox, EmptyState, Field, Input, Modal, RadioCards, 
 import { cx } from '../../../ui/utils'
 import { relativeTime } from '../../../utils/relativeTime'
 import { VISIBILITIES, VISIBILITY_ICONS } from './BoardHeader'
+import { canAutoFocusTyping } from '../../../utils/autoFocus'
+
 
 const Item = ({ icon: Icon, label, hint, onClick, tone }) => (
 	<button type='button' className={cx('bh-menu-item', tone === 'danger' && 'is-danger')} onClick={onClick}>
@@ -123,7 +125,7 @@ const BoardMenu = ({
 				canManage ? (
 					<form className='bh-menu-form' onSubmit={saveDescription}>
 						<Field label={t('boardHeader.about')} hint={t('boardHeader.aboutText')}>
-							<Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('boardHeader.descriptionPlaceholder')} maxLength={1000} rows={6} autoFocus />
+							<Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('boardHeader.descriptionPlaceholder')} maxLength={1000} rows={6} autoFocus={canAutoFocusTyping()} />
 						</Field>
 						<Button type='submit' loading={busy} disabled={description.trim() === (board?.description || '')}>{t('common.save')}</Button>
 					</form>
@@ -169,7 +171,7 @@ const BoardMenu = ({
 			{view === 'copy' && (
 				<form className='bh-menu-form' onSubmit={copy}>
 					<Field label={t('boardHeader.copyName')}>
-						<Input value={copyName} onChange={(event) => setCopyName(event.target.value)} maxLength={100} autoFocus />
+						<Input value={copyName} onChange={(event) => setCopyName(event.target.value)} maxLength={100} autoFocus={canAutoFocusTyping()} />
 					</Field>
 					<Checkbox checked={keepCards} onChange={(event) => setKeepCards(event.target.checked)} label={t('boardHeader.copyKeep')} />
 					<p className='bh-muted'>{t('boardHeader.copyKeepHint')}</p>

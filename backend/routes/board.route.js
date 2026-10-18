@@ -1,5 +1,25 @@
 import express from 'express'
 import {
+	addImageAttachment,
+	addLinkAttachment,
+	addTimeEntry,
+	copyTask,
+	createBoardLabel,
+	deleteAttachment,
+	deleteBoardLabel,
+	deleteComment,
+	deleteTimeEntry,
+	getFeatures,
+	getRunningTimer,
+	getTaskTime,
+	startTimer,
+	stopTimer,
+	toggleWatchTask,
+	updateBoardLabel,
+	updateComment,
+	updateTimeEntry,
+} from '../controllers/card.controller.js'
+import {
 	acceptBoardInvite,
 	copyBoardInviteLink,
 	copyBoard,
@@ -30,6 +50,7 @@ import {
 	leaveBoard,
 	removeBoard,
 	removeBoardMember,
+	resendBoardInvite,
 	revokeBoardInvite,
 	revokePublicBoardLink,
 	updateBoard,
@@ -46,8 +67,6 @@ import {
 import {
 	addTaskComment,
 	getTaskActivities,
-	startTaskTimer,
-	stopTaskTimer,
 } from '../controllers/taskActivity.controller.js'
 import { verifiedAuthMiddleware, optionalAuthMiddleware } from '../middlewares/auth.middleware.js'
 import {
@@ -67,7 +86,14 @@ import {
 	memberRoleSchema,
 	reorderTasksSchema,
 	taskCommentSchema,
+	attachmentSchema,
+	boardLabelSchema,
+	boardLabelUpdateSchema,
 	copyBoardSchema,
+	copyTaskSchema,
+	imageAttachmentSchema,
+	timeEntrySchema,
+	timeEntryUpdateSchema,
 	updateBoardSchema,
 	updateColumnSchema,
 	updateTaskSchema,
@@ -143,6 +169,7 @@ router.post(
 	validateBody(createInviteSchema),
 	createBoardInvite,
 )
+router.post('/boards/:id/invites/:inviteId/resend', verifiedAuthMiddleware, inviteLimiter, boardMiddleware, resendBoardInvite)
 router.post(
 	'/boards/:id/invites/:inviteId/copy',
 	verifiedAuthMiddleware,
@@ -188,7 +215,23 @@ router.patch('/tasks/:id', authMiddleware, validateBody(updateTaskSchema), updat
 router.delete('/tasks/:id', authMiddleware, deleteTask)
 router.get('/tasks/:id/activities', authMiddleware, getTaskActivities)
 router.post('/tasks/:id/comments', authMiddleware, validateBody(taskCommentSchema), addTaskComment)
-router.post('/tasks/:id/timer/start', authMiddleware, startTaskTimer)
-router.post('/tasks/:id/timer/stop', authMiddleware, stopTaskTimer)
+router.post('/tasks/:id/timer/start', authMiddleware, startTimer)
+router.post('/tasks/:id/timer/stop', authMiddleware, stopTimer)
+router.get('/tasks/:id/time', authMiddleware, getTaskTime)
+router.post('/tasks/:id/time', authMiddleware, validateBody(timeEntrySchema), addTimeEntry)
+router.patch('/time/:entryId', authMiddleware, validateBody(timeEntryUpdateSchema), updateTimeEntry)
+router.delete('/time/:entryId', authMiddleware, deleteTimeEntry)
+router.get('/timer/running', authMiddleware, getRunningTimer)
+router.patch('/tasks/:id/comments/:commentId', authMiddleware, validateBody(taskCommentSchema), updateComment)
+router.delete('/tasks/:id/comments/:commentId', authMiddleware, deleteComment)
+router.post('/tasks/:id/attachments', authMiddleware, validateBody(attachmentSchema), addLinkAttachment)
+router.post('/tasks/:id/attachments/image', authMiddleware, validateBody(imageAttachmentSchema), addImageAttachment)
+router.delete('/tasks/:id/attachments/:attachmentId', authMiddleware, deleteAttachment)
+router.post('/tasks/:id/copy', authMiddleware, validateBody(copyTaskSchema), copyTask)
+router.post('/tasks/:id/watch', authMiddleware, toggleWatchTask)
+router.post('/boards/:id/labels', verifiedAuthMiddleware, validateBody(boardLabelSchema), createBoardLabel)
+router.patch('/boards/:id/labels/:labelId', verifiedAuthMiddleware, validateBody(boardLabelUpdateSchema), updateBoardLabel)
+router.delete('/boards/:id/labels/:labelId', verifiedAuthMiddleware, deleteBoardLabel)
+router.get('/features', authMiddleware, getFeatures)
 
 export default router

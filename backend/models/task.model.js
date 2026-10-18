@@ -46,8 +46,41 @@ const taskSchema = new mongoose.Schema(
 			enum: ['none', 'low', 'medium', 'high', 'urgent'],
 			default: 'none',
 		},
+		// Total of finished time entries (see TimeEntry); kept here for the card face.
 		trackedSeconds: { type: Number, default: 0 },
+		// Older single shared timer, superseded by per-person time entries.
 		timerStartedAt: { type: Date, default: null },
+		estimateMinutes: { type: Number, default: 0, min: 0 },
+		startDate: { type: Date, default: null },
+		// Marked done on the card itself (the round checkbox), wherever it sits.
+		completed: { type: Boolean, default: false },
+		completedAt: { type: Date, default: null },
+		cover: {
+			type: new mongoose.Schema({
+				type: { type: String, enum: ['color', 'photo'], required: true },
+				id: String,
+				key: String,
+				license: String,
+				url: String,
+				thumb: String,
+				color: String,
+				author: String,
+				authorUrl: String,
+				source: String,
+				// strip: a band above the title; full: the photo or colour fills the card.
+				size: { type: String, enum: ['strip', 'full'], default: 'strip' },
+			}, { _id: false }),
+			default: null,
+		},
+		attachments: [{
+			kind: { type: String, enum: ['link', 'image'], default: 'link' },
+			url: { type: String, required: true },
+			name: { type: String, default: '' },
+			addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+			createdAt: { type: Date, default: Date.now },
+		}],
+		// People who follow the card: they hear about comments and moves.
+		watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 	},
 	{ timestamps: true },
 )

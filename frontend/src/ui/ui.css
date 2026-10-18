@@ -149,6 +149,12 @@ select.ui-control.ui-control {
 .ui-input-group__icon + .ui-control.ui-control { padding-left: 38px; }
 .ui-input-group__action { position: absolute; right: 4px; }
 .ui-input-group:has(.ui-input-group__action) .ui-control.ui-control { padding-right: 48px; }
+.ui-input-group__action { display: flex; align-items: center; gap: 2px; }
+.ui-input-group:has(.ui-caps) .ui-control.ui-control { padding-right: 80px; }
+/* Our own Caps Lock hint replaces the browser's (Safari draws it stretched). */
+.ui-control.ui-control::-webkit-caps-lock-indicator { display: none; content: none; }
+.ui-caps { display: grid; flex: 0 0 auto; place-items: center; width: 26px; height: 26px; border-radius: var(--ui-radius-sm); background: var(--ui-warning-soft); color: var(--ui-warning-soft-text); animation: ui-pop-in var(--ui-duration) var(--ui-ease); }
+.ui-caps svg { display: block; width: 16px; height: 16px; flex: none; }
 
 .ui-check { display: inline-flex; align-items: flex-start; gap: var(--ui-space-3); cursor: pointer; color: var(--ui-text); font-size: var(--ui-text-md); }
 .ui-check__box.ui-check__box {
@@ -478,6 +484,18 @@ select.ui-control.ui-control {
 	cursor: pointer;
 }
 .ui-menu__item:hover, .ui-menu__item:focus-visible { background: var(--ui-surface-2); }
+/* Groups: "Theme · Light ›" opens its choices in place, indented under it. */
+.ui-menu__group-toggle .ui-menu__value { margin-left: auto; overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.ui-menu__chevron { flex: 0 0 auto; color: var(--ui-text-muted); transition: transform var(--ui-duration) var(--ui-ease); }
+.ui-menu__group.is-open .ui-menu__chevron { transform: rotate(180deg); }
+.ui-menu__group.is-open .ui-menu__group-toggle { background: var(--ui-surface-2); }
+.ui-menu__sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px; padding: 2px 0 2px 12px; border-left: 2px solid var(--ui-border); margin-left: 20px; animation: ui-fade-in var(--ui-duration) var(--ui-ease); }
+.ui-menu__sub .ui-menu__item { min-height: 40px; }
+.ui-menu__check { margin-left: auto; color: var(--ui-accent); }
+.ui-menu__sub .ui-menu__item[aria-checked='true'] { color: var(--ui-accent-soft-text); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+	.ui-menu__chevron, .ui-menu__sub { transition: none; animation: none; }
+}
 .ui-menu__item--danger { color: var(--ui-danger-soft-text); }
 .ui-menu__item--danger:hover { background: var(--ui-danger-soft); }
 .ui-menu__item svg { color: var(--ui-text-muted); flex: 0 0 auto; }
@@ -485,6 +503,10 @@ select.ui-control.ui-control {
 .ui-menu__separator { height: 1px; margin: var(--ui-space-1) 0; background: var(--ui-border); }
 .ui-menu__header { display: flex; flex-direction: column; gap: 2px; padding: var(--ui-space-2) var(--ui-space-3) var(--ui-space-3); }
 .ui-menu__header-title { overflow: hidden; color: var(--ui-text); font-size: var(--ui-text-md); font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.ui-menu__header-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* A person's card: a big avatar beside who they are. */
+.ui-menu__header--person { flex-direction: row; align-items: center; gap: var(--ui-space-3); min-width: 260px; padding: var(--ui-space-3); }
+.ui-menu__header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .ui-menu__header-subtitle { overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-sm); white-space: nowrap; text-overflow: ellipsis; }
 .ui-menu__label { padding: var(--ui-space-2) var(--ui-space-3) var(--ui-space-1); font-size: var(--ui-text-xs); font-weight: 600; color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 

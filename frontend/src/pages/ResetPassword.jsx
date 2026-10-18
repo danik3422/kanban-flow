@@ -9,6 +9,8 @@ import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { Button, Field, Input, PasswordInput, Spinner } from '../ui'
 import { meetsPasswordRules } from '../utils/password'
+import { canAutoFocusTyping } from '../utils/autoFocus'
+
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -156,7 +158,7 @@ const ResetPassword = () => {
 							}}
 							placeholder={t('auth.fields.newPasswordPlaceholder')}
 							autoComplete='new-password'
-							autoFocus
+							autoFocus={canAutoFocusTyping()}
 							aria-describedby='reset-password-rules'
 						/>
 					</Field>
@@ -197,7 +199,7 @@ const ResetPassword = () => {
 							placeholder={t('auth.fields.emailPlaceholder')}
 							autoComplete='username'
 							inputMode='email'
-							autoFocus
+							autoFocus={canAutoFocusTyping()}
 						/>
 					</Field>
 					<Button type='submit' size='lg' block loading={isSubmitting}>

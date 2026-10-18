@@ -43,13 +43,24 @@ export const addTask = (columns, task) =>
 			: column,
 	)
 
-export const replaceTask = (columns, task) =>
-	columns.map((column) => {
+// Updates may leave out what only the card face needs (comment count, running
+// timers): keep what the board already knows unless the update brings it.
+export const replaceTask = (columns, task) => {
+	const previous = columns.flatMap((column) => column.tasks).find((item) => item._id === task._id)
+	const merged = previous ? { ...previous, ...task } : task
+	return columns.map((column) => {
 		const withoutTask = column.tasks.filter((item) => item._id !== task._id)
-		return column._id === task.column
-			? { ...column, tasks: sortColumnTasks(column, [...withoutTask, task]) }
+		return column._id === merged.column
+			? { ...column, tasks: sortColumnTasks(column, [...withoutTask, merged]) }
 			: { ...column, tasks: withoutTask }
 	})
+}
+
+export const setTaskCommentCount = (columns, taskId, commentCount) =>
+	columns.map((column) => ({
+		...column,
+		tasks: column.tasks.map((task) => (task._id === taskId ? { ...task, commentCount } : task)),
+	}))
 
 export const removeTask = (columns, taskId) =>
 	columns.map((column) => ({

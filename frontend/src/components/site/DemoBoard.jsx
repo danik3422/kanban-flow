@@ -1,24 +1,27 @@
-import { CheckCircle2, GripVertical, ListChecks } from 'lucide-react'
+import { CheckCircle2, Circle, CircleCheck, Clock3, GripVertical, MessageSquare, Paperclip, Share2, SquareCheck, Star } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '../../i18n'
-import { Avatar, AvatarGroup, Badge } from '../../ui'
+import { intlLocale } from '../../i18n/translate'
+import { Avatar, AvatarGroup } from '../../ui'
 import { cx } from '../../ui/utils'
+import { CARD_COLORS, formatClock } from '../../utils/cardDisplay'
 
 const COLUMN_ORDER = ['todo', 'doing', 'done']
 const PEOPLE = { olena: 'Olena Kovalenko', mark: 'Mark Wilson', danylo: 'Danylo Syloats' }
+// Cards look like the real ones: labels, a cover, dates, checklist, comments and a running timer.
 const INITIAL_COLUMNS = {
 	todo: [
-		{ id: 'research', label: 'research', tone: 'orange', who: 'mark' },
-		{ id: 'brief', label: 'planning', tone: 'info', who: 'danylo' },
+		{ id: 'research', label: 'research', color: 'orange', who: ['mark'], comments: 3 },
+		{ id: 'brief', label: 'planning', color: 'blue', who: ['danylo'], due: 1 },
 	],
 	doing: [
-		{ id: 'design', label: 'design', tone: 'accent', who: 'olena', checklist: '2/4' },
-		{ id: 'notes', label: 'content', tone: 'warning', who: 'mark' },
+		{ id: 'design', label: 'design', color: 'purple', who: ['olena', 'mark'], checklist: [2, 4], timer: 5045, cover: true },
+		{ id: 'notes', label: 'content', color: 'yellow', who: ['mark'], due: 5, files: 2 },
 	],
 	done: [
-		{ id: 'analytics', label: 'analytics', tone: 'success', who: 'danylo' },
-		{ id: 'landing', label: 'content', tone: 'warning', who: 'olena' },
+		{ id: 'analytics', label: 'analytics', color: 'green', who: ['danylo'], due: -2 },
+		{ id: 'landing', label: 'content', color: 'yellow', who: ['olena'], checklist: [3, 3] },
 	],
 }
 const PLACEHOLDER = { id: '__placeholder' }
@@ -48,44 +51,73 @@ const moveTo = (columns, taskId, column, index) => {
 	return next
 }
 
-const DemoCard = ({ task, column, title, label, floating, source, lifted, settled, nudging, ...props }) => (
-	<button
-		type='button'
-		data-demo-card={floating ? undefined : task.id}
-		className={cx(
-			'demo-card',
-			column === 'done' && 'is-done',
-			floating && 'is-floating',
-			source && 'is-drag-source',
-			lifted && 'is-lifted',
-			settled && 'is-settled',
-			nudging && 'is-nudging',
-		)}
-		{...props}
-	>
-		<span className='demo-card__top'>
-			<Badge tone={task.tone}>{label}</Badge>
-			<GripVertical size={14} className='demo-card__grip' aria-hidden='true' />
-		</span>
-		<span className='demo-card__title'>{title}</span>
-		<span className='demo-card__meta'>
-			{column === 'done' ? (
-				<CheckCircle2 size={16} className='demo-card__done-icon' aria-hidden='true' />
-			) : task.checklist ? (
-				<span className='demo-card__checklist'><ListChecks size={14} aria-hidden='true' />{task.checklist}</span>
-			) : <span />}
-			<Avatar name={PEOPLE[task.who]} size={22} decorative />
-		</span>
-	</button>
-)
+/** A timer that ticks while the card is in progress, like a real running timer. */
+const DemoClock = ({ base }) => {
+	const [seconds, setSeconds] = useState(base)
+	useEffect(() => {
+		const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000)
+		return () => window.clearInterval(timer)
+	}, [])
+	return <span className='demo-card__badge demo-card__timer'><span className='demo-card__pulse' aria-hidden='true' />{formatClock(seconds)}</span>
+}
+
+const DemoCard = ({ task, column, title, label, dueText, floating, source, lifted, settled, nudging, ...props }) => {
+	const done = column === 'done'
+	const dueTone = task.due === undefined ? null : done ? 'done' : task.due <= 1 ? 'soon' : 'later'
+	const checklistDone = task.checklist && task.checklist[0] === task.checklist[1]
+	return (
+		<button
+			type='button'
+			data-demo-card={floating ? undefined : task.id}
+			className={cx(
+				'demo-card',
+				done && 'is-done',
+				floating && 'is-floating',
+				source && 'is-drag-source',
+				lifted && 'is-lifted',
+				settled && 'is-settled',
+				nudging && 'is-nudging',
+			)}
+			{...props}
+		>
+			{task.cover && <span className='demo-card__cover' aria-hidden='true' />}
+			<span className='demo-card__body'>
+				<span className='demo-card__top'>
+					<span className='demo-card__label' style={{ '--label': CARD_COLORS[task.color] }}>{label}</span>
+					<GripVertical size={14} className='demo-card__grip' aria-hidden='true' />
+				</span>
+				<span className='demo-card__title-row'>
+					{done
+						? <CircleCheck size={16} className='demo-card__check is-on' aria-hidden='true' />
+						: <Circle size={16} className='demo-card__check' aria-hidden='true' />}
+					<span className='demo-card__title'>{title}</span>
+				</span>
+				<span className='demo-card__meta'>
+					<span className='demo-card__badges'>
+						{dueTone && <span className={`demo-card__badge demo-card__due is-${dueTone}`}><Clock3 size={12} aria-hidden='true' />{dueText}</span>}
+						{task.checklist && <span className={cx('demo-card__badge', (checklistDone || done) && 'is-complete')}><SquareCheck size={12} aria-hidden='true' />{done ? `${task.checklist[1]}/${task.checklist[1]}` : task.checklist.join('/')}</span>}
+						{task.comments && <span className='demo-card__badge'><MessageSquare size={12} aria-hidden='true' />{task.comments}</span>}
+						{task.files && <span className='demo-card__badge'><Paperclip size={12} aria-hidden='true' />{task.files}</span>}
+						{task.timer && !done && !floating && <DemoClock base={task.timer} />}
+					</span>
+					<span className='demo-card__people'>
+						{task.who.map((who) => <Avatar key={who} name={PEOPLE[who]} size={22} decorative />)}
+					</span>
+				</span>
+			</span>
+		</button>
+	)
+}
 
 /**
  * A small working board for the home page: cards are dragged with a mouse,
  * a finger (hold, then drag) or the keyboard (Space, arrows, Space).
  */
 const DemoBoard = () => {
-	const { t } = useI18n()
+	const { t, language } = useI18n()
 	const [columns, setColumns] = useState(INITIAL_COLUMNS)
+	// Due dates are relative to the day the page opened.
+	const [today] = useState(() => Date.now())
 	const [drag, setDrag] = useState(null)
 	const [lifted, setLifted] = useState(null)
 	const [settledId, setSettledId] = useState(null)
@@ -103,6 +135,8 @@ const DemoBoard = () => {
 	const statusTimerRef = useRef(null)
 
 	const taskTitle = (taskId) => t(`home.demo.${taskId}`)
+	const dayFormat = new Intl.DateTimeFormat(intlLocale(language), { day: 'numeric', month: 'short' })
+	const dueText = (task) => (task.due === undefined ? '' : dayFormat.format(new Date(today + task.due * 86400000)))
 	const columnName = (column) => t(`home.demo.${column}`)
 
 	const report = (message, visible = true) => {
@@ -400,12 +434,16 @@ const DemoBoard = () => {
 		<div className={cx('demo-board', drag && 'is-dragging')} ref={boardRef}>
 			<div className='demo-board__top'>
 				<span className='demo-board__name'>{t('home.demo.board')}</span>
+				<Star size={15} className='demo-board__star' aria-hidden='true' />
+				<span className='demo-board__spacer' />
 				<AvatarGroup people={Object.values(PEOPLE).map((name) => ({ name }))} size={24} label={t('home.demo.team')} />
-				<span className='demo-board__count'>{t('home.demo.tasks', { count: total })}</span>
+				<span className='demo-board__share' aria-hidden='true'><Share2 size={13} /><span className='demo-board__share-text'>{t('home.demo.share')}</span></span>
 			</div>
+			<div className='demo-board__canvas'>
 			<p className={cx('demo-board__hint', status && 'is-status')} aria-hidden='true'>
 				{status ? <CheckCircle2 size={14} /> : <GripVertical size={14} />}
 				<span>{status || hint}</span>
+				<span className='demo-board__count'>{t('home.demo.tasks', { count: total })}</span>
 			</p>
 			<div className='demo-board__columns' ref={stripRef} onScroll={handleStripScroll}>
 				{COLUMN_ORDER.map((column) => (
@@ -427,6 +465,7 @@ const DemoBoard = () => {
 								column={column}
 								title={taskTitle(task.id)}
 								label={t(`home.demo.labels.${task.label}`)}
+								dueText={dueText(task)}
 								source={drag?.taskId === task.id}
 								lifted={lifted?.taskId === task.id}
 								settled={settledId === task.id}
@@ -445,6 +484,7 @@ const DemoBoard = () => {
 					</section>
 				))}
 			</div>
+			</div>
 			<div className='demo-board__dots' aria-hidden='true'>
 				{COLUMN_ORDER.map((column, index) => <span key={column} className={cx(index === activeColumn && 'is-active')} />)}
 			</div>
@@ -460,6 +500,7 @@ const DemoBoard = () => {
 						column={drag.origin.column}
 						title={taskTitle(draggedTask.id)}
 						label={t(`home.demo.labels.${draggedTask.label}`)}
+						dueText={dueText(draggedTask)}
 						floating
 						tabIndex={-1}
 					/>

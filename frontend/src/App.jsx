@@ -13,6 +13,7 @@ import { axiosInstance } from './lib/axios'
 // Page chunks, keyed so the one for the opened address can start downloading
 // while the session is still being checked instead of after it.
 const PAGES = {
+	About: () => import('./pages/About'),
 	BoardInvite: () => import('./pages/BoardInvite'),
 	Calendar: () => import('./pages/Calendar'),
 	Home: () => import('./pages/Home'),
@@ -29,6 +30,7 @@ const PAGES = {
 	VerifyEmail: () => import('./pages/VerifyEmail'),
 	Workspace: () => import('./pages/Workspace'),
 }
+const About = lazy(PAGES.About)
 const BoardInvite = lazy(PAGES.BoardInvite)
 const CalendarPage = lazy(PAGES.Calendar)
 const Home = lazy(PAGES.Home)
@@ -47,6 +49,7 @@ const Workspace = lazy(PAGES.Workspace)
 
 const EXACT_PAGES = {
 	'/': 'Home',
+	'/about': 'About',
 	'/login': 'Login',
 	'/signup': 'Signup',
 	'/login/resetpassword': 'ResetPassword',
@@ -71,6 +74,8 @@ const pageFor = (pathname) => {
 // Pages not yet moved to the new design still rely on the old top bar.
 
 import { shouldBlockAccountGateRoute } from './lib/authRouteRules'
+import { applyPageMeta, pageMetaFor } from './lib/seo'
+import { useI18n } from './i18n'
 import { startPagePath } from './utils/preferences'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -78,26 +83,15 @@ export const App = () => {
 	const location = useLocation()
 	const navigate = useNavigate()
 	const handledSocialRedirectRef = useRef(false)
+	const { language } = useI18n()
 	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
 	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
 	// so the board, sidebar and socket are not torn down and loaded twice.
 	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
 
 	useEffect(() => {
-		const publicRoute = location.pathname === '/' || location.pathname.startsWith('/public/') || location.pathname.startsWith('/invite/')
-		const pageMeta = location.pathname.startsWith('/public/')
-			? { title: 'Public board — KanbanHub', description: 'View a shared KanbanHub board.' }
-			: location.pathname.startsWith('/invite/')
-				? { title: 'Board invitation — KanbanHub', description: 'Join a KanbanHub workspace.' }
-				: { title: 'KanbanHub — Make progress visible', description: 'A focused workspace for turning ideas into visible progress.' }
-		document.title = pageMeta.title
-		const description = document.querySelector('meta[name="description"]')
-		const robots = document.querySelector('meta[name="robots"]')
-		const canonical = document.querySelector('link[rel="canonical"]')
-		if (description) description.setAttribute('content', pageMeta.description)
-		if (robots) robots.setAttribute('content', publicRoute ? 'index,follow' : 'noindex,nofollow')
-		if (canonical) canonical.setAttribute('href', `${window.location.origin}${publicRoute ? location.pathname : '/'}`)
-	}, [location.pathname])
+		applyPageMeta(pageMetaFor(location.pathname, language))
+	}, [location.pathname, language])
 
 	useEffect(() => {
 		checkAuth()
@@ -177,6 +171,7 @@ export const App = () => {
 						<Route path='/login/verify-email' element={<VerifyEmail />} />
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
+						<Route path='/about' element={<About />} />
 						<Route
 							path='*'
 							element={
@@ -194,6 +189,7 @@ export const App = () => {
 						<Route path='/verify-email' element={<Navigate to='/setup-profile' replace />} />
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
+						<Route path='/about' element={<About />} />
 						<Route
 							path='*'
 							element={
@@ -217,6 +213,7 @@ export const App = () => {
 						<Route path='/invite' element={<BoardInvite />} />
 						<Route path='/invite/:token' element={<BoardInvite />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
+						<Route path='/about' element={<About />} />
 						<Route
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}

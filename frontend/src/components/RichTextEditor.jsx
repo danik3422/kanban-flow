@@ -1,18 +1,20 @@
 import { Bold, Code2, Italic, Link, List, ListOrdered, Strikethrough, Underline } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useI18n } from '../i18n'
 import { sanitizeDescription } from '../lib/richText'
 
 const toolbarItems = [
-	{ command: 'bold', label: 'Bold', icon: Bold },
-	{ command: 'italic', label: 'Italic', icon: Italic },
-	{ command: 'underline', label: 'Underline', icon: Underline },
-	{ command: 'strikeThrough', label: 'Strikethrough', icon: Strikethrough },
-	{ command: 'formatBlock', value: 'pre', label: 'Code', icon: Code2 },
-	{ command: 'insertUnorderedList', label: 'Bulleted list', icon: List },
-	{ command: 'insertOrderedList', label: 'Numbered list', icon: ListOrdered },
+	{ command: 'bold', label: 'editor.bold', icon: Bold },
+	{ command: 'italic', label: 'editor.italic', icon: Italic },
+	{ command: 'underline', label: 'editor.underline', icon: Underline },
+	{ command: 'strikeThrough', label: 'editor.strike', icon: Strikethrough },
+	{ command: 'formatBlock', value: 'pre', label: 'editor.code', icon: Code2 },
+	{ command: 'insertUnorderedList', label: 'editor.bullets', icon: List },
+	{ command: 'insertOrderedList', label: 'editor.numbers', icon: ListOrdered },
 ]
 
 const RichTextEditor = ({ value, onChange }) => {
+	const { t } = useI18n()
 	const editorRef = useRef(null)
 
 	useEffect(() => {
@@ -33,14 +35,14 @@ const RichTextEditor = ({ value, onChange }) => {
 	}
 
 	const insertLink = () => {
-		const url = window.prompt('Enter a URL')
+		const url = window.prompt(t('editor.linkPrompt'))
 		if (!url || !/^https?:\/\//i.test(url)) return
 		runCommand('createLink', url)
 	}
 
 	return (
 		<div className='rich-text-editor'>
-			<div className='rich-text-toolbar' role='toolbar' aria-label='Text formatting'>
+			<div className='rich-text-toolbar' role='toolbar' aria-label={t('editor.toolbar')}>
 				{toolbarItems.map(({ command, value: commandValue, label, icon: Icon }) => (
 					<button
 						key={label}
@@ -48,8 +50,8 @@ const RichTextEditor = ({ value, onChange }) => {
 						className='rich-text-tool'
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={() => runCommand(command, commandValue)}
-						aria-label={label}
-						title={label}
+						aria-label={t(label)}
+						title={t(label)}
 					>
 						<Icon size={16} />
 					</button>
@@ -59,8 +61,8 @@ const RichTextEditor = ({ value, onChange }) => {
 					className='rich-text-tool'
 					onMouseDown={(event) => event.preventDefault()}
 					onClick={insertLink}
-					aria-label='Add link'
-					title='Add link'
+					aria-label={t('editor.link')}
+					title={t('editor.link')}
 				>
 					<Link size={16} />
 				</button>
@@ -72,9 +74,9 @@ const RichTextEditor = ({ value, onChange }) => {
 				suppressContentEditableWarning
 				onInput={emitChange}
 				role='textbox'
-				aria-label='Description'
+				aria-label={t('editor.label')}
 				aria-multiline='true'
-				data-placeholder='Add a description'
+				data-placeholder={t('editor.placeholder')}
 			/>
 		</div>
 	)

@@ -1,20 +1,8 @@
 import {
-	ArrowUpRight,
-	CalendarDays,
-	ChevronDown,
-	ChevronRight,
-	Clock3,
-	ListChecks,
-	MessageSquare,
 	Plus,
-	Play,
 	Sparkles,
-	Square,
-	Trash2,
-	UserRound,
-	X,
 } from 'lucide-react'
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
@@ -38,15 +26,18 @@ import BoardFilter from '../components/board/header/BoardFilter'
 import BoardMenu from '../components/board/header/BoardMenu'
 import ShareDialog from '../components/board/header/ShareDialog'
 import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../utils/cardFilter'
+import CardModal from '../components/card/CardModal'
+import CardTile from '../components/card/CardTile'
+import useCardDrag from '../hooks/useCardDrag'
+import useFlipCards from '../hooks/useFlipCards'
+import { allLabels } from '../utils/cardDisplay'
+import { isSamePlace, moveCardInColumns } from '../utils/cardOrdering'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import RichTextEditor from '../components/RichTextEditor'
-import { sanitizeDescription } from '../lib/richText'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../utils/taskSorting'
-import { formatDueDate, getDueDateKey, getDueDateState } from '../utils/dueDate'
 import { getColumnDropIndex, reorderColumns } from '../utils/columnOrdering'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import useBoardRealtime from '../hooks/useBoardRealtime'
@@ -55,11 +46,11 @@ import {
 	addTask,
 	applyColumnOrder,
 	applyColumnSort,
-	applyTaskUpdate,
 	mergeColumn,
 	removeColumn,
 	removeTask,
 	replaceTask,
+	setTaskCommentCount,
 	setColumnTasks,
 } from '../utils/boardColumns'
 import {
@@ -79,10 +70,6 @@ const PRIORITY_LABELS = {
 	urgent: 'Urgent',
 }
 
-const getChecklistProgress = (checklist = []) => {
-	const completed = checklist.filter((item) => item.completed).length
-	return { completed, total: checklist.length }
-}
 
 const getSortStorageKey = (boardId, userId = 'anonymous') =>
 	`kanban-column-sorts:${userId}:${boardId}`
@@ -103,24 +90,6 @@ const saveLocalSorts = (boardId, userId, sorts) => {
 }
 
 
-const setNativeDragImage = (event, element) => {
-	const rect = element.getBoundingClientRect()
-	const preview = element.cloneNode(true)
-	preview.style.position = 'fixed'
-	preview.style.top = '-10000px'
-	preview.style.left = '-10000px'
-	preview.style.width = `${rect.width}px`
-	preview.style.maxWidth = `${rect.width}px`
-	preview.style.pointerEvents = 'none'
-	preview.style.opacity = '0.96'
-	preview.style.transform = 'rotate(1deg) scale(0.99)'
-	preview.style.boxShadow = '0 4px 8px rgba(44, 68, 59, 0.12), 0 18px 30px rgba(44, 68, 59, 0.2)'
-	document.body.appendChild(preview)
-	const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left))
-	const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top))
-	event.dataTransfer.setDragImage(preview, offsetX, offsetY)
-	window.setTimeout(() => preview.remove(), 0)
-}
 
 const fetchColumns = async (boardId) => {
 	const { data } = await axiosInstance.get(`/board/boards/${boardId}/content`)
@@ -175,46 +144,23 @@ const Workspace = () => {
 	const [isBackgroundOpen, setIsBackgroundOpen] = useState(false)
 	const [isSubmittingBoard, setIsSubmittingBoard] = useState(false)
 	const [createBoardError, setCreateBoardError] = useState('')
-	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
 	const [inviteLink, setInviteLink] = useState(null)
 	const [publicBoardLink, setPublicBoardLink] = useState('')
 	const [boardActivities, setBoardActivities] = useState([])
 	const [isActivityLoading, setIsActivityLoading] = useState(false)
-	const [editingTask, setEditingTask] = useState(null)
-	const [editingTitle, setEditingTitle] = useState('')
-	const [draggedTask, setDraggedTask] = useState(null)
 	const [draggedColumn, setDraggedColumn] = useState(null)
-	const [columnDropTarget, setColumnDropTarget] = useState(null)
-	const [draggedTaskHeight, setDraggedTaskHeight] = useState(null)
 	const columnDragSessionRef = useRef(null)
 	const columnDragOverlayRef = useRef(null)
-	const [dropIndicator, setDropIndicator] = useState(null)
 	const [taskDetails, setTaskDetails] = useState(null)
-	const [taskActivities, setTaskActivities] = useState([])
-	const [taskComment, setTaskComment] = useState('')
-	const [isTimerRunning, setIsTimerRunning] = useState(false)
-	const [trackedSeconds, setTrackedSeconds] = useState(0)
-	const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false)
-	const [newChecklistItem, setNewChecklistItem] = useState('')
-	const taskDetailsInitialRef = useRef(null)
+	// Bumped when comments change elsewhere, so an open card reloads them.
+	const [commentsVersion, setCommentsVersion] = useState(0)
 	const hasRevalidatedBoardsRef = useRef(false)
-	const [taskDetailsForm, setTaskDetailsForm] = useState({
-		title: '',
-		description: '',
-		dueDate: '',
-		assignees: [],
-		labels: [],
-		checklist: [],
-		priority: 'none',
-		columnId: '',
-	})
 	const [isInviteOpen, setIsInviteOpen] = useState(false)
 	const [isDeleteBoardOpen, setIsDeleteBoardOpen] = useState(false)
 	const [isLeaveBoardOpen, setIsLeaveBoardOpen] = useState(false)
 	const [deleteColumnTarget, setDeleteColumnTarget] = useState(null)
-	const [deleteTaskTarget, setDeleteTaskTarget] = useState(null)
 	const [columnSortBy, setColumnSortBy] = useState({}) // { columnId: 'sortType' }
 	const [columnMenu, setColumnMenu] = useState(null) // { columnId, anchor }
 	// While a list is dragged: where it would land (index among the other lists),
@@ -304,7 +250,6 @@ const Workspace = () => {
 				setBoards(availableBoards)
 				setSelectedBoard(activeBoard)
 				setIsActivityLoading(Boolean(activeBoard))
-				setBoardMembers(devBoardMembers)
 				setBoardMemberRecords(devBoardMembers)
 				setBoardInvites(devBoardInvites)
 				if (boardId === devBoard._id) setColumns(devColumns)
@@ -388,18 +333,15 @@ const Workspace = () => {
 		if (!isDevAuthBypass) setColumns(cachedColumns || [])
 		setColumnSortBy(cachedColumns ? sortByOf(cachedColumns) : {})
 		setLoadedBoardId(cachedColumns ? selectedBoardId : null)
-		setBoardMembers([])
 		setBoardMemberRecords([])
 		setBoardInvites([])
 		setBoardActivities([])
 		setInviteLink(null)
 		setPublicBoardLink('')
 		setTaskDetails(null)
-		setEditingTask(null)
 		setActiveTaskColumn(null)
 		setColumnMenu(null)
 		setDeleteColumnTarget(null)
-		setDeleteTaskTarget(null)
 		setIsInviteOpen(false)
 		setIsDeleteBoardOpen(false)
 		setIsLeaveBoardOpen(false)
@@ -436,100 +378,6 @@ const Workspace = () => {
 		columnsCache.set(`${authUser?._id}:${selectedBoardId}`, columns)
 	}, [columns, selectedBoardId, loadedBoardId, authUser?._id])
 
-	useEffect(() => {
-		if (!draggedTask) return undefined
-		// dragover fires constantly; only re-render when the insertion point moves.
-		const updateDropIndicator = (next) =>
-			setDropIndicator((current) =>
-				current?.columnId === next.columnId && current?.index === next.index ? current : next,
-			)
-		const handleDragOver = (event) => {
-			event.dataTransfer.dropEffect = 'move'
-			const targetElement =
-				event.target instanceof Element
-					? event.target
-					: event.target.parentElement
-			const columnElement = targetElement?.closest('.bc-column')
-			if (!columnElement) return
-
-			document
-				.querySelectorAll('.task-card.drop-before, .task-card.drop-after')
-				.forEach((item) => item.classList.remove('drop-before', 'drop-after'))
-
-			const targetColumn = columns.find(
-				(column) => column._id === columnElement.dataset.columnId,
-			)
-			if (!targetColumn) return
-
-			const taskList = columnElement.querySelector('.bc-tasks')
-			if (!taskList) return
-
-			const taskListRect = taskList.getBoundingClientRect()
-			const edgeDistance = 56
-			if (event.clientY < taskListRect.top + edgeDistance) {
-				taskList.scrollTop -= Math.max(6, (taskListRect.top + edgeDistance - event.clientY) / 3)
-			} else if (event.clientY > taskListRect.bottom - edgeDistance) {
-				taskList.scrollTop += Math.max(6, (event.clientY - taskListRect.bottom + edgeDistance) / 3)
-			}
-
-			const draggedId = draggedTask?._id
-			const cards = Array.from(taskList.querySelectorAll('.task-card')).filter(
-				(card) => card.dataset?.taskId !== draggedId,
-			)
-			const currentCard = targetElement?.closest('.task-card')
-			const isSelfCard = currentCard?.dataset?.taskId === draggedId
-			if (currentCard && !isSelfCard && currentCard.closest('.bc-tasks') === taskList) {
-				const taskIndex = cards.indexOf(currentCard)
-				const rect = currentCard.getBoundingClientRect()
-				const isBefore = event.clientY < rect.top + rect.height / 2
-				currentCard.classList.add(isBefore ? 'drop-before' : 'drop-after')
-				updateDropIndicator({
-					columnId: targetColumn._id,
-					index: taskIndex + (isBefore ? 0 : 1),
-				})
-				return
-			}
-
-			if (cards.length === 0) {
-				updateDropIndicator({
-					columnId: targetColumn._id,
-					index: 0,
-				})
-				return
-			}
-
-			let insertionIndex = 0
-			let beforeCard = null
-			for (const listCard of cards) {
-				const rect = listCard.getBoundingClientRect()
-				if (event.clientY < rect.top + rect.height / 2) {
-					beforeCard = listCard
-					break
-				}
-				insertionIndex += 1
-			}
-			if (beforeCard) {
-				beforeCard.classList.add('drop-before')
-				updateDropIndicator({
-					columnId: targetColumn._id,
-					index: insertionIndex,
-				})
-				return
-			}
-
-			updateDropIndicator({
-				columnId: targetColumn._id,
-				index: cards.length,
-			})
-		}
-		document.addEventListener('dragover', handleDragOver)
-		return () => {
-			document.removeEventListener('dragover', handleDragOver)
-			document
-				.querySelectorAll('.task-card.drop-before, .task-card.drop-after')
-				.forEach((item) => item.classList.remove('drop-before', 'drop-after'))
-		}
-	}, [columns, draggedTask])
 
 	useEffect(() => {
 		const handlePointerMove = (event) => {
@@ -622,7 +470,6 @@ const Workspace = () => {
 			columnDragOverlayRef.current = null
 			columnDragSessionRef.current = null
 			setDraggedColumn(null)
-			setColumnDropTarget(null)
 			setColumnPreviewIndex(null)
 			// The ghost settles into the list's new place before it disappears.
 			const slot = session?.active && session.element?.isConnected ? session.element.getBoundingClientRect() : null
@@ -661,7 +508,6 @@ const Workspace = () => {
 			columnDragOverlayRef.current = null
 			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
 			document.body.classList.remove('is-dragging-list')
-			setColumnDropTarget(null)
 		}
 	}, [columns, moveColumn])
 
@@ -673,7 +519,6 @@ const Workspace = () => {
 			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
 			if (revokedBoardId !== selectedBoardId) return
 			setColumns([])
-			setBoardMembers([])
 			setBoardMemberRecords([])
 			setBoardInvites([])
 			setBoardActivities([])
@@ -700,10 +545,13 @@ const Workspace = () => {
 		},
 		'task:created': (task) => setColumns((current) => addTask(current, task)),
 		'task:updated': (task) => setColumns((current) => replaceTask(current, task)),
+		'task:comments-changed': ({ taskId, commentCount }) => {
+			setColumns((current) => setTaskCommentCount(current, taskId, commentCount))
+			setCommentsVersion((version) => version + 1)
+		},
 		'task:deleted': ({ taskId }) => {
 			setColumns((current) => removeTask(current, taskId))
 			setTaskDetails((current) => (current?._id === taskId ? null : current))
-			setDeleteTaskTarget((current) => (current?._id === taskId ? null : current))
 		},
 		'column:tasks-reordered': ({ columnId, tasks }) =>
 			setColumns((current) => setColumnTasks(current, columnId, tasks)),
@@ -742,7 +590,6 @@ const Workspace = () => {
 		])
 			.then(([membersResult, invitesResult, activitiesResult]) => {
 				if (membersResult.status === 'fulfilled') {
-					setBoardMembers(membersResult.value.data.map((member) => member.user))
 					setBoardMemberRecords(membersResult.value.data)
 				}
 				if (invitesResult.status === 'fulfilled') {
@@ -992,46 +839,27 @@ const Workspace = () => {
 	}
 
 	const deleteTask = async (taskId) => {
-		if (!selectedBoard || isDevAuthBypass) {
-			setColumns((current) =>
-				current.map((column) => ({
-					...column,
-					tasks: column.tasks.filter((task) => task._id !== taskId),
-				})),
-			)
+		const drop = () => {
+			setColumns((current) => removeTask(current, taskId))
 			setTaskDetails(null)
-			setDeleteTaskTarget(null)
-			toast.success('Demo task deleted')
+		}
+		if (!selectedBoard || isDevAuthBypass) {
+			drop()
 			return
 		}
-
 		try {
 			await axiosInstance.delete(`/board/tasks/${taskId}`)
-			setColumns((current) =>
-				current.map((column) => ({
-					...column,
-					tasks: column.tasks.filter((task) => task._id !== taskId),
-				})),
-			)
-			setTaskDetails(null)
-			setDeleteTaskTarget(null)
-			toast.success('Task deleted')
+			drop()
+			toast.success(tr('card.deleted'))
 		} catch (error) {
 			if (error.response?.status === 404) {
-				setColumns((current) =>
-					current.map((column) => ({
-						...column,
-						tasks: column.tasks.filter((task) => task._id !== taskId),
-					})),
-				)
-				setTaskDetails(null)
-				setDeleteTaskTarget(null)
-				toast.info('Task was already deleted')
+				drop()
 				return
 			}
-			toast.error(error.response?.data?.message || 'Could not delete task')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'card.saveError'))
 		}
 	}
+
 
 
 	const sortColumnTasks = async (columnId, sortType) => {
@@ -1223,8 +1051,6 @@ const Workspace = () => {
 		const rect = element.getBoundingClientRect()
 		// No pointer capture: moves are tracked on the window, and capturing here would
 		// steal the click that opens the title for renaming.
-		setDraggedTask(null)
-		setDraggedTaskHeight(null)
 		columnDragSessionRef.current = {
 			column,
 			pointerId: event.pointerId,
@@ -1244,52 +1070,7 @@ const Workspace = () => {
 
 
 
-	const updateTask = async (task) => {
-		if (!editingTitle.trim() || isDevAuthBypass) {
-			setEditingTask(null)
-			return
-		}
-		try {
-			await axiosInstance.patch(`/board/tasks/${task._id}`, {
-				title: editingTitle.trim(),
-			})
-			setEditingTask(null)
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not update task')
-		}
-	}
-
-	const openTaskDetails = useCallback((task) => {
-		const taskColumn = columns.find((column) =>
-			column.tasks.some((item) => item._id === task._id),
-		)
-		setTaskDetails(task)
-		const initialForm = {
-			title: task.title || '',
-			description: task.description || '',
-			dueDate: getDueDateKey(task.dueDate),
-			assignees: (task.assignees || []).map(
-				(assignee) => assignee._id || assignee,
-			),
-			labels: task.labels || [],
-			checklist: task.checklist || [],
-			priority: task.priority || 'none',
-			columnId: taskColumn?._id || '',
-		}
-		taskDetailsInitialRef.current = initialForm
-		setTaskDetailsForm(initialForm)
-		setIsAssigneePickerOpen(false)
-		setNewChecklistItem('')
-		setTaskComment('')
-		setTrackedSeconds(task.trackedSeconds || 0)
-		setIsTimerRunning(Boolean(task.timerStartedAt))
-		setIsActivityLoading(true)
-		axiosInstance
-			.get(`/board/tasks/${task._id}/activities`)
-			.then(({ data }) => setTaskActivities(data))
-			.catch(() => setTaskActivities([]))
-			.finally(() => setIsActivityLoading(false))
-	}, [columns])
+	const openTaskDetails = useCallback((task) => setTaskDetails(task), [])
 
 	// A card opened from the bell (router state) or from an email link (?task=).
 	useEffect(() => {
@@ -1302,226 +1083,6 @@ const Workspace = () => {
 			navigate(location.pathname, { replace: true, state: null })
 		})
 	}, [columns, location.pathname, location.search, location.state, navigate, openTaskDetails, taskDetails])
-
-	const addTaskComment = async () => {
-		const message = taskComment.trim()
-		if (!taskDetails || !message) return
-		try {
-			const { data } = await axiosInstance.post(`/board/tasks/${taskDetails._id}/comments`, { message })
-			setTaskActivities((current) => [data, ...current])
-			setTaskComment('')
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not add comment')
-		}
-	}
-
-	const toggleTaskTimer = async () => {
-		if (!taskDetails) return
-		try {
-			if (isTimerRunning) {
-				const { data } = await axiosInstance.post(`/board/tasks/${taskDetails._id}/timer/stop`)
-				setTrackedSeconds(data.trackedSeconds)
-				setIsTimerRunning(false)
-				setTaskActivities((current) => [data.activity, ...current])
-			} else {
-				const { data } = await axiosInstance.post(`/board/tasks/${taskDetails._id}/timer/start`)
-				setTrackedSeconds(data.trackedSeconds)
-				setIsTimerRunning(true)
-			}
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not update task timer')
-		}
-	}
-
-	const formatTrackedTime = (seconds) => {
-		const minutes = Math.floor(seconds / 60)
-		return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
-	}
-
-	const toggleTaskAssignee = (memberId) => {
-		setTaskDetailsForm((current) => ({
-			...current,
-			assignees: current.assignees.includes(memberId)
-				? current.assignees.filter((id) => id !== memberId)
-				: [...current.assignees, memberId],
-		}))
-	}
-
-	const addChecklistItem = (event) => {
-		event.preventDefault()
-		const text = newChecklistItem.trim()
-		if (!text) return
-		setTaskDetailsForm((current) => ({
-			...current,
-			checklist: [...current.checklist, { text, completed: false }],
-		}))
-		setNewChecklistItem('')
-	}
-
-	const updateChecklistItem = (index, changes) => {
-		setTaskDetailsForm((current) => ({
-			...current,
-			checklist: current.checklist.map((item, itemIndex) =>
-				itemIndex === index ? { ...item, ...changes } : item,
-			),
-		}))
-	}
-
-	const removeChecklistItem = (index) => {
-		setTaskDetailsForm((current) => ({
-			...current,
-			checklist: current.checklist.filter((_, itemIndex) => itemIndex !== index),
-		}))
-	}
-
-	const saveTaskDetails = async (event) => {
-		event.preventDefault()
-		if (!taskDetails || !taskDetailsForm.title.trim()) return
-
-		// Send only what this user edited so concurrent edits by others are not overwritten.
-		const initialForm = taskDetailsInitialRef.current || {}
-		const isEdited = (field) =>
-			JSON.stringify(taskDetailsForm[field]) !== JSON.stringify(initialForm[field])
-		const changes = {}
-		if (taskDetailsForm.title.trim() !== initialForm.title) changes.title = taskDetailsForm.title.trim()
-		if (isEdited('description')) changes.description = taskDetailsForm.description
-		if (isEdited('dueDate')) changes.dueDate = taskDetailsForm.dueDate || null
-		for (const field of ['assignees', 'labels', 'checklist', 'priority']) {
-			if (isEdited(field)) changes[field] = taskDetailsForm[field]
-		}
-		if (isEdited('columnId')) changes.column = taskDetailsForm.columnId
-		if (Object.keys(changes).length === 0) {
-			setTaskDetails(null)
-			return
-		}
-		const sourceColumn = columns.find((column) =>
-			column.tasks.some((task) => task._id === taskDetails._id),
-		)
-		const targetColumn = columns.find(
-			(column) => column._id === taskDetailsForm.columnId,
-		)
-		const isMovingColumns = sourceColumn && targetColumn && sourceColumn._id !== targetColumn._id
-		if (isMovingColumns) changes.position = targetColumn.tasks.length
-
-		if (isDevAuthBypass) {
-			setColumns((current) =>
-				applyTaskUpdate(
-					current,
-					{ ...taskDetails, ...changes },
-					targetColumn?._id || sourceColumn?._id,
-				),
-			)
-			setTaskDetails(null)
-			return
-		}
-
-		try {
-			const { data } = await axiosInstance.patch(
-				`/board/tasks/${taskDetails._id}`,
-				changes,
-			)
-			setColumns((current) =>
-				applyTaskUpdate(current, data, targetColumn?._id || sourceColumn?._id),
-			)
-			setTaskDetails(null)
-			toast.success('Task updated')
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not update task')
-		}
-	}
-
-	const moveTask = async (
-		task,
-		targetColumn,
-		targetIndex = targetColumn.tasks.length,
-	) => {
-		if (!task) {
-			setDraggedTask(null)
-			return
-		}
-		const sourceColumn = columns.find((column) =>
-			column.tasks.some((item) => item._id === task._id),
-		)
-		if (!sourceColumn) {
-			setDraggedTask(null)
-			return
-		}
-		const previousColumns = columns
-		const previousSortBy = columnSortBy
-		const requestedIndex =
-			dropIndicator?.columnId === targetColumn._id
-				? dropIndicator.index
-				: targetIndex
-		const sourceIndex = sourceColumn.tasks.findIndex(
-			(item) => item._id === task._id,
-		)
-		const hasDropIndicator = dropIndicator?.columnId === targetColumn._id
-		const insertionIndex =
-			sourceColumn._id === targetColumn._id && !hasDropIndicator && requestedIndex > sourceIndex
-				? requestedIndex - 1
-				: requestedIndex
-		if (
-			sourceColumn._id === targetColumn._id &&
-			insertionIndex === sourceIndex
-		) {
-			setDraggedTask(null)
-			setDropIndicator(null)
-			return
-		}
-		const nextPosition = Math.max(
-			0,
-			Math.min(
-				insertionIndex,
-				targetColumn.tasks.length -
-					(sourceColumn._id === targetColumn._id ? 1 : 0),
-			),
-		)
-		const reorderedColumns = columns.map((column) => {
-				if (column._id !== sourceColumn._id && column._id !== targetColumn._id)
-					return column
-				const nextTasks = column.tasks.filter((item) => item._id !== task._id)
-				if (column._id === targetColumn._id) {
-					nextTasks.splice(nextPosition, 0, {
-						...task,
-						column: targetColumn._id,
-						position: nextPosition,
-					})
-				}
-				return {
-					...column,
-					// Set sortBy to 'custom' when user manually moves a task
-					sortBy: 'custom',
-					tasks: nextTasks.map((item, index) => ({ ...item, position: index })),
-				}
-		})
-		setColumns(reorderedColumns)
-		const affectedColumnIds = [targetColumn._id]
-		if (sourceColumn._id !== targetColumn._id) affectedColumnIds.push(sourceColumn._id)
-		setColumnSortBy((prev) => {
-			const next = { ...prev }
-			affectedColumnIds.forEach((columnId) => {
-				next[columnId] = 'custom'
-			})
-			if (isDevAuthBypass) saveLocalSorts(selectedBoard._id, authUser?._id, next)
-			return next
-		})
-		setDraggedTask(null)
-		setDropIndicator(null)
-		if (isDevAuthBypass) return
-		try {
-			await axiosInstance.patch(`/board/boards/${selectedBoard._id}/tasks/reorder`, {
-				columns: affectedColumnIds.map((columnId) => ({
-					columnId,
-					taskIds: reorderedColumns.find((column) => column._id === columnId)
-						?.tasks.map((item) => item._id) || [],
-				})),
-			})
-		} catch (error) {
-			setColumns(previousColumns)
-			setColumnSortBy(previousSortBy)
-			toast.error(error.response?.data?.message || 'Could not move task')
-		}
-	}
 
 	const visibleColumns = columns
 		.filter((column) => column.pinned)
@@ -1542,7 +1103,18 @@ const Workspace = () => {
 	const isStarredBoard = Boolean(selectedBoard && starredBoardIds.includes(selectedBoard._id))
 	const boardPeople = boardMemberRecords
 		.filter((member) => member.user)
-		.map((member) => ({ id: member.user._id, _id: member.user._id, name: member.user.name || member.user.email, email: member.user.email, avatar: member.user.avatar, status: presenceByUserId?.[member.user._id] === 'online' ? 'online' : undefined }))
+		.map((member) => ({
+			id: member.user._id,
+			_id: member.user._id,
+			name: member.user.name || member.user.email,
+			email: member.user.email,
+			avatar: member.user.avatar,
+			jobTitle: member.user.jobTitle,
+			timezone: member.user.timezone,
+			role: String(member.user._id) === String(selectedBoard?.createdBy) ? 'owner' : member.role || 'member',
+			isMe: String(member.user._id) === String(authUser?._id),
+			status: presenceByUserId?.[member.user._id] === 'online' ? 'online' : undefined,
+		}))
 	const boardAdmins = boardMemberRecords
 		.filter((member) => member.user && (member.role === 'admin' || String(member.user._id) === String(selectedBoard?.createdBy)))
 		.map((member) => member.user)
@@ -1601,18 +1173,66 @@ const Workspace = () => {
 		const { data } = await axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`)
 		setBoardInvites(data)
 	}
-	const inviteByEmail = async (email, role) => {
-		try {
-			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email, role })
+	// Invites everyone listed; returns the addresses that could not be invited.
+	const inviteByEmail = async (emails, role) => {
+		const failed = []
+		let invited = 0
+		let notEmailed = 0
+		for (const email of emails) {
+			try {
+				const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email, role })
+				invited += 1
+				if (!data.emailSent) notEmailed += 1
+			} catch (error) {
+				failed.push(email)
+				toast.error(`${email}: ${translateServerMessageCurrent(error.response?.data?.message, 'boardHeader.inviteError')}`)
+			}
+		}
+		if (invited) {
 			await reloadInvites()
-			if (data.emailSent) toast.success(tr('boardHeader.sent', { email }))
+			toast.success(invited === 1 && emails.length === 1 ? tr('boardHeader.sent', { email: emails[0] }) : tr('boardHeader.invitedMany', { count: invited }))
+			if (notEmailed) toast.warning(tr('boardHeader.sentNoEmail'))
+		}
+		return failed
+	}
+	const resendInvite = async (invite) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites/${invite._id}/resend`)
+			await reloadInvites()
+			if (data.emailSent) toast.success(tr('boardHeader.resent', { email: invite.email }))
 			else toast.warning(tr('boardHeader.sentNoEmail'))
-			return true
 		} catch (error) {
 			failToast(error, 'boardHeader.inviteError')
-			return false
 		}
 	}
+	const copyInviteFor = async (invite) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites/${invite._id}/copy`)
+			await copyText(data.inviteUrl, tr('boardHeader.linkCopied'))
+			await reloadInvites()
+		} catch (error) {
+			failToast(error, 'auth.errors.generic')
+		}
+	}
+
+	const [shareSuggestions, setShareSuggestions] = useState([])
+	useEffect(() => {
+		if (!isInviteOpen || !canManageBoard || isDevAuthBypass) return undefined
+		let current = true
+		axiosInstance.get('/board/team').then(({ data }) => {
+			if (!current) return
+			const seen = new Map()
+			for (const entry of data) for (const member of entry.members || []) {
+				const user = member.user
+				if (user?.email && String(user._id) !== String(authUser?._id) && !seen.has(user.email)) seen.set(user.email, { name: user.name, email: user.email.toLowerCase(), avatar: user.avatar })
+			}
+			setShareSuggestions([...seen.values()])
+		}).catch(() => {})
+		return () => {
+			current = false
+		}
+	}, [isInviteOpen, canManageBoard, authUser?._id])
+
 	const createInviteLink = async () => {
 		try {
 			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email: '', role: 'member' })
@@ -1668,7 +1288,6 @@ const Workspace = () => {
 		try {
 			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/members/${member._id}`)
 			setBoardMemberRecords((current) => current.filter((record) => record._id !== member._id))
-			setBoardMembers((current) => current.filter((user) => user._id !== member.user._id))
 			toast.success(tr('boardHeader.removed', { name: member.user?.name || member.user?.email }))
 		} catch (error) {
 			failToast(error, 'auth.errors.generic')
@@ -1732,6 +1351,165 @@ const Workspace = () => {
 	const totalCards = columns.reduce((sum, column) => sum + (column.tasks?.length || 0), 0)
 	const matchingCards = isFiltering ? columns.reduce((sum, column) => sum + (column.tasks || []).filter((task) => cardPasses(task, column)).length, 0) : totalCards
 
+
+	// ── Cards ──────────────────────────────────────────────────────────────────
+	const meId = authUser?._id
+	const boardLabelList = selectedBoard?.labels || []
+	const labelOptions = allLabels(boardLabelList, columns)
+	const allTasks = columns.flatMap((column) => column.tasks)
+	const findTask = (taskId) => allTasks.find((task) => task._id === taskId)
+	const openTask = taskDetails ? findTask(taskDetails._id) || null : null
+	const [features, setFeatures] = useState({ uploads: false })
+	useEffect(() => {
+		if (isDevAuthBypass) return
+		axiosInstance.get('/board/features').then(({ data }) => setFeatures(data)).catch(() => {})
+	}, [])
+	const cardError = (error) => toast.error(translateServerMessageCurrent(error.response?.data?.message, 'card.saveError'))
+
+	/** Move a card (drag, list menu, Move panel) and save the new order of both lists. */
+	const moveCard = async (taskId, columnId, index) => {
+		if (!selectedBoard || isSamePlace(columns, taskId, columnId, index)) return
+		const previous = columns
+		const previousSorts = columnSortBy
+		const sourceId = columns.find((column) => column.tasks.some((task) => task._id === taskId))?._id
+		const next = moveCardInColumns(columns, taskId, columnId, index).map((column) => (column._id === columnId || column._id === sourceId ? { ...column, sortBy: 'custom' } : column))
+		setColumns(next)
+		setColumnSortBy((current) => ({ ...current, [columnId]: 'custom', ...(sourceId && { [sourceId]: 'custom' }) }))
+		if (isDevAuthBypass) return
+		try {
+			await axiosInstance.patch(`/board/boards/${selectedBoard._id}/tasks/reorder`, {
+				columns: [...new Set([sourceId, columnId])].filter(Boolean).map((id) => ({ columnId: id, taskIds: next.find((column) => column._id === id)?.tasks.map((task) => task._id) || [] })),
+			})
+		} catch (error) {
+			setColumns(previous)
+			setColumnSortBy(previousSorts)
+			cardError(error)
+		}
+	}
+
+	/** Save card fields: shown at once, rolled back if the server says no. `local` skips the server. */
+	const patchTask = async (task, fields, { local = false } = {}) => {
+		const optimistic = { ...fields }
+		if (fields.assignees) optimistic.assignees = fields.assignees.map((id) => boardPeople.find((person) => String(person._id) === String(id)) || { _id: id })
+		if ('completed' in fields) optimistic.completedAt = fields.completed ? new Date().toISOString() : null
+		setColumns((current) => replaceTask(current, { ...task, ...optimistic }))
+		if (local || isDevAuthBypass) return task
+		try {
+			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}`, fields)
+			setColumns((current) => replaceTask(current, data))
+			return data
+		} catch (error) {
+			setColumns((current) => replaceTask(current, task))
+			cardError(error)
+			return null
+		}
+	}
+
+	const saveBoardLabels = (labels) => patchSelectedBoard({ labels })
+	const createLabel = async ({ name, color }, { addTo } = {}) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/labels`, { name: name.trim(), color })
+			saveBoardLabels(data)
+			if (addTo && !addTo.labels.some((label) => label.toLowerCase() === name.trim().toLowerCase())) await patchTask(addTo, { labels: [...addTo.labels, name.trim()] })
+			return true
+		} catch (error) {
+			cardError(error)
+			return false
+		}
+	}
+	// Labels only on cards (older boards) become board labels the first time they are edited.
+	const ensureSavedLabel = async (label) => {
+		if (label.saved) return selectedBoard.labels.find((item) => item.name.toLowerCase() === label.name.toLowerCase())
+		const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/labels`, { name: label.name, color: label.color })
+		saveBoardLabels(data)
+		return data.find((item) => item.name.toLowerCase() === label.name.toLowerCase())
+	}
+	const updateLabel = async (label, draft) => {
+		try {
+			const saved = await ensureSavedLabel(label)
+			const { data } = await axiosInstance.patch(`/board/boards/${selectedBoard._id}/labels/${saved._id}`, { name: draft.name.trim(), color: draft.color })
+			saveBoardLabels(data)
+			if (draft.name.trim() !== label.name) setColumns((current) => current.map((column) => ({ ...column, tasks: column.tasks.map((task) => ({ ...task, labels: (task.labels || []).map((name) => (name === label.name ? draft.name.trim() : name)) })) })))
+			return true
+		} catch (error) {
+			cardError(error)
+			return false
+		}
+	}
+	const deleteLabel = async (label) => {
+		try {
+			const saved = await ensureSavedLabel(label)
+			const { data } = await axiosInstance.delete(`/board/boards/${selectedBoard._id}/labels/${saved._id}`)
+			saveBoardLabels(data)
+			setColumns((current) => current.map((column) => ({ ...column, tasks: column.tasks.map((task) => ({ ...task, labels: (task.labels || []).filter((name) => name !== label.name) })) })))
+			return true
+		} catch (error) {
+			cardError(error)
+			return false
+		}
+	}
+
+	const cardRequest = async (request) => {
+		try {
+			const { data } = await request()
+			setColumns((current) => replaceTask(current, data.task || data))
+			return true
+		} catch (error) {
+			cardError(error)
+			return false
+		}
+	}
+	const copyCard = async (task, payload) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/tasks/${task._id}/copy`, payload)
+			setColumns((current) => (current.some((column) => column.tasks.some((item) => item._id === data._id)) ? current : addTask(current, data)))
+			toast.success(tr('card.copied'))
+			return true
+		} catch (error) {
+			cardError(error)
+			return false
+		}
+	}
+
+	// Card drag: the slot opens where the card would land, cards glide around it.
+	const cardDrag = useCardDrag({ boardRef: boardListRef, enabled: Boolean(selectedBoard) && !isDevAuthBypass, onDrop: moveCard })
+	const cardLayoutKey = `${columns.map((column) => column.tasks.map((task) => task._id).join('.')).join('|')}#${cardDrag.drag ? `${cardDrag.drag.columnId}:${cardDrag.drag.index}` : ''}`
+	useFlipCards(boardListRef, cardLayoutKey)
+
+	const renderColumnCards = (column) => {
+		const drag = cardDrag.drag
+		const slot = drag && drag.columnId === column._id ? <div key='drag-slot' className='task-drag-slot' style={{ height: drag.height }} aria-hidden='true' /> : null
+		const done = column._id === lastColumnId
+		const items = []
+		let place = 0
+		for (const task of column.tasks) {
+			const isSource = drag?.taskId === task._id
+			if (!isSource) {
+				if (slot && drag.index === place) items.push(slot)
+				place += 1
+			}
+			items.push(
+				<CardTile
+					key={task._id}
+					task={task}
+					boardLabels={boardLabelList}
+					done={done}
+					meId={meId}
+					canEdit
+					isDragSource={isSource}
+					isFilteredOut={!cardPasses(task, column)}
+					onOpen={() => {
+						if (!cardDrag.consumeClick()) setTaskDetails(task)
+					}}
+					onToggleComplete={() => patchTask(task, { completed: !task.completed })}
+					onPointerDown={(event) => cardDrag.onPointerDown(event, task._id)}
+				/>,
+			)
+		}
+		if (slot && drag.index >= place) items.push(slot)
+		return items
+	}
+
 	// F opens the filter, Q shows only my cards (Trello's shortcuts).
 	useEffect(() => {
 		if (!boardId) return undefined
@@ -1785,6 +1563,8 @@ const Workspace = () => {
 							onFilter={() => setIsFilterOpen(true)}
 							onShare={() => setIsInviteOpen(true)}
 							onMenu={() => setIsBoardMenuOpen(true)}
+							onOpenProfile={(person) => navigate(person.isMe ? '/profile' : `/team?person=${person._id}`)}
+							onShowCards={(person) => setCardFilter({ ...EMPTY_FILTER, members: [String(person._id)] })}
 						/>
 					) : null}
 				>
@@ -1842,8 +1622,8 @@ const Workspace = () => {
 												isCollapsed={!isPhone && collapsedColumnIds.includes(column._id)}
 												isWatching={(column.watchers || []).some((watcherId) => String(watcherId) === String(authUser?._id))}
 												isDragging={draggedColumn?._id === column._id || landingColumnId === column._id}
-												isDropTarget={columnDropTarget === column._id}
-												isTaskDragActive={Boolean(draggedTask)}
+												isDropTarget={Boolean(cardDrag.drag) && cardDrag.drag.columnId === column._id}
+												isTaskDragActive={Boolean(cardDrag.drag)}
 												isComposing={activeTaskColumn === column._id}
 												onStartComposing={() => setActiveTaskColumn(column._id)}
 												onStopComposing={() => setActiveTaskColumn((current) => (current === column._id ? null : current))}
@@ -1852,151 +1632,8 @@ const Workspace = () => {
 												onToggleCollapse={() => toggleCollapsed(column._id)}
 												onOpenMenu={(anchor) => setColumnMenu({ columnId: column._id, anchor })}
 												onHeaderPointerDown={(event) => startColumnDrag(event, column)}
-												onDragOver={(event) => {
-													event.preventDefault()
-													event.dataTransfer.dropEffect = 'move'
-												}}
-												onDrop={() => (draggedColumn ? moveColumn(draggedColumn, column) : moveTask(draggedTask, column))}
 											>
-													{column.tasks.length === 0 ? null : (
-														column.tasks.map((task, taskIndex) => (
-															<Fragment key={task._id}>
-																{draggedTask &&
-																	dropIndicator?.columnId === column._id &&
-																	dropIndicator.index === taskIndex && (
-																		<div
-																			className='task-drag-placeholder'
-																			style={{ minHeight: draggedTaskHeight || undefined }}
-																			aria-hidden='true'
-																		/>
-																	)}
-															<article
-															className={`task-card ${draggedTask?._id === task._id ? 'is-dragging' : ''}${cardPasses(task, column) ? '' : ' is-filtered-out'}`}
-															title='Click to open · drag to move'
-													data-task-id={task._id}
-																draggable={editingTask?._id !== task._id}
-															onDragStart={(event) => {
-																event.dataTransfer.effectAllowed = 'move'
-																event.dataTransfer.setData('text/plain', task._id)
-															setNativeDragImage(event, event.currentTarget)
-															setDraggedColumn(null)
-																setDropIndicator(null)
-															setDraggedTask(task)
-															setDraggedTaskHeight(event.currentTarget.getBoundingClientRect().height)
-														}}
-															onDragEnd={() => {
-															setDraggedTask(null)
-															setDraggedTaskHeight(null)
-																setDropIndicator(null)
-														}}
-																key={task._id}
-																onClick={() => openTaskDetails(task)}
-																onDoubleClick={() => {
-																	setEditingTask(task)
-																	setEditingTitle(task.title)
-																}}
-															>
-																<div className='task-label'>
-																	{task.priority && task.priority !== 'none' ? (
-																		<span className={`task-priority-badge priority-${task.priority}`}>
-																			{PRIORITY_LABELS[task.priority]}
-																		</span>
-																	) : (
-																		<span />
-																	)}
-																	<button
-																		type='button'
-																		className='icon-button subtle'
-																		onClick={(event) => {
-																			event.stopPropagation()
-																			setDeleteTaskTarget(task)
-																		}}
-																		aria-label='Delete task'
-																		title='Delete task'
-																	>
-																		<Trash2 size={16} />
-																	</button>
-																</div>
-																{editingTask?._id === task._id ? (
-																	<form
-																		className='inline-form'
-																		onClick={(event) => event.stopPropagation()}
-																		onSubmit={(event) => {
-																			event.preventDefault()
-																			updateTask(task)
-																		}}
-																	>
-																		<input
-																			autoFocus
-																			value={editingTitle}
-																			onChange={(event) =>
-																				setEditingTitle(event.target.value)
-																			}
-																		/>
-																		<button
-																			type='submit'
-																			className='mini-primary'
-																		>
-																			Save
-																		</button>
-																	</form>
-																) : (
-																	<>
-																		<h3>{task.title}</h3>
-																		{task.description && (
-																			<div
-																				className='task-description-preview'
-																				dangerouslySetInnerHTML={{
-																					__html: sanitizeDescription(task.description),
-																				}}
-																			/>
-																		)}
-																		{task.labels?.length > 0 && (
-																			<div className='task-labels' aria-label='Task labels'>
-																				{task.labels.slice(0, 3).map((label) => (
-																					<span key={label}>{label}</span>
-																				))}
-																				{task.labels.length > 3 && <small>+{task.labels.length - 3}</small>}
-																			</div>
-																		)}
-																		{getChecklistProgress(task.checklist).total > 0 && (
-																			<div className='task-checklist-summary'>
-																				<ListChecks size={14} />
-																				{getChecklistProgress(task.checklist).completed}/{getChecklistProgress(task.checklist).total} checklist items
-																			</div>
-																		)}
-																		<div className='task-footer'>
-																			<span>
-																				{task.dueDate ? (
-																					<>
-																						<CalendarDays className={`task-due-icon ${getDueDateState(task.dueDate)}`} size={14} />{' '}
-																						{formatDueDate(task.dueDate)}
-																					</>
-																				) : null}
-																				{task.assignees?.length > 0 && (
-																					<>
-																						<UserRound size={14} />{' '}
-																						{task.assignees.length}
-																					</>
-																				)}
-																			</span>
-																			<ArrowUpRight size={15} />
-																		</div>
-																	</>
-																)}
-															</article>
-														</Fragment>
-														))
-													)}
-												{draggedTask &&
-													dropIndicator?.columnId === column._id &&
-													dropIndicator.index >= column.tasks.length && (
-													<div
-														className='task-drag-placeholder'
-														style={{ minHeight: draggedTaskHeight || undefined }}
-														aria-hidden='true'
-													/>
-												)}
+												{renderColumnCards(column)}
 											</BoardColumn>
 										))}
 										{canEditBoardName && <ListComposer onSubmit={addList} />}
@@ -2018,6 +1655,37 @@ const Workspace = () => {
 				onOpenBoard={selectBoard}
 				onCreateBoard={() => setIsCreatingBoard(true)}
 			/>
+			{openTask && (
+				<CardModal
+					task={openTask}
+					columns={columns}
+					boardLabels={boardLabelList}
+					labels={labelOptions}
+					people={boardPeople}
+					meId={meId}
+					canEdit
+					canManage={canManageBoard}
+					uploads={features.uploads}
+					commentsVersion={commentsVersion}
+					onClose={() => setTaskDetails(null)}
+					onPatch={(fields, options) => patchTask(openTask, fields, options)}
+					onMove={(columnId, index) => {
+						moveCard(openTask._id, columnId, index)
+						toast.success(tr('card.moved'))
+					}}
+					onCopy={(payload) => copyCard(openTask, payload)}
+					onDelete={() => deleteTask(openTask._id)}
+					onLabelCreate={(draft) => createLabel(draft, { addTo: openTask })}
+					onLabelUpdate={updateLabel}
+					onLabelDelete={deleteLabel}
+					onAttachLink={(url, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments`, { url, name }))}
+					onAttachImage={(image, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments/image`, { image, name }))}
+					onRemoveAttachment={(item) => cardRequest(() => axiosInstance.delete(`/board/tasks/${openTask._id}/attachments/${item._id}`))}
+					onToggleWatch={() => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/watch`))}
+					onCopyLink={() => copyText(`${window.location.origin}/workspaces/${selectedBoard?._id}?task=${openTask._id}`, tr('card.linkCopied'))}
+					taskTitleOf={(taskId) => findTask(String(taskId))?.title || ''}
+				/>
+			)}
 			{selectedBoard && (
 				<>
 					<ShareDialog
@@ -2041,6 +1709,13 @@ const Workspace = () => {
 						onRoleChange={changeMemberRole}
 						onRemove={removeMember}
 						onRevokeInvite={cancelInvite}
+						onResendInvite={resendInvite}
+						onCopyInvite={copyInviteFor}
+						onLeave={() => {
+							setIsInviteOpen(false)
+							setIsLeaveBoardOpen(true)
+						}}
+						suggestions={shareSuggestions}
 					/>
 					<BoardMenu
 						open={isBoardMenuOpen}
@@ -2127,321 +1802,6 @@ const Workspace = () => {
 					if (column) runColumnAction(column, type, payload)
 				}}
 			/>
-			{deleteTaskTarget && (
-				<div
-					className='modal-backdrop'
-					onMouseDown={() => setDeleteTaskTarget(null)}
-					role='presentation'
-				>
-					<div
-						className='modal-panel delete-board-panel'
-						onMouseDown={(event) => event.stopPropagation()}
-						role='dialog'
-						aria-modal='true'
-						aria-labelledby='delete-task-title'
-					>
-						<div className='modal-title'>
-							<div>
-								<p className='eyebrow'>Permanent action</p>
-								<h2 id='delete-task-title'>Delete task?</h2>
-							</div>
-							<button
-								type='button'
-								className='icon-button'
-								onClick={() => setDeleteTaskTarget(null)}
-								aria-label='Close'
-								title='Close'
-							>
-								<X size={18} />
-							</button>
-						</div>
-						<p className='delete-board-copy'>
-							Task "{deleteTaskTarget.title}" and all its details will be permanently deleted.
-						</p>
-						<div className='delete-board-actions'>
-							<button
-								type='button'
-								className='quiet-button'
-								onClick={() => setDeleteTaskTarget(null)}
-							>
-								Keep it
-							</button>
-							<button
-								type='button'
-								className='primary-button danger-button'
-								onClick={() => deleteTask(deleteTaskTarget._id)}
-							>
-								Delete task
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-			{taskDetails && (
-				<div
-					className='modal-backdrop'
-					onMouseDown={() => setTaskDetails(null)}
-				>
-					<form
-						className='modal-panel task-details-panel'
-						onSubmit={saveTaskDetails}
-						onMouseDown={(event) => event.stopPropagation()}
-					>
-						<div className='modal-title'>
-							<div>
-								<div className='task-breadcrumb' aria-label='Task location'>
-										<span>Workspace</span>
-									<ChevronRight size={16} />
-									<span>{selectedBoard?.name || 'Room'}</span>
-									<ChevronRight size={16} />
-									<strong>{taskDetailsForm.title || 'Untitled task'}</strong>
-								</div>
-							</div>
-							<button
-								type='button'
-								className='icon-button'
-								onClick={() => setTaskDetails(null)}
-								aria-label='Close'
-								title='Close'
-							>
-								<X size={18} />
-							</button>
-						</div>
-										<div className='task-details-layout'>
-											<div className='task-details-main'>
-						<label className='field-label' htmlFor='task-title'>
-							Title
-						</label>
-						<input
-							id='task-title'
-							autoFocus
-							value={taskDetailsForm.title}
-							onChange={(event) =>
-								setTaskDetailsForm((current) => ({
-									...current,
-									title: event.target.value,
-								}))
-							}
-						/>
-						<label className='field-label' htmlFor='task-description'>
-							Description
-						</label>
-						<RichTextEditor
-							value={taskDetailsForm.description}
-							onChange={(description) =>
-								setTaskDetailsForm((current) => ({
-									...current,
-									description,
-								}))
-							}
-						/>
-						<label className='field-label' htmlFor='task-due-date'>
-							Deadline
-						</label>
-						<input
-							id='task-due-date'
-							type='date'
-							value={taskDetailsForm.dueDate}
-							onChange={(event) =>
-								setTaskDetailsForm((current) => ({
-									...current,
-									dueDate: event.target.value,
-								}))
-							}
-						/>
-						<label className='field-label' htmlFor='task-labels'>
-							Labels
-						</label>
-						<input
-							id='task-labels'
-							value={taskDetailsForm.labels.join(', ')}
-							onChange={(event) =>
-								setTaskDetailsForm((current) => ({
-									...current,
-									labels: event.target.value
-										.split(',')
-										.map((label) => label.trim())
-										.filter(Boolean),
-								}))
-							}
-							placeholder='design, urgent, research'
-						/>
-						{boardMembers.length > 0 && (
-							<>
-								<label className='field-label' htmlFor='task-assignees'>
-									Assignees
-								</label>
-								<div className='assignee-picker' id='task-assignees'>
-									<div className='assignee-picker-control'>
-										<div className='assignee-chips'>
-											{taskDetailsForm.assignees.length === 0 && (
-												<span className='assignee-placeholder'>Assign people</span>
-											)}
-											{taskDetailsForm.assignees.map((memberId) => {
-												const member = boardMembers.find((item) => item._id === memberId)
-												if (!member) return null
-												const name = member.name || member.email
-												return (
-													<span className='assignee-chip' key={memberId}>
-														<span className='assignee-avatar'>{name.slice(0, 1).toUpperCase()}</span>
-														{name}
-														<button type='button' onClick={() => toggleTaskAssignee(memberId)} aria-label={`Remove ${name}`}><X size={13} /></button>
-													</span>
-												)
-											})}
-										</div>
-										<button type='button' className='assignee-picker-toggle' onClick={() => setIsAssigneePickerOpen((value) => !value)} aria-expanded={isAssigneePickerOpen} aria-label='Choose assignees'><ChevronDown size={17} /></button>
-									</div>
-									{isAssigneePickerOpen && (
-										<div className='assignee-picker-menu'>
-											{boardMembers.map((member) => {
-												const name = member.name || member.email
-												const isSelected = taskDetailsForm.assignees.includes(member._id)
-												return <button type='button' className={`assignee-option ${isSelected ? 'is-selected' : ''}`} key={member._id} onClick={() => toggleTaskAssignee(member._id)}><span className='assignee-avatar'>{name.slice(0, 1).toUpperCase()}</span><span>{name}</span><span className='assignee-option-check'>{isSelected ? '✓' : ''}</span></button>
-											})}
-										</div>
-									)}
-								</div>
-							</>
-						)}
-						<label className='field-label' htmlFor='task-checklist'>
-							Checklist
-						</label>
-						<div className='checklist-editor' id='task-checklist'>
-							<div className='checklist-items'>
-								{taskDetailsForm.checklist.length === 0 && (
-									<p className='checklist-empty'>No checklist items yet.</p>
-								)}
-								{taskDetailsForm.checklist.map((item, index) => (
-									<div className={`checklist-item ${item.completed ? 'is-completed' : ''}`} key={`${item.text}-${index}`}>
-										<input
-											type='checkbox'
-											checked={item.completed}
-											onChange={(event) => updateChecklistItem(index, { completed: event.target.checked })}
-											aria-label={`Mark ${item.text} complete`}
-										/>
-										<input
-											value={item.text}
-											onChange={(event) => updateChecklistItem(index, { text: event.target.value })}
-											aria-label={`Checklist item ${index + 1}`}
-										/>
-										<button type='button' className='checklist-remove' onClick={() => removeChecklistItem(index)} aria-label={`Remove ${item.text}`}><X size={15} /></button>
-									</div>
-								))}
-							</div>
-							<div className='checklist-add'>
-								<input value={newChecklistItem} onChange={(event) => setNewChecklistItem(event.target.value)} placeholder='Add checklist item' aria-label='New checklist item' />
-								<button type='button' className='checklist-add-button' onClick={addChecklistItem} aria-label='Add checklist item' title='Add checklist item'><Plus size={17} /></button>
-							</div>
-						</div>
-										</div>
-										<aside className='task-details-summary'>
-											<div className='task-summary-block'>
-												<span className='task-summary-label'>Status</span>
-												<select
-													className='task-status-select'
-													value={taskDetailsForm.columnId}
-													onChange={(event) =>
-														setTaskDetailsForm((current) => ({
-															...current,
-															columnId: event.target.value,
-														}))
-													}
-												>
-													{columns.map((column) => (
-														<option key={column._id} value={column._id}>
-															{column.title}
-														</option>
-													))}
-												</select>
-											</div>
-											<div className='task-summary-block'>
-												<label className='task-summary-label' htmlFor='task-priority'>Priority</label>
-												<select
-													id='task-priority'
-													className='task-status-select'
-													value={taskDetailsForm.priority}
-													onChange={(event) =>
-														setTaskDetailsForm((current) => ({
-															...current,
-															priority: event.target.value,
-														}))
-													}
-												>
-													{Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-														<option key={value} value={value}>
-															{label}
-														</option>
-													))}
-												</select>
-											</div>
-											<div className='task-summary-block'>
-												<span className='task-summary-label'>Checklist</span>
-												<strong>{getChecklistProgress(taskDetailsForm.checklist).completed} / {getChecklistProgress(taskDetailsForm.checklist).total} complete</strong>
-											</div>
-											<div className='task-summary-block'>
-												<span className='task-summary-label'>Assignees</span>
-												<strong>
-													{taskDetailsForm.assignees.length
-														? taskDetailsForm.assignees
-																.map((memberId) => {
-																	const member = boardMembers.find((item) => item._id === memberId)
-																	return member?.name || member?.email || 'Member'
-																})
-																.join(', ')
-														: 'Unassigned'}
-												</strong>
-											</div>
-											<div className='task-summary-block'>
-												<span className='task-summary-label'>Deadline</span>
-												<strong>
-													{taskDetailsForm.dueDate
-														? formatDueDate(taskDetailsForm.dueDate, { day: 'numeric', month: 'short', year: 'numeric' })
-														: 'No deadline'}
-												</strong>
-											</div>
-										</aside>
-									</div>
-									<section className='task-activity-panel' aria-label='Comments and activity'>
-										<div className='task-activity-heading'>
-											<div><MessageSquare size={18} /><strong>Comments and activity</strong></div>
-											<button type='button' className='task-timer-button' onClick={toggleTaskTimer}>
-												{isTimerRunning ? <Square size={14} /> : <Play size={14} />}
-												{isTimerRunning ? 'Stop timer' : 'Start timer'}
-											</button>
-										</div>
-										<div className='task-time-summary'><Clock3 size={15} /> Tracked {formatTrackedTime(trackedSeconds)}</div>
-										<div className='task-comment-composer'>
-											<input
-												value={taskComment}
-												onChange={(event) => setTaskComment(event.target.value)}
-												onKeyDown={(event) => {
-													// The composer sits inside the task form; Enter must post the comment, not save and close the task.
-													if (event.key !== 'Enter') return
-													event.preventDefault()
-													if (taskComment.trim()) addTaskComment()
-												}}
-												placeholder='Write a comment...'
-												aria-label='Write a comment'
-												maxLength={2000}
-											/>
-											<button type='button' className='mini-primary' onClick={addTaskComment} disabled={!taskComment.trim()}>Comment</button>
-										</div>
-										<div className='task-activity-list'>
-											{isActivityLoading ? <p className='task-activity-empty'>Loading activity...</p> : taskActivities.length === 0 ? <p className='task-activity-empty'>No activity yet.</p> : taskActivities.map((activity) => (
-												<article className='task-activity-item' key={activity._id}>
-													<span className='task-activity-avatar'>{(activity.user?.name || activity.user?.email || 'U').slice(0, 2).toUpperCase()}</span>
-													<div><p><strong>{activity.user?.name || activity.user?.email || 'User'}</strong> {activity.message || activity.type}</p><time>{new Date(activity.createdAt).toLocaleString()}</time></div>
-												</article>
-											))}
-										</div>
-									</section>
-						<button className='primary-button full-button' type='submit'>
-							Save changes
-						</button>
-					</form>
-				</div>
-			)}
 			<BoardBackgroundDialog
 				open={isBackgroundOpen && Boolean(selectedBoard)}
 				onClose={() => setIsBackgroundOpen(false)}

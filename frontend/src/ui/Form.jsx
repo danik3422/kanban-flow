@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from 'lucide-react'
+import { ArrowBigUpDash, Eye, EyeOff } from 'lucide-react'
 import { cloneElement, forwardRef, isValidElement, useId, useState } from 'react'
 import { useI18n } from '../i18n'
 import { IconButton } from './Button'
@@ -50,21 +50,40 @@ export const Input = forwardRef(function Input({ icon: Icon, action, className, 
 	)
 })
 
-export const PasswordInput = forwardRef(function PasswordInput(props, ref) {
+/**
+ * Password field with a show/hide toggle and its own Caps Lock hint. The browser's
+ * built-in indicator is hidden (Safari stretches it), so every browser shows the same icon.
+ */
+export const PasswordInput = forwardRef(function PasswordInput({ onKeyDown, onKeyUp, onBlur, ...props }, ref) {
 	const { t } = useI18n()
 	const [visible, setVisible] = useState(false)
+	const [capsLock, setCapsLock] = useState(false)
+	const readCaps = (event) => {
+		if (typeof event.getModifierState === 'function') setCapsLock(event.getModifierState('CapsLock'))
+	}
 	return (
 		<Input
 			ref={ref}
 			type={visible ? 'text' : 'password'}
 			{...props}
+			onKeyDown={(event) => { readCaps(event); onKeyDown?.(event) }}
+			onKeyUp={(event) => { readCaps(event); onKeyUp?.(event) }}
+			onBlur={(event) => { setCapsLock(false); onBlur?.(event) }}
 			action={
-				<IconButton
-					icon={visible ? EyeOff : Eye}
-					label={visible ? t('common.hidePassword') : t('common.showPassword')}
-					size='sm'
-					onClick={() => setVisible((value) => !value)}
-				/>
+				<>
+					{capsLock && (
+						<span className='ui-caps' role='status' title={t('common.capsLockOn')}>
+							<ArrowBigUpDash size={16} strokeWidth={2} aria-hidden='true' />
+							<span className='ui-visually-hidden'>{t('common.capsLockOn')}</span>
+						</span>
+					)}
+					<IconButton
+						icon={visible ? EyeOff : Eye}
+						label={visible ? t('common.hidePassword') : t('common.showPassword')}
+						size='sm'
+						onClick={() => setVisible((value) => !value)}
+					/>
+				</>
 			}
 		/>
 	)

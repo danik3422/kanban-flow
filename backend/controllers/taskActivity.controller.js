@@ -5,6 +5,7 @@ import { notifyTaskRecipients } from '../lib/notificationDelivery.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
+import { emitCommentCount } from './card.controller.js'
 
 const getAccessibleTask = async (taskId, userId) => {
 	if (!mongoose.Types.ObjectId.isValid(taskId)) return null
@@ -59,7 +60,8 @@ export const addTaskComment = async (req, res) => {
 		})
 
 		const actorName = req.user.name || req.user.email || 'Someone'
-		const assigneeUserIds = [...new Set((access.task.assignees || []).map((assignee) => assignee.toString()).filter((id) => id !== req.user._id.toString()))]
+		// Assignees and watchers hear about comments.
+		const assigneeUserIds = [...new Set([...(access.task.assignees || []), ...(access.task.watchers || [])].map((id) => id.toString()).filter((id) => id !== req.user._id.toString()))]
 		await notifyTaskRecipients({
 			userIds: assigneeUserIds,
 			actorId: req.user._id,
@@ -71,75 +73,10 @@ export const addTaskComment = async (req, res) => {
 			details: { comment: message },
 		})
 
+		await emitCommentCount(access.board._id, access.task._id)
 		return res.status(201).json(await activity.populate('user', 'name email avatar'))
 	} catch (error) {
 		console.error('Task comment creation failed:', error)
 		return res.status(500).json({ message: 'Could not add task comment' })
-	}
-}
-
-export const startTaskTimer = async (req, res) => {
-	try {
-		const access = await getAccessibleTask(req.params.id, req.user._id)
-		if (!access) return res.status(404).json({ message: 'Task not found' })
-		// Conditional updates make double clicks and concurrent users safe.
-		const task = await Task.findOneAndUpdate(
-			{ _id: access.task._id, timerStartedAt: null },
-			{ $set: { timerStartedAt: new Date() } },
-			{ returnDocument: 'after' },
-		)
-		if (!task) return res.status(400).json({ message: 'Timer is already running' })
-		await recordBoardActivity({
-			boardId: access.board._id,
-			userId: req.user._id,
-			action: 'started timer',
-			entityType: 'task',
-			entityId: task._id,
-			entityName: task.title,
-			details: `started a timer on ${task.title}`,
-		})
-		return res.status(200).json({ timerStartedAt: task.timerStartedAt, trackedSeconds: task.trackedSeconds })
-	} catch (error) {
-		console.error('Task timer start failed:', error)
-		return res.status(500).json({ message: 'Could not start task timer' })
-	}
-}
-
-export const stopTaskTimer = async (req, res) => {
-	try {
-		const access = await getAccessibleTask(req.params.id, req.user._id)
-		if (!access) return res.status(404).json({ message: 'Task not found' })
-		const startedAt = access.task.timerStartedAt
-		if (!startedAt) return res.status(400).json({ message: 'Timer is not running' })
-		const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 1000))
-		// Only the request that still sees this start time may log it.
-		const task = await Task.findOneAndUpdate(
-			{ _id: access.task._id, timerStartedAt: startedAt },
-			{ $set: { timerStartedAt: null }, $inc: { trackedSeconds: durationSeconds } },
-			{ returnDocument: 'after' },
-		)
-		if (!task) return res.status(400).json({ message: 'Timer is not running' })
-		const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
-		const activity = await TaskActivity.create({
-			task: task._id,
-			board: access.board._id,
-			user: req.user._id,
-			type: 'time_logged',
-			durationMinutes,
-			message: 'logged time on this card',
-		})
-		await recordBoardActivity({
-			boardId: access.board._id,
-			userId: req.user._id,
-			action: 'logged time',
-			entityType: 'task',
-			entityId: task._id,
-			entityName: task.title,
-			details: `logged ${durationMinutes} minutes on ${task.title}`,
-		})
-		return res.status(200).json({ trackedSeconds: task.trackedSeconds, activity })
-	} catch (error) {
-		console.error('Task timer stop failed:', error)
-		return res.status(500).json({ message: 'Could not stop task timer' })
 	}
 }

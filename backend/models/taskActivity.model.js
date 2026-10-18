@@ -7,13 +7,16 @@ const taskActivitySchema = new mongoose.Schema(
 		user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		type: {
 			type: String,
-			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted'],
+			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted', 'completed', 'reopened', 'attachment_added', 'copied'],
 			required: true,
 		},
 		message: { type: String, default: '' },
 		fromColumn: { type: String, default: '' },
 		toColumn: { type: String, default: '' },
 		durationMinutes: { type: Number, default: 0 },
+		// Which fields an update touched, so the app can say it in the reader's language.
+		fields: { type: [String], default: undefined },
+		editedAt: { type: Date, default: null },
 	},
 	{ timestamps: true },
 )

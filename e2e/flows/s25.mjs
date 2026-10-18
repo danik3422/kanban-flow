@@ -111,8 +111,8 @@ const dueMail = inbox.at(-1)
 check('instantly emails the due date change', dueMail && /“Write release notes” is now due/.test(dueMail.subject), dueMail?.subject)
 const link = dueMail.text.match(/https?:\/\/\S+\?task=\S+/)?.[0]
 check('the email links to the card', Boolean(link), dueMail.text)
-await page.goto(link); await page.waitForSelector('.task-details-panel', { timeout: 8000 }).catch(() => {})
-check('the link opens the card', (await page.locator('.task-details-panel').count()) === 1)
+await page.goto(link); await page.waitForSelector('.cm-modal', { timeout: 8000 }).catch(() => {})
+check('the link opens the card', (await page.locator('.cm-modal').count()) === 1)
 await page.keyboard.press('Escape')
 
 // Hourly summary: nothing at once, then one email with everything, in the reader's language.

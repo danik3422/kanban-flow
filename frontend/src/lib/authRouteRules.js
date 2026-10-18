@@ -3,6 +3,7 @@ export const accountGateAllowedRoutes = [
   '/login/verify-email',
   '/verify-email',
   '/setup-profile',
+  '/about',
 ]
 
 export const shouldBlockAccountGateRoute = (pathname, authUser) => {

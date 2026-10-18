@@ -130,10 +130,15 @@ await page.goto(`${APP}/workspaces`); await page.waitForSelector('.board-card')
 
 // Account menu: language, theme, sign-out.
 await page.locator('.app-account-trigger').click()
+check('theme and language start folded', (await page.getByRole('menuitemradio').count()) === 0 && (await page.locator('.ui-menu__group-toggle').count()) === 2)
+check('each shows its current choice', (await page.locator('.ui-menu__group-toggle', { hasText: 'Language' }).innerText()).includes('English'))
+await page.locator('.ui-menu__group-toggle', { hasText: 'Language' }).click()
+check('a group opens its choices in place', (await page.getByRole('menuitemradio').count()) === 3 && (await page.getByRole('menuitemradio', { name: 'English' }).getAttribute('aria-checked')) === 'true')
 await page.getByRole('menuitemradio', { name: 'Українська' }).click()
 await page.goto(`${APP}/workspaces`); await page.waitForSelector('.board-card')
 check('the account menu switches the language', (await page.locator('.ui-page-header__title').innerText()) === 'Дошки')
 await page.locator('.app-account-trigger').click()
+await page.locator('.ui-menu__group-toggle', { hasText: 'Тема' }).click()
 await page.getByRole('menuitemradio', { name: 'Темна' }).click()
 check('the account menu switches the theme', (await page.getAttribute('html', 'data-theme')) === 'dark')
 

@@ -16,6 +16,7 @@ import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
 import Notification from '../models/notification.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
+import TimeEntry from '../models/timeEntry.model.js'
 import BoardActivity from '../models/boardActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
 import { normalizeBackground, reportUnsplashUse, searchBackgroundPhotos } from '../lib/boardBackgrounds.js'
@@ -35,13 +36,17 @@ const describeTaskContent = (task) => ({
 	labels: (task.labels || []).join('\u0000'),
 	checklist: JSON.stringify((task.checklist || []).map((item) => [item.text, Boolean(item.completed)])),
 	priority: task.priority || 'none',
+	'start date': task.startDate ? new Date(task.startDate).toISOString() : '',
+	estimate: String(task.estimateMinutes || 0),
+	cover: task.cover ? JSON.stringify([task.cover.type, task.cover.key || task.cover.id || task.cover.url, task.cover.size]) : '',
 })
 
-const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0 }) =>
+const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0, fields }) =>
 	TaskActivity.create({
 		task: taskId,
 		board: boardId,
 		user: userId,
+		...(fields?.length && { fields }),
 		type,
 		message,
 		fromColumn,
@@ -408,7 +413,7 @@ export const getBoardMembers = async (req, res) => {
 		}
 
 		const members = await BoardMember.find({ board: boardId })
-			.populate('user', 'name email avatar provider')
+			.populate('user', 'name email avatar provider jobTitle timezone')
 			.lean()
 
 		return res.status(200).json(members)
@@ -735,6 +740,45 @@ export const copyBoardInviteLink = async (req, res) => {
 	}
 }
 
+/** Send an email invitation again: a fresh link, seven more days, a new email. */
+export const resendBoardInvite = async (req, res) => {
+	try {
+		const board = req.board
+		if (!(await canManageBoard(board, req.user._id))) {
+			return res.status(403).json({ message: 'Only the board owner or an admin can resend invites' })
+		}
+		if (!mongoose.Types.ObjectId.isValid(req.params.inviteId)) return res.status(404).json({ message: 'Pending invite not found' })
+		const invite = await BoardInvite.findOne({ _id: req.params.inviteId, board: board._id, usedAt: null, email: { $ne: '' } })
+		if (!invite) return res.status(404).json({ message: 'Pending invite not found' })
+		const rawToken = crypto.randomBytes(32).toString('hex')
+		invite.tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+		invite.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+		await invite.save()
+		const inviteUrl = `${env.frontendUrl}/invite/${rawToken}`
+		let emailSent = false
+		try {
+			const invitee = await User.findOne({ email: invite.email }).select('language').lean()
+			await sendBoardInviteEmail({ email: invite.email, boardName: board.name, boardUrl: inviteUrl, inviterName: req.user.name || req.user.email, language: invitee?.language || req.user.language })
+			emailSent = true
+		} catch (error) {
+			console.warn('Invite email was not resent:', error.message)
+		}
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'resent invite',
+			entityType: 'invite',
+			entityId: invite._id,
+			entityName: invite.email,
+			details: `resent the invitation to ${invite.email}`,
+		})
+		return res.status(200).json({ emailSent, expiresAt: invite.expiresAt })
+	} catch (error) {
+		console.error('Board invite resend failed:', error)
+		return res.status(500).json({ message: 'Could not resend the invitation' })
+	}
+}
+
 export const getBoardColumns = async (req, res) => {
 	try {
 		const boardId = req.params.id
@@ -774,8 +818,24 @@ export const getBoardContent = async (req, res) => {
 			.populate('assignees', 'name email avatar')
 			.sort({ position: 1, createdAt: 1 })
 			.lean()
+		// What the card faces show: how many comments, and who has a timer running.
+		const taskIds = tasks.map((task) => task._id)
+		const [commentCounts, runningTimers] = await Promise.all([
+			TaskActivity.aggregate([{ $match: { task: { $in: taskIds }, type: 'comment' } }, { $group: { _id: '$task', count: { $sum: 1 } } }]),
+			TimeEntry.find({ task: { $in: taskIds }, endedAt: null }).select('task user startedAt').lean(),
+		])
+		const commentsByTask = new Map(commentCounts.map((row) => [row._id.toString(), row.count]))
+		const runningByTask = new Map()
+		for (const entry of runningTimers) {
+			const key = entry.task.toString()
+			runningByTask.set(key, [...(runningByTask.get(key) || []), { user: entry.user, startedAt: entry.startedAt }])
+		}
 		const tasksByColumn = new Map(columns.map((column) => [column._id.toString(), []]))
-		for (const task of tasks) tasksByColumn.get(task.column.toString())?.push(task)
+		for (const task of tasks) {
+			task.commentCount = commentsByTask.get(task._id.toString()) || 0
+			task.runningTimers = runningByTask.get(task._id.toString()) || []
+			tasksByColumn.get(task.column.toString())?.push(task)
+		}
 
 		return res.status(200).json(columns.map((column) => ({
 			...column,
@@ -2120,6 +2180,10 @@ export const updateTask = async (req, res) => {
 			position,
 			column: targetColumnId,
 			priority,
+			startDate,
+			completed,
+			estimateMinutes,
+			cover,
 		} = req.body
 		if (assignees !== undefined && !await validateBoardAssignees(board, assignees)) {
 			return res.status(400).json({ message: 'All assignees must be active board members' })
@@ -2154,6 +2218,30 @@ export const updateTask = async (req, res) => {
 		if (labels !== undefined) task.labels = labels
 		if (checklist !== undefined) task.checklist = checklist
 		if (priority !== undefined) task.priority = priority
+		if (startDate !== undefined) task.startDate = startDate || null
+		if (estimateMinutes !== undefined) task.estimateMinutes = estimateMinutes
+		if (cover !== undefined) {
+			try {
+				// An image already attached to this card can be its cover too.
+				const attached = cover?.type === 'photo' && /^attachment-/.test(cover.id || '')
+					? task.attachments.find((item) => item.kind === 'image' && `attachment-${item._id}` === cover.id)
+					: null
+				task.cover = cover === null
+					? null
+					: cover.type === 'color'
+						? cover
+						: attached
+							? { type: 'photo', id: cover.id, url: attached.url, thumb: attached.url, size: cover.size }
+							: { ...normalizeBackground({ ...cover, type: 'photo' }), size: cover.size }
+			} catch (error) {
+				return res.status(400).json({ message: 'Choose a cover from the list.' })
+			}
+		}
+		const completedChanged = completed !== undefined && Boolean(completed) !== Boolean(task.completed)
+		if (completedChanged) {
+			task.completed = Boolean(completed)
+			task.completedAt = completed ? new Date() : null
+		}
 		const moved = originalColumnId.toString() !== targetColumn._id.toString()
 		// A column change without an explicit slot appends the card to the target column.
 		const requestedPosition = position !== undefined
@@ -2253,7 +2341,17 @@ export const updateTask = async (req, res) => {
 				: `updated the ${changedFields.join(', ')}`,
 			fromColumn: originalColumn?.title || '',
 			toColumn: targetColumn.title || '',
+			fields: moved ? undefined : changedFields,
 		})
+		if (completedChanged) {
+			await recordTaskActivity({
+				taskId: task._id,
+				boardId,
+				userId: req.user._id,
+				type: task.completed ? 'completed' : 'reopened',
+				message: task.completed ? 'marked this card complete' : 'marked this card incomplete',
+			})
+		}
 		const newlyAssignedIds = (assignees === undefined ? [] : assignees)
 			.map((assignee) => assignee.toString())
 			.filter((assigneeId) => !originalAssigneeIds.includes(assigneeId))
@@ -2296,7 +2394,8 @@ export const updateTask = async (req, res) => {
 			}
 		}
 		if (moved && Array.isArray(assignees ?? task.assignees)) {
-			const nextAssigneeIds = [...new Set((assignees ?? task.assignees).map((assignee) => assignee.toString()))]
+			// Assignees and watchers hear that the card moved.
+			const nextAssigneeIds = [...new Set([...(assignees ?? task.assignees), ...(task.watchers || [])].map((assignee) => assignee.toString()))]
 			const notificationTargets = nextAssigneeIds.filter((assigneeId) => assigneeId !== req.user._id.toString())
 			if (notificationTargets.length) {
 				await notifyTaskAssignees({

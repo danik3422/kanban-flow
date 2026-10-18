@@ -10,6 +10,7 @@ import { axiosInstance } from '../lib/axios'
 import { loadFirebase } from '../lib/firebase'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button, Field, IconButton, Input, PasswordInput } from '../ui'
+import { canAutoFocusTyping } from '../utils/autoFocus'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -24,7 +25,7 @@ const Login = () => {
 	const [isPasskeyPending, setIsPasskeyPending] = useState(false)
 	const emailRef = useRef(null)
 	const passwordRef = useRef(null)
-	const autoFocus = typeof window !== 'undefined' && window.matchMedia('(min-width: 721px)').matches
+	const autoFocus = canAutoFocusTyping()
 
 	// Preload social sign-in so the provider popup opens straight from the click.
 	useEffect(() => {

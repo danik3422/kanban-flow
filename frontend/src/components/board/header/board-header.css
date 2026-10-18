@@ -18,9 +18,12 @@
 .bh-phone-only { display: none; }
 
 .bh-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; margin-right: var(--ui-space-1); }
-.bh-people { display: inline-flex; align-items: center; padding: 2px; border: 0; border-radius: var(--ui-radius-full); background: none; cursor: pointer; }
-.bh-people:hover .ui-avatar { box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 3px var(--ui-border-strong); }
-.bh-people:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.bh-people { display: flex; align-items: center; padding-left: 6px; }
+/* Faces overlap like a stack; each one is its own button. */
+.bh-person-button { position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; margin-left: -6px; padding: 0; border: 2px solid var(--ui-bg); border-radius: 50%; background: var(--ui-surface-2); color: var(--ui-text-2); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; transition: transform var(--ui-duration) var(--ui-ease); }
+.bh-person-button:hover, .bh-person-button[aria-expanded='true'] { z-index: 1; transform: translateY(-2px); }
+.bh-person-button:focus-visible { z-index: 1; outline: none; box-shadow: var(--ui-focus-ring); }
+.bh-person-more { background: var(--ui-surface-3); }
 .bh-filter.is-active { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
 .bh-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--ui-radius-full); background: var(--ui-accent); color: #fff; font-size: 11px; font-weight: 700; }
 
@@ -54,34 +57,73 @@
 }
 
 /* Share dialog */
+.bh-share-modal { --modal-width: 560px; }
 .bh-share-body { display: flex; flex-direction: column; gap: var(--ui-space-5); }
-.bh-invite { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--ui-space-2); align-items: start; }
-.bh-invite .ui-input-group { width: 100%; }
-.bh-invite__role { width: 150px; }
-.bh-invite__error { grid-column: 1 / -1; margin: 0; color: var(--ui-danger-soft-text); font-size: var(--ui-text-xs); font-weight: 600; }
-.bh-link-row { display: flex; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); }
-.bh-link-row__icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-accent-soft-text); }
-.bh-link-row__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
-.bh-link-row__title { color: var(--ui-text); font-weight: 600; }
-.bh-link-row__actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.bh-invite { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.bh-invite__row { display: flex; align-items: center; justify-content: flex-end; gap: var(--ui-space-2); }
+.bh-invite__hint { font-size: var(--ui-text-xs); }
+.bh-invite__error { margin: 0; color: var(--ui-danger-soft-text); font-size: var(--ui-text-xs); font-weight: 600; overflow-wrap: anywhere; }
+.bh-note { margin: 0; padding: var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-surface-2); color: var(--ui-text-2); font-size: var(--ui-text-sm); }
+
+/* Emails as chips */
+.bh-chips-field-wrap { position: relative; }
+.bh-chips-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 48px; padding: 7px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); cursor: text; }
+.bh-chips-field:focus-within { border-color: var(--ui-accent); box-shadow: var(--ui-focus-ring); }
+.bh-chips-field.is-invalid { border-color: var(--ui-danger); }
+.bh-chips-field__icon { flex: 0 0 auto; margin: 0 2px; color: var(--ui-text-muted); }
+.bh-chips-field__input { flex: 1 1 140px; min-width: 120px; height: 30px; padding: 0 2px; border: 0; background: transparent; color: var(--ui-text); font: inherit; font-size: 16px; outline: none; }
+@media (min-width: 721px) {
+	.bh-chips-field__input { font-size: var(--ui-text-md); }
+}
+.bh-email-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 28px; padding: 0 4px 0 10px; border-radius: var(--ui-radius-full); background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); font-size: var(--ui-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.bh-email-chip.is-invalid { background: var(--ui-danger-soft); color: var(--ui-danger-soft-text); }
+.bh-email-chip__remove { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.bh-email-chip__remove:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.bh-suggestions { position: absolute; top: calc(100% + 4px); right: 0; left: 0; z-index: 5; margin: 0; padding: 4px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); box-shadow: var(--ui-shadow-lg); list-style: none; }
+.bh-suggestion { display: flex; align-items: center; gap: var(--ui-space-3); width: 100%; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; }
+.bh-suggestion.is-active, .bh-suggestion:hover { background: var(--ui-surface-2); }
+.bh-suggestion__text { display: flex; flex-direction: column; min-width: 0; }
+.bh-suggestion__name { font-weight: 600; }
+
+/* Role as a small button */
+.bh-role-button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; height: 34px; padding: 0 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.bh-role-button:hover { border-color: var(--ui-border-strong); }
+.bh-role-button:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.bh-invite__row .bh-role-button { height: var(--ui-control-h); margin-right: auto; }
+
+/* Invite and public links */
+.bh-link-card { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); }
+.bh-link-card__head { display: flex; align-items: center; gap: var(--ui-space-3); }
+.bh-link-card__icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-accent-soft-text); }
+.bh-link-card__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.bh-link-card__title { color: var(--ui-text); font-weight: 600; }
+.bh-link-card__url { display: flex; gap: var(--ui-space-2); }
+.bh-link-card__url .ui-input-group, .bh-link-card__url > .ui-control { flex: 1; min-width: 0; }
+.bh-link-card__url input { color: var(--ui-text-2); font-size: var(--ui-text-sm); }
 .bh-danger-text { color: var(--ui-danger-soft-text); }
-.bh-section-title { margin: 0 0 var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* People and invitations */
+.bh-people-section { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.bh-people-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ui-space-2); }
+.bh-people-search { width: 200px; }
+.bh-section-title { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .bh-people-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.bh-person { display: flex; align-items: center; gap: var(--ui-space-3); min-height: 56px; padding: 6px 0; border-top: 1px solid var(--ui-border); }
+.bh-person { display: flex; align-items: center; gap: var(--ui-space-3); min-height: 60px; padding: 8px 0; border-top: 1px solid var(--ui-border); }
 .bh-person:first-child { border-top: 0; }
 .bh-person__text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .bh-person__name { overflow: hidden; color: var(--ui-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .bh-person__text .bh-muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bh-person__actions { display: flex; align-items: center; gap: 2px; }
-.bh-person__role { width: 150px; }
+.bh-invite-avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border: 1px dashed var(--ui-border-strong); border-radius: 50%; color: var(--ui-text-muted); }
+.bh-empty { padding: var(--ui-space-4) 0; text-align: center; }
 .bh-muted { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.45; }
 @media (max-width: 600px) {
-	.bh-invite { grid-template-columns: minmax(0, 1fr) auto; }
-	.bh-invite .ui-input-group { grid-column: 1 / -1; }
-	.bh-invite__role { width: 100%; }
-	.bh-link-row { flex-wrap: wrap; }
-	.bh-link-row__actions { width: 100%; padding-left: 48px; }
-	.bh-person__role { width: 128px; }
+	.bh-people-head { flex-direction: column; align-items: stretch; }
+	.bh-people-head .ui-segmented { width: 100%; }
+	.bh-people-search { width: 100%; }
+	.bh-link-card__url { flex-direction: column; }
+	.bh-link-card__head { flex-wrap: wrap; }
+	.bh-link-card__head > .ui-btn { margin-left: 48px; }
+	.bh-person__text .bh-muted { white-space: normal; }
 }
 
 /* Board menu */
@@ -132,3 +174,7 @@
 
 /* Cards that do not pass the filter step aside. */
 .bc-board.is-filtering .task-card.is-filtered-out { display: none; }
+
+/* Person card lines: job title, then email, each trimmed on its own. */
+.bh-card-line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-menu__header--person { max-width: 340px; }

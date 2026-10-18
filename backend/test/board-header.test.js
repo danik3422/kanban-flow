@@ -88,3 +88,21 @@ describe('copy board', () => {
 		assert.equal((await request(app).post(`/api/board/boards/${board._id}/copy`).set('Cookie', cookie(owner)).send({ name: '  ' })).status, 400)
 	})
 })
+
+describe('resend invitation', () => {
+	it('sends a fresh link, the old one stops working; members cannot resend', async () => {
+		const { owner, member, board } = await setup()
+		const created = await request(app).post(`/api/board/boards/${board._id}/invites`).set('Cookie', cookie(owner)).send({ email: 'later@example.com', role: 'member' })
+		assert.equal(created.status, 201)
+		const oldToken = created.body.inviteUrl.split('/invite/')[1]
+		const invites = await request(app).get(`/api/board/boards/${board._id}/invites`).set('Cookie', cookie(owner))
+		const invite = invites.body.find((item) => item.email === 'later@example.com')
+		const resent = await request(app).post(`/api/board/boards/${board._id}/invites/${invite._id}/resend`).set('Cookie', cookie(owner))
+		assert.equal(resent.status, 200)
+		assert.ok(new Date(resent.body.expiresAt) > new Date(Date.now() + 6 * 86400000))
+		const old = await request(app).get(`/api/board/invites/${oldToken}/details`)
+		assert.notEqual(old.status, 200, 'the old link no longer works')
+		assert.equal((await request(app).post(`/api/board/boards/${board._id}/invites/${invite._id}/resend`).set('Cookie', cookie(member))).status, 403)
+		assert.ok([400, 404].includes((await request(app).post(`/api/board/boards/${board._id}/invites/not-an-id/resend`).set('Cookie', cookie(owner))).status))
+	})
+})

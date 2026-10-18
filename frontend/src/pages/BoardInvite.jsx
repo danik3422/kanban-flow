@@ -15,6 +15,8 @@ import { useAuthStore } from '../store/useAuthStore'
 import { useBoardStats } from '../store/useBoardStats'
 import { Alert, Avatar, Button, Field, Input, Skeleton } from '../ui'
 import { startPagePath } from '../utils/preferences'
+import { canAutoFocusTyping } from '../utils/autoFocus'
+
 
 const PENDING_INVITE_KEY = 'kanban-pending-invite'
 
@@ -63,7 +65,7 @@ const PasteInvite = () => {
 					placeholder={t('invite.pastePlaceholder')}
 					autoComplete='off'
 					inputMode='url'
-					autoFocus
+					autoFocus={canAutoFocusTyping()}
 				/>
 			</Field>
 			<Button type='submit' size='lg' block iconRight={ArrowRight}>{t('invite.pasteOpen')}</Button>

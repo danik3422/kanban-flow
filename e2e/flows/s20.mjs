@@ -67,7 +67,7 @@ await openMenu('Backlog')
 await menuItem('Sort by').click()
 await menuItem('Priority').click()
 await page.waitForTimeout(500)
-check('sorting by priority puts urgent first', (await column('Backlog').locator('.task-card h3').first().innerText()) === 'Urgent thing')
+check('sorting by priority puts urgent first', (await column('Backlog').locator('.ct-title').first().innerText()) === 'Urgent thing')
 
 // Colour and remove colour.
 await openMenu('Backlog')
@@ -137,7 +137,16 @@ await page.waitForFunction(() => document.querySelector('.bc-column .bc-column__
 await page.waitForTimeout(800)
 // Both lists on screen: a drag that has to scroll the board mid-way is not what people do.
 await page.locator('.bc-scroll').evaluate((element) => { element.scrollLeft = 0 })
-await column('In progress').locator('.task-card', { hasText: 'First' }).dragTo(column('Ideas'))
+{
+	// Cards move with pointer events: press, nudge past the threshold, travel, release.
+	const from = await column('In progress').locator('.task-card', { hasText: 'First' }).boundingBox()
+	const to = await column('Ideas').boundingBox()
+	await page.mouse.move(from.x + 20, from.y + from.height / 2)
+	await page.mouse.down()
+	await page.mouse.move(from.x + 30, from.y + from.height / 2 + 6, { steps: 3 })
+	await page.mouse.move(to.x + to.width / 2, to.y + 80, { steps: 12 })
+	await page.mouse.up()
+}
 {
 	let after = await content()
 	for (let attempt = 0; attempt < 20 && !after.find((item) => item.title === 'Ideas').tasks.length; attempt++) {

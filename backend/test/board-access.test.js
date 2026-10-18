@@ -19,6 +19,7 @@ import PasskeyChallenge from '../models/passkeyChallenge.model.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
+import TimeEntry from '../models/timeEntry.model.js'
 import User from '../models/user.model.js'
 
 let mongoServer
@@ -1656,20 +1657,21 @@ describe('security and integrity hardening', () => {
 		const { owner, board } = await createBoardWithOwner()
 		const cookie = authCookie(owner._id)
 		const column = await Column.create({ board: board._id, title: 'Timer' })
-		const task = await Task.create({ column: column._id, title: 'Timed', timerStartedAt: new Date(Date.now() - 120_000) })
+		const task = await Task.create({ column: column._id, title: 'Timed' })
 
-		const doubleStart = await request(app).post(`/api/board/tasks/${task._id}/timer/start`).set('Cookie', cookie)
-		assert.equal(doubleStart.status, 400)
-
+		assert.equal((await request(app).post(`/api/board/tasks/${task._id}/timer/start`).set('Cookie', cookie)).status, 201)
+		assert.equal((await request(app).post(`/api/board/tasks/${task._id}/timer/start`).set('Cookie', cookie)).status, 400, 'one timer per person and card')
+		// Two minutes of work, then two stops at once.
+		await TimeEntry.updateOne({ task: task._id, endedAt: null }, { $set: { startedAt: new Date(Date.now() - 120_000) } })
 		const results = await Promise.all([
 			request(app).post(`/api/board/tasks/${task._id}/timer/stop`).set('Cookie', cookie),
 			request(app).post(`/api/board/tasks/${task._id}/timer/stop`).set('Cookie', cookie),
 		])
 		assert.deepEqual(results.map((response) => response.status).sort(), [200, 400])
 		const stored = await Task.findById(task._id).lean()
-		assert.equal(stored.timerStartedAt, null)
 		assert.ok(stored.trackedSeconds >= 120 && stored.trackedSeconds < 130, `tracked ${stored.trackedSeconds}`)
 		assert.equal(await TaskActivity.countDocuments({ task: task._id, type: 'time_logged' }), 1)
+		assert.equal(await TimeEntry.countDocuments({ task: task._id, endedAt: null }), 0)
 	})
 
 	it('revokes invite links of an admin who is demoted or leaves', async () => {

@@ -13,6 +13,8 @@ import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 import { Avatar, Button, Field, Input } from '../ui'
+import { canAutoFocusTyping } from '../utils/autoFocus'
+
 
 const SetupProfile = () => {
 	const { t, language } = useI18n()
@@ -77,7 +79,7 @@ const SetupProfile = () => {
 						}}
 						placeholder={t('auth.setup.namePlaceholder')}
 						autoComplete='name'
-						autoFocus
+						autoFocus={canAutoFocusTyping()}
 					/>
 				</Field>
 				<Field label={t('auth.setup.job')} optional>

@@ -1,12 +1,18 @@
+# KanbanHub — https://kanbanhub.app
+# Public pages: /, /about, /login, /signup.
+# Shared boards (/public/*) and invites (/invite/*) stay crawlable on purpose so
+# search engines can read their noindex tag; they are private links, never indexed.
 User-agent: *
 Allow: /
-Disallow: /login
-Disallow: /signup
-Disallow: /profile
-Disallow: /settings
 Disallow: /workspaces
 Disallow: /my-tasks
 Disallow: /calendar
 Disallow: /team
+Disallow: /profile
+Disallow: /settings
+Disallow: /setup-profile
+Disallow: /verify-email
+Disallow: /login/resetpassword
+Disallow: /login/verify-email
 
-Sitemap: /sitemap.xml
+Sitemap: https://kanbanhub.app/sitemap.xml
