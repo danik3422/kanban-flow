@@ -10,7 +10,7 @@ const getAccessibleTask = async (taskId, userId) => {
 	if (!mongoose.Types.ObjectId.isValid(taskId)) return null
 	const task = await Task.findById(taskId).populate('column', 'board')
 	if (!task) return null
-	const board = await Board.findById(task.column.board).select('createdBy')
+	const board = await Board.findById(task.column.board).select('createdBy name')
 	if (!board) return null
 	const isOwner = board.createdBy.toString() === userId.toString()
 	const isMember = await BoardMember.exists({ board: board._id, user: userId })
@@ -68,6 +68,7 @@ export const addTaskComment = async (req, res) => {
 			type: 'task_commented',
 			title: 'New task update',
 			message: `${actorName} commented on “${access.task.title}”`,
+			details: { comment: message },
 		})
 
 		return res.status(201).json(await activity.populate('user', 'name email avatar'))

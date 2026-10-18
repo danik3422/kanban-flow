@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-core'
+import { chromium, webkit } from 'playwright-core'
 import fs from 'node:fs'
 export const APP = 'http://localhost:5199'
 export const API = 'http://localhost:5001/api'
@@ -9,8 +9,11 @@ export const MAIL = `${TMP}mail.log`
 export const SHOTS = `${TMP}shots/`
 // Signed-in session of the main test user, written by flow s1.
 export const ALICE_STATE = `${TMP}alice.json`
+// Alice's email and password, so a flow that logs her out can sign her back in.
+export const ALICE_LOGIN = `${TMP}alice-login.json`
 export const CHROME_PATH = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-export const launch = () => chromium.launch({ executablePath: CHROME_PATH, headless: true })
+// BROWSER=webkit runs a flow in Safari's engine (after `npx playwright-core install webkit`).
+export const launch = () => (process.env.BROWSER === 'webkit' ? webkit.launch({ headless: true }) : chromium.launch({ executablePath: CHROME_PATH, headless: true }))
 export const lastMailTo = (email) => {
 	const lines = fs.readFileSync(MAIL, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === email)
 	return lines.at(-1)

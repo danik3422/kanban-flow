@@ -23,6 +23,7 @@ const change = await deviceB.request.patch(`${API}/auth/change-password`, { data
 check('password changed on another device', change.status() === 200, String(change.status()))
 await deviceA.waitForTimeout(24000)
 const status = await deviceA.locator('.app-live').getAttribute('class').catch(() => 'none')
-check('revoked session shows Offline instead of reconnecting forever', status?.includes('app-live--offline'), status)
+// The other device is told and leaves for sign-in (or, if it missed that, shows Offline).
+check('a revoked session leaves for sign-in instead of reconnecting forever', /\/login/.test(deviceA.url()) || status?.includes('app-live--offline'), `${deviceA.url()} ${status}`)
 if (process.env.FRAMES) console.log(frames.filter((f) => !/"board:presence"|^\S+ (SENT|RECV) [23]$/.test(f)).join('\n'))
 await browser.close(); done()

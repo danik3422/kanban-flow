@@ -1,4 +1,5 @@
-import { APP, API, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, ALICE_STATE } from '../lib.mjs'
+import fs from 'node:fs'
+import { APP, API, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, ALICE_STATE, ALICE_LOGIN } from '../lib.mjs'
 const browser = await launch()
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, storageState: ALICE_STATE })
 const page = await ctx.newPage(); watch(page, 'alice')
@@ -40,5 +41,9 @@ await page.locator('.app-account-trigger').click()
 await page.getByRole('menuitem', { name: /log ?out|sign out/i }).click()
 await page.waitForTimeout(800)
 check('logout closes the realtime connection right away', currentDocumentSockets.length === 1 && currentDocumentSockets[0].closed, currentDocumentSockets.map((s) => s.closed).join(','))
+// Logging out ends Alice's session for good; sign her back in for the flows after this one.
+const alice = JSON.parse(fs.readFileSync(ALICE_LOGIN, 'utf8'))
+await page.goto(`${APP}/login`); await uiLogin(page, alice.email, alice.password); await page.waitForURL(/\/(workspaces|my-tasks|calendar)/)
+await ctx.storageState({ path: ALICE_STATE })
 console.log(before >= 0 ? '' : '')
 await browser.close(); done()

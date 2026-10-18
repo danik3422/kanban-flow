@@ -38,6 +38,14 @@ export const passwordResetConfirmSchema = z.object({
 
 export const settingsSchema = z.object({
 	emailNotifications: z.boolean().optional(),
+	emailFrequency: z.enum(['never', 'periodic', 'instant']).optional(),
+	emailPreferences: z.object({
+		comments: z.boolean(),
+		dueDates: z.boolean(),
+		removed: z.boolean(),
+		cardsCreated: z.boolean(),
+		cardsMoved: z.boolean(),
+	}).partial().strict().optional(),
 	taskNotifications: z.boolean().optional(),
 	weeklyDigest: z.boolean().optional(),
 	language: z.enum(['en', 'uk', 'ru']).optional(),
@@ -186,6 +194,19 @@ export const passkeyAuthenticateSchema = z.looseObject({
 	response: z.looseObject({
 		clientDataJSON: z.string().min(1).max(10000),
 	}),
+})
+
+const passkeyName = z.string().trim().max(60, 'Passkey name is too long')
+
+// The WebAuthn attestation is passed to the verifier untouched; the name rides along.
+export const verifyPasskeySchema = z.looseObject({
+	id: z.string().min(1).max(1024),
+	response: z.looseObject({}),
+	passkeyName: passkeyName.optional(),
+})
+
+export const renamePasskeySchema = z.object({
+	name: passkeyName.min(1, 'Give the passkey a name'),
 })
 
 export const removePasskeySchema = z.object({

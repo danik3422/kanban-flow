@@ -121,6 +121,7 @@ export const ConfirmDialog = ({
 	tone = 'danger',
 	confirmText,
 	loading = false,
+	initialFocusRef,
 	children,
 }) => {
 	const { t } = useI18n()
@@ -138,6 +139,7 @@ export const ConfirmDialog = ({
 			title={title}
 			description={description}
 			size='sm'
+			initialFocusRef={initialFocusRef}
 			footer={
 				<>
 					<Button variant='secondary' onClick={onClose} disabled={loading}>{cancelLabel || t('common.cancel')}</Button>

@@ -271,7 +271,7 @@ describe('signing out other sessions', () => {
 		const otherDevice = cookieFor(user)
 
 		const response = await request(app).post('/api/auth/sessions/sign-out-others').set('Cookie', thisDevice)
-		assert.equal(response.status, 204)
+		assert.equal(response.status, 200)
 		const freshCookie = response.headers['set-cookie']?.find((cookie) => cookie.startsWith('jwt='))
 		assert.ok(freshCookie, 'this device gets a new session cookie')
 
@@ -286,5 +286,88 @@ describe('signing out other sessions', () => {
 	it('requires a signed-in session', async () => {
 		const response = await request(app).post('/api/auth/sessions/sign-out-others')
 		assert.equal(response.status, 401)
+	})
+})
+
+describe('signed-in devices', () => {
+	const signIn = async (email, userAgent) => {
+		const response = await request(app).post('/api/auth/login').set('User-Agent', userAgent).send({ email, password: 'Password123!' })
+		assert.equal(response.status, 200)
+		return [response.headers['set-cookie'].find((cookie) => cookie.startsWith('jwt=')).split(';')[0]]
+	}
+	const MAC_CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+	const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+	const WINDOWS_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
+
+	it('lists each device and signs out one of them on its own', async () => {
+		await User.create({ email: 'devices@example.com', password: await bcrypt.hash('Password123!', 10), name: 'Devices', emailVerified: true, profileSetup: true })
+		const laptop = await signIn('devices@example.com', MAC_CHROME)
+		const phone = await signIn('devices@example.com', IPHONE)
+		const desktop = await signIn('devices@example.com', WINDOWS_FIREFOX)
+
+		const list = await request(app).get('/api/auth/sessions').set('Cookie', laptop)
+		assert.equal(list.status, 200)
+		assert.equal(list.body.length, 3)
+		assert.deepEqual(list.body.map((session) => [session.current, session.browser, session.os, session.type]), [
+			[true, 'Chrome', 'macOS', 'desktop'],
+			...list.body.slice(1).map((session) => [false, session.browser, session.os, session.type]),
+		])
+		assert.ok(list.body.some((session) => session.browser === 'Safari' && session.os === 'iOS' && session.type === 'phone'))
+		assert.ok(list.body.some((session) => session.browser === 'Firefox' && session.os === 'Windows'))
+		assert.equal(list.body[0].id, 'current')
+
+		const phoneId = list.body.find((session) => session.os === 'iOS').id
+		assert.equal((await request(app).delete(`/api/auth/sessions/${phoneId}`).set('Cookie', laptop)).status, 204)
+		assert.equal((await request(app).get('/api/auth/get-user').set('Cookie', phone)).status, 401, 'the phone is signed out')
+		assert.equal((await request(app).get('/api/auth/get-user').set('Cookie', desktop)).status, 200, 'the others stay signed in')
+		assert.equal((await request(app).get('/api/auth/get-user').set('Cookie', laptop)).status, 200)
+		assert.equal((await request(app).get('/api/auth/sessions').set('Cookie', laptop)).body.length, 2)
+	})
+
+	it('does not sign out this device or someone else’s from the list', async () => {
+		await User.create({ email: 'devices-a@example.com', password: await bcrypt.hash('Password123!', 10), emailVerified: true, profileSetup: true })
+		await User.create({ email: 'devices-b@example.com', password: await bcrypt.hash('Password123!', 10), emailVerified: true, profileSetup: true })
+		const mine = await signIn('devices-a@example.com', MAC_CHROME)
+		const theirs = await signIn('devices-b@example.com', IPHONE)
+		const theirId = (await request(app).get('/api/auth/sessions').set('Cookie', theirs)).body[0]
+		assert.equal(theirId.id, 'current')
+		const theirSession = await mongoose.connection.collection('sessions').findOne({ userAgent: IPHONE })
+		assert.equal((await request(app).delete(`/api/auth/sessions/${theirSession._id}`).set('Cookie', mine)).status, 404)
+		assert.equal((await request(app).delete('/api/auth/sessions/current').set('Cookie', mine)).status, 400)
+		assert.equal((await request(app).get('/api/auth/get-user').set('Cookie', theirs)).status, 200)
+	})
+
+	it('signing out other devices leaves only this one listed', async () => {
+		await User.create({ email: 'devices-all@example.com', password: await bcrypt.hash('Password123!', 10), emailVerified: true, profileSetup: true })
+		const laptop = await signIn('devices-all@example.com', MAC_CHROME)
+		await signIn('devices-all@example.com', IPHONE)
+		await signIn('devices-all@example.com', WINDOWS_FIREFOX)
+		const response = await request(app).post('/api/auth/sessions/sign-out-others').set('Cookie', laptop)
+		assert.equal(response.body.signedOut, 2)
+		const fresh = [response.headers['set-cookie'].find((cookie) => cookie.startsWith('jwt=')).split(';')[0]]
+		const list = await request(app).get('/api/auth/sessions').set('Cookie', fresh)
+		assert.deepEqual(list.body.map((session) => session.current), [true])
+	})
+
+	it('logging out removes the device from the list', async () => {
+		await User.create({ email: 'devices-out@example.com', password: await bcrypt.hash('Password123!', 10), emailVerified: true, profileSetup: true })
+		const laptop = await signIn('devices-out@example.com', MAC_CHROME)
+		const phone = await signIn('devices-out@example.com', IPHONE)
+		await request(app).post('/api/auth/logout').set('Cookie', phone)
+		assert.equal((await request(app).get('/api/auth/get-user').set('Cookie', phone)).status, 401, 'the old cookie no longer works')
+		assert.equal((await request(app).get('/api/auth/sessions').set('Cookie', laptop)).body.length, 1)
+	})
+
+	it('names, renames and reports passkeys', async () => {
+		const user = await User.create({ email: 'passkey-name@example.com', password: await bcrypt.hash('Password123!', 10), emailVerified: true, profileSetup: true, passkeys: [{ credentialID: 'cred-1', publicKey: Buffer.from('x'), name: 'Work laptop', provider: 'iCloud Keychain' }] })
+		const cookie = await signIn('passkey-name@example.com', MAC_CHROME)
+		let me = await request(app).get('/api/auth/get-user').set('Cookie', cookie)
+		assert.deepEqual(me.body.passkeys.map(({ id, name, provider }) => ({ id, name, provider })), [{ id: 'cred-1', name: 'Work laptop', provider: 'iCloud Keychain' }])
+		assert.equal((await request(app).patch('/api/auth/passkeys/cred-1').set('Cookie', cookie).send({ name: '  Home Mac  ' })).status, 204)
+		me = await request(app).get('/api/auth/get-user').set('Cookie', cookie)
+		assert.equal(me.body.passkeys[0].name, 'Home Mac')
+		assert.equal((await request(app).patch('/api/auth/passkeys/cred-1').set('Cookie', cookie).send({ name: '   ' })).status, 400)
+		assert.equal((await request(app).patch('/api/auth/passkeys/missing').set('Cookie', cookie).send({ name: 'X' })).status, 404)
+		assert.equal((await User.findById(user._id)).passkeys.length, 1)
 	})
 })

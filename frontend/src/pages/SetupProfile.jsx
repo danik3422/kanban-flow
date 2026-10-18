@@ -6,12 +6,13 @@ import AuthLayout from '../components/auth/AuthLayout'
 import { AuthHeading } from '../components/auth/AuthParts'
 import { ProfileScene } from '../components/auth/AuthScenes'
 import AvatarEditor from '../components/profile/AvatarEditor'
-import { getDetectedTimezone, timezoneOptions } from '../data/timezones'
+import TimezonePicker from '../components/timezone/TimezonePicker'
+import { getDetectedTimezone } from '../data/timezones'
 import { useI18n } from '../i18n'
 import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
-import { Avatar, Button, Field, Input, Select } from '../ui'
+import { Avatar, Button, Field, Input } from '../ui'
 
 const SetupProfile = () => {
 	const { t, language } = useI18n()
@@ -82,7 +83,7 @@ const SetupProfile = () => {
 					<Input id='setup-job' value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder={t('auth.setup.jobPlaceholder')} autoComplete='organization-title' />
 				</Field>
 				<Field label={t('auth.setup.timezone')} hint={t('auth.setup.timezoneHint')}>
-					<Select id='setup-timezone' value={timezone} onChange={(event) => setTimezone(event.target.value)} options={timezoneOptions} />
+					<TimezonePicker id='setup-timezone' value={timezone} onChange={setTimezone} />
 				</Field>
 				<Button type='submit' className='setup-submit' size='lg' block loading={isSubmitting} iconRight={ArrowRight}>
 					{isSubmitting ? t('common.saving') : isFirstSetup ? t('auth.setup.submit') : t('common.save')}

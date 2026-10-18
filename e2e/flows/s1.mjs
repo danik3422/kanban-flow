@@ -1,4 +1,5 @@
-import { APP, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, SHOTS, ALICE_STATE } from '../lib.mjs'
+import fs from 'node:fs'
+import { APP, apiSignup, check, done, lastMailTo, launch, linkFrom, uiLogin, watch, SHOTS, ALICE_STATE, ALICE_LOGIN } from '../lib.mjs'
 const browser = await launch()
 const email = `alice${Date.now()}@example.com`, password = 'Password123!'
 await apiSignup(email, password)
@@ -35,5 +36,6 @@ await page.waitForTimeout(2500)
 check('a newly created board stays open (no bounce to the overview)', /\/workspaces\/[a-f0-9]{24}$/.test(page.url()), page.url())
 await page.screenshot({ path: SHOTS + 'e2e-board-created.png' })
 await ctx.storageState({ path: ALICE_STATE })
+fs.writeFileSync(ALICE_LOGIN, JSON.stringify({ email, password }))
 console.log('ALICE', email, page.url())
 await browser.close(); done()

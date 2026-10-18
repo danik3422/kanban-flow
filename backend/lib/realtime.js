@@ -22,3 +22,12 @@ export const revokeUserBoardAccess = (userId, boardId, payload = {}) => {
 		...payload,
 	})
 }
+
+// A device that was signed out drops its live connection; the others just re-check.
+export const disconnectSession = (sid) => {
+	if (!io || !sid) return
+	const room = `session:${sid}`
+	io.to(room).emit('session:changed', {})
+	// Give the event a moment to arrive, so the device re-checks and shows it was signed out.
+	setTimeout(() => io?.in(room).disconnectSockets(true), 2000).unref?.()
+}

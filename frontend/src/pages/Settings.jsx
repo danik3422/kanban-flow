@@ -1,17 +1,14 @@
 import { Monitor, Moon, Pencil, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import '../components/settings/settings.css'
+import NotificationSettings from '../components/settings/NotificationSettings'
 import SecuritySection from '../components/settings/SecuritySection'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../i18n'
-import { translateServerMessageCurrent } from '../i18n/translate'
-import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
-import { isDevAuthBypass } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
 import { Avatar, Button, PageHeader, SegmentedControl, Select, Switch } from '../ui'
 import { weekdayNames, weekStartFor } from '../utils/calendar'
@@ -51,7 +48,6 @@ const Settings = () => {
 	const [boards, setBoards] = useState([])
 	const [startPage, setStartPageState] = useState(getStartPage)
 	const [weekStart, setWeekStartState] = useState(getWeekStart)
-	const [savingKey, setSavingKey] = useState('')
 	const [activeSection, setActiveSection] = useState(SECTIONS[0])
 	const sectionsRef = useRef(null)
 
@@ -100,22 +96,6 @@ const Settings = () => {
 	}
 
 	// One switch, one request: show it at once, undo it if the server refuses.
-	const saveNotification = async (key, value) => {
-		const previous = authUser?.[key]
-		useAuthStore.setState((state) => ({ authUser: { ...state.authUser, [key]: value } }))
-		if (isDevAuthBypass) return
-		setSavingKey(key)
-		try {
-			await axiosInstance.patch('/auth/settings', { [key]: value })
-			toast.success(t('settings.notify.saved'))
-		} catch (error) {
-			useAuthStore.setState((state) => ({ authUser: { ...state.authUser, [key]: previous } }))
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'settings.notify.saveError'))
-		} finally {
-			setSavingKey('')
-		}
-	}
-
 	const changeStartPage = (value) => {
 		setStartPage(value)
 		setStartPageState(value)
@@ -206,22 +186,7 @@ const Settings = () => {
 							</Section>
 
 							<Section id='notifications' title={t('settings.sections.notifications')} text={t('settings.sectionText.notifications')}>
-								<div className='st-card'>
-									<Switch
-										label={t('settings.notify.taskTitle')}
-										description={t('settings.notify.taskText')}
-										checked={authUser?.taskNotifications !== false}
-										disabled={savingKey === 'taskNotifications'}
-										onChange={(event) => saveNotification('taskNotifications', event.target.checked)}
-									/>
-									<Switch
-										label={t('settings.notify.emailTitle')}
-										description={t('settings.notify.emailText', { email: authUser?.email || '' })}
-										checked={authUser?.emailNotifications !== false}
-										disabled={savingKey === 'emailNotifications'}
-										onChange={(event) => saveNotification('emailNotifications', event.target.checked)}
-									/>
-								</div>
+								<NotificationSettings />
 							</Section>
 
 							<Section id='security' title={t('settings.sections.security')} text={t('settings.sectionText.security')}>

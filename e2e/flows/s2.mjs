@@ -1,4 +1,5 @@
-import { APP, check, done, launch, watch, SHOTS, ALICE_STATE } from '../lib.mjs'
+import fs from 'node:fs'
+import { APP, check, done, launch, watch, SHOTS, ALICE_STATE, ALICE_LOGIN } from '../lib.mjs'
 const browser = await launch()
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, storageState: ALICE_STATE })
 const page = await ctx.newPage(); watch(page, 'alice')
@@ -115,4 +116,5 @@ check('change password succeeds', (await changed).status() === 200)
 await page.goto(APP + '/my-tasks'); await page.waitForTimeout(1500)
 check('session survives the password change', page.url().endsWith('/my-tasks'), page.url())
 await ctx.storageState({ path: ALICE_STATE })
+fs.writeFileSync(ALICE_LOGIN, JSON.stringify({ ...JSON.parse(fs.readFileSync(ALICE_LOGIN, 'utf8')), password: process.env.PW_NEW || 'Password456!' }))
 await browser.close(); done()

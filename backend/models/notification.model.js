@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema(
 		},
 		type: {
 			type: String,
-			enum: ['task_assigned', 'task_commented', 'task_moved', 'task_updated', 'list_card_added'],
+			enum: ['task_assigned', 'task_unassigned', 'task_commented', 'task_moved', 'task_updated', 'task_due_soon', 'task_due_changed', 'list_card_added'],
 			required: true,
 		},
 		title: { type: String, required: true },
@@ -22,18 +22,25 @@ const notificationSchema = new mongoose.Schema(
 				actorName: { type: String, maxlength: 120 },
 				fromColumn: { type: String, maxlength: 60 },
 				toColumn: { type: String, maxlength: 60 },
+				dueDate: { type: Date },
+				comment: { type: String, maxlength: 300 },
 			}, { _id: false }),
 			default: undefined,
 		},
 		board: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' },
 		task: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
 		readAt: { type: Date, default: null },
+		// Kept for the email digest when the bell is turned off: never listed or pushed.
+		hidden: { type: Boolean, default: false },
+		// pending: waits for the hourly digest; sent; skipped (not wanted, or read first).
+		emailStatus: { type: String, enum: ['none', 'pending', 'sent', 'skipped'], default: 'none' },
 		emailSentAt: { type: Date, default: null },
 	},
 	{ timestamps: true },
 )
 
 notificationSchema.index({ user: 1, createdAt: -1 })
+notificationSchema.index({ emailStatus: 1, user: 1 })
 
 // Task and board deletions clean up notifications by these keys.
 notificationSchema.index({ task: 1 })

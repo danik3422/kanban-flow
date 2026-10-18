@@ -32,6 +32,7 @@ import BoardBackgroundDialog from '../components/boards/BoardBackgroundDialog'
 import BoardColumn, { ListComposer } from '../components/board/BoardColumn'
 import ColumnActions from '../components/board/ColumnActions'
 import BoardDock from '../components/board/BoardDock'
+import BoardSkeleton from '../components/board/BoardSkeleton'
 import BoardSwitcher from '../components/board/BoardSwitcher'
 import '../components/board/board-columns.css'
 import useIsPhone from '../hooks/useIsPhone'
@@ -132,6 +133,11 @@ const fetchColumns = async (boardId) => {
 	return data
 }
 
+// Lists of boards opened during this visit, so going back to one shows it at once
+// while a fresh copy loads behind it. Keyed by user and board.
+const columnsCache = new Map()
+const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column._id, column.sortBy || 'custom']))
+
 const Workspace = () => {
 	const { authUser } = useAuthStore()
 	const { t: tr } = useI18n()
@@ -159,7 +165,6 @@ const Workspace = () => {
 	const [selectedBoard, setSelectedBoard] = useState(null)
 	const [columns, setColumns] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
-	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isCreatingBoard, setIsCreatingBoard] = useState(false)
 	const [activeTaskColumn, setActiveTaskColumn] = useState(null)
 	const [newBoardName, setNewBoardName] = useState('')
@@ -233,8 +238,10 @@ const Workspace = () => {
 	const [isSwitcherOpen, setIsSwitcherOpen] = useState(false)
 	const [collapsedColumnIds, setCollapsedColumnIds] = useState([])
 	const isPhone = useIsPhone()
+	// The board whose lists are on screen (from the server or this visit's cache).
+	const [loadedBoardId, setLoadedBoardId] = useState(null)
 	const isBoardContentLoading = isLoading || Boolean(
-		selectedBoard && !isDevAuthBypass && isRefreshing && columns.length === 0,
+		selectedBoard && !isDevAuthBypass && loadedBoardId !== selectedBoard._id,
 	)
 
 
@@ -393,8 +400,10 @@ const Workspace = () => {
 	const [renderedBoardId, setRenderedBoardId] = useState(selectedBoardId)
 	if (renderedBoardId !== selectedBoardId) {
 		setRenderedBoardId(selectedBoardId)
-		if (!isDevAuthBypass) setColumns([])
-		setColumnSortBy({})
+		const cachedColumns = selectedBoardId ? columnsCache.get(`${authUser?._id}:${selectedBoardId}`) : null
+		if (!isDevAuthBypass) setColumns(cachedColumns || [])
+		setColumnSortBy(cachedColumns ? sortByOf(cachedColumns) : {})
+		setLoadedBoardId(cachedColumns ? selectedBoardId : null)
 		setBoardMembers([])
 		setBoardMemberRecords([])
 		setBoardInvites([])
@@ -419,7 +428,6 @@ const Workspace = () => {
 		if (!selectedBoardId || isDevAuthBypass) return
 		let isCurrent = true
 		const loadSelectedBoard = async () => {
-			setIsRefreshing(true)
 			try {
 				const nextColumns = await fetchColumns(selectedBoardId)
 				if (isCurrent) applyLoadedColumns(nextColumns)
@@ -430,7 +438,9 @@ const Workspace = () => {
 					)
 				}
 			} finally {
-				if (isCurrent) setIsRefreshing(false)
+				if (isCurrent) {
+					setLoadedBoardId(selectedBoardId)
+				}
 			}
 		}
 		loadSelectedBoard()
@@ -438,6 +448,12 @@ const Workspace = () => {
 			isCurrent = false
 		}
 	}, [selectedBoardId, applyLoadedColumns])
+
+	// Whatever the board shows (loaded, edited, updated live) is what a return visit starts from.
+	useEffect(() => {
+		if (!selectedBoardId || isDevAuthBypass || loadedBoardId !== selectedBoardId) return
+		columnsCache.set(`${authUser?._id}:${selectedBoardId}`, columns)
+	}, [columns, selectedBoardId, loadedBoardId, authUser?._id])
 
 	useEffect(() => {
 		if (!draggedTask) return undefined
@@ -558,6 +574,7 @@ const Workspace = () => {
 				setColumnPreviewIndex(session.targetIndex)
 				setDraggedColumn(session.column)
 				document.body.classList.add('is-dragging-list')
+				window.getSelection()?.removeAllRanges()
 			}
 			event.preventDefault()
 			let preview = columnDragOverlayRef.current
@@ -911,15 +928,17 @@ const Workspace = () => {
 	}
 
 	const selectBoard = (board) => {
+		setIsSidebarOpen(false)
+		// The board already open: keep what is on screen, there is nothing to reload.
+		if (board._id === selectedBoard?._id) {
+			if (boardId !== board._id) navigate(`/workspaces/${board._id}`)
+			return
+		}
+		// The rest (lists, members, links) is cleared when the new board renders.
 		setSelectedBoard(board)
-		setColumns([])
-		setInviteLink(null)
 		setIsActivityLoading(true)
-		setBoardActivities([])
 		setBoardNameDraft(board.name || '')
 		setIsEditingBoardName(false)
-		setPublicBoardLink('')
-		setIsSidebarOpen(false)
 		navigate(`/workspaces/${board._id}`)
 	}
 
@@ -1538,6 +1557,10 @@ const Workspace = () => {
 		if (event.button !== 0 || event.pointerType === 'touch' || !canEditBoardName) return
 		// The title itself is a handle too; only the icon buttons and editors are not.
 		if (event.target.closest('.ui-icon-btn, input, textarea, form')) return
+		// Holding the mouse on a header must never start selecting text across the lists.
+		// The click that follows (opening the title for renaming) still fires.
+		event.preventDefault()
+		window.getSelection()?.removeAllRanges()
 		const element = event.currentTarget.closest('.bc-column')
 		const rect = element.getBoundingClientRect()
 		// No pointer capture: moves are tracked on the window, and capturing here would
@@ -1610,8 +1633,9 @@ const Workspace = () => {
 			.finally(() => setIsActivityLoading(false))
 	}, [columns])
 
+	// A card opened from the bell (router state) or from an email link (?task=).
 	useEffect(() => {
-		const targetTaskId = location.state?.notificationTaskId
+		const targetTaskId = location.state?.notificationTaskId || new URLSearchParams(location.search).get('task')
 		if (!targetTaskId || taskDetails || !columns.length) return
 		const task = columns.flatMap((column) => column.tasks || []).find((item) => item._id === targetTaskId)
 		if (!task) return
@@ -1619,7 +1643,7 @@ const Workspace = () => {
 			openTaskDetails(task)
 			navigate(location.pathname, { replace: true, state: null })
 		})
-	}, [columns, location.pathname, location.state, navigate, openTaskDetails, taskDetails])
+	}, [columns, location.pathname, location.search, location.state, navigate, openTaskDetails, taskDetails])
 
 	const addTaskComment = async () => {
 		const message = taskComment.trim()
@@ -1952,35 +1976,7 @@ const Workspace = () => {
 				) : (
 					<div className='workspace-content bc-content has-dock'>
 						{isBoardContentLoading ? (
-							!selectedBoard && !boardId ? (
-								<div className='workspace-overview-loading' role='status' aria-live='polite'>
-									<div className='workspace-overview-loading-heading'><div className='workspace-overview-loading-heading-copy'><p className='eyebrow workspace-overview-loading-eyebrow'>Your rooms</p><h1 className='workspace-overview-loading-title'>Everything in one place.</h1><p className='heading-copy workspace-overview-loading-copy'>Choose a room to jump into a board, or create a new one for the next project.</p></div><span className='workspace-overview-loading-button' /></div>
-									<div className='workspace-overview-loading-summary'><span /><span /></div>
-									{[1, 2].map((group) => <div className='workspace-overview-loading-group' key={group}><div className='workspace-overview-loading-group-heading'><div><span /><span /></div><i /></div><div className='workspace-overview-loading-grid'>{[1, 2, 3].map((card) => <div className='workspace-overview-loading-card' key={card}><b /><div><span /><span /></div><i /></div>)}</div></div>)}
-								</div>
-							) : (
-							<div className='workspace-board-loading' role='status' aria-live='polite'>
-								<div className='workspace-board-loading-toolbar'><span /><div className='workspace-board-loading-actions'><span /></div></div>
-								<div className='workspace-board-loading-columns'>
-									{[
-										['sparse', ['feature', 'short', 'compact']],
-										['dense', ['compact', 'compact', 'medium', 'feature']],
-										['active', ['feature', 'medium']],
-										['review', ['medium', 'feature', 'short']],
-										['empty', []],
-									].map(([columnType, cards]) => (
-										<div className={`workspace-board-loading-column is-${columnType}`} key={columnType}>
-											<div className='workspace-board-loading-column-title'><span /><i /></div>
-											{cards.map((cardType, index) => (
-												<div className={`workspace-board-loading-card is-${cardType}`} key={`${columnType}-${index}`}>
-													<span /><i /><b />
-												</div>
-											))}
-										</div>
-									))}
-								</div>
-							</div>
-							)
+							<BoardSkeleton />
 						) : !selectedBoard ? (
 							<div className='empty-state empty-state-accent'>
 								<div className='empty-icon'>

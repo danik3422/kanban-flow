@@ -75,3 +75,41 @@
 @media (prefers-reduced-motion: reduce) {
 	.st-nav a { transition: none; }
 }
+
+/* Signed-in devices and passkeys: details separated by dots, wrapping on phones. */
+.st-device__details, .st-passkey__details { display: flex; flex-wrap: wrap; column-gap: 6px; }
+.st-device__details > span + span::before, .st-passkey__details > span + span::before { content: '·'; margin-right: 6px; color: var(--ui-text-muted); }
+.st-device[data-current] .st-row__icon { background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
+.st-devices__note { min-height: 48px; }
+.st-add--danger { color: var(--ui-danger-soft-text); }
+.st-row__actions { display: flex; align-items: center; gap: 2px; }
+@media (max-width: 600px) {
+	/* Details one per line; sign out stays beside the device as an icon. */
+	.st-device__details, .st-passkey__details { flex-direction: column; }
+	.st-device__details > span + span::before, .st-passkey__details > span + span::before { content: none; }
+	.st-device .st-row__control .ui-btn { width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+	.st-device__signout { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* Notifications: the bell and desktop rows, email frequency cards, email preferences. */
+.st-subtitle--first { margin-top: 0; }
+.st-row__switch { flex: 1; min-width: 0; }
+.st-row__switch .ui-switch__description { line-height: 1.45; }
+.st-frequency { margin-top: var(--ui-space-1); }
+.st-frequency > legend { font-size: var(--ui-text-sm); }
+@media (min-width: 900px) {
+	.st-frequency { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.st-frequency > legend { grid-column: 1 / -1; }
+	.st-frequency .ui-radio-card { flex-direction: column; align-items: flex-start; }
+}
+.st-prefs-head { display: flex; flex-direction: column; gap: 2px; margin-top: var(--ui-space-4); }
+.st-prefs { padding: var(--ui-space-1) 0; }
+.st-pref { padding: var(--ui-space-3) var(--ui-space-4); border-top: 1px solid var(--ui-border); }
+.st-pref:first-child { border-top: 0; }
+.st-pref--all { background: var(--ui-surface-2); }
+.st-pref .ui-check { width: 100%; align-items: flex-start; cursor: pointer; }
+.st-pref__text { display: flex; flex-direction: column; gap: 2px; }
+.st-pref__title { color: var(--ui-text); font-weight: 600; }
+.st-pref__description { color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.45; }
+.st-prefs-off { margin-top: var(--ui-space-1); }
+.st-prefs-always { margin: var(--ui-space-1) 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.5; }

@@ -68,6 +68,8 @@ const CURATED = [
 ]
 
 const PAGE_SIZE = 18
+// Unsplash's largest page: fewer requests against its hourly limit.
+const UNSPLASH_PAGE_SIZE = 30
 const UNSPLASH_IMAGE_HOST = 'images.unsplash.com'
 
 const curatedPhoto = ([id, color]) => ({
@@ -111,13 +113,13 @@ const searchUnsplash = async (query, page) => {
 	const cached = cache.get(key)
 	if (cached && cached.at > Date.now() - CACHE_MS) return cached.value
 	const url = query
-		? `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&page=${page}&per_page=${PAGE_SIZE}&orientation=landscape&content_filter=high`
-		: `https://api.unsplash.com/topics/wallpapers/photos?page=${page}&per_page=${PAGE_SIZE}&orientation=landscape`
+		? `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&page=${page}&per_page=${UNSPLASH_PAGE_SIZE}&orientation=landscape&content_filter=high`
+		: `https://api.unsplash.com/topics/wallpapers/photos?page=${page}&per_page=${UNSPLASH_PAGE_SIZE}&orientation=landscape`
 	const response = await fetch(url, { headers: { Authorization: `Client-ID ${env.unsplashAccessKey}`, 'Accept-Version': 'v1' }, signal: AbortSignal.timeout(6000) })
 	if (!response.ok) throw new Error(`Unsplash ${response.status}`)
 	const body = await response.json()
 	const results = Array.isArray(body) ? body : body.results || []
-	const value = { source: 'unsplash', photos: results.map(fromUnsplash), hasMore: Array.isArray(body) ? results.length === PAGE_SIZE : page < (body.total_pages || 0) }
+	const value = { source: 'unsplash', photos: results.map(fromUnsplash), hasMore: Array.isArray(body) ? results.length === UNSPLASH_PAGE_SIZE : page < (body.total_pages || 0) }
 	cache.set(key, { at: Date.now(), value })
 	return value
 }

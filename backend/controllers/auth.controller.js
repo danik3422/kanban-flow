@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import { getAuth } from 'firebase-admin/auth'
 import crypto from 'node:crypto'
@@ -19,7 +20,9 @@ import {
 import { hashPassword } from '../lib/password.js'
 import { publicUserFields } from '../lib/userProjection.js'
 import { emitUserEvent } from '../lib/realtime.js'
-import { clearAuthCookie, generateToken } from '../lib/utils.js'
+import { describeUserAgent, endOtherSessions, endSession, listSessions, renewSession, startSession } from '../lib/sessions.js'
+import { clearAuthCookie } from '../lib/utils.js'
+import Session from '../models/session.model.js'
 import PasskeyChallenge from '../models/passkeyChallenge.model.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
 import User from '../models/user.model.js'
@@ -35,6 +38,39 @@ const getPasskeyRp = () => {
 const REAUTH_WINDOW_MS = 5 * 60 * 1000
 const hasRecentReauthentication = (user) =>
 	Boolean(user.lastReauthenticatedAt) && Date.now() - user.lastReauthenticatedAt.getTime() <= REAUTH_WINDOW_MS
+
+// Well-known authenticators by AAGUID, so a passkey says where it lives.
+const PASSKEY_PROVIDERS = {
+	'fbfc3007-154e-4ecc-8c0b-6e020557d7bd': 'iCloud Keychain',
+	'dd4ec289-e01d-41c9-bb89-70fa845d4bf2': 'iCloud Keychain',
+	'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4': 'Google Password Manager',
+	'adce0002-35bc-c60a-648b-0b25f1f05503': 'Chrome on Mac',
+	'08987058-cadc-4b81-b6e1-30de50dcbe96': 'Windows Hello',
+	'9ddd1817-af5a-4672-a2b9-3e3dd95000a9': 'Windows Hello',
+	'6028b017-b1d4-4c02-b4b3-afcdafc96bb2': 'Windows Hello',
+	'bada5566-a7aa-401f-bd96-45619a55120d': '1Password',
+	'd548826e-79b4-db40-a3d8-11116f7e8349': 'Bitwarden',
+	'531126d6-e717-415c-9320-3d9aa6981239': 'Dashlane',
+	'b84e4048-15dc-4dd0-8640-f4f60813c8af': 'NordPass',
+	'0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6': 'Keeper',
+	'53414d53-554e-4700-0000-000000000000': 'Samsung Pass',
+	'771b48fd-d3d4-4f74-9232-fc157ab0507a': 'Edge on Mac',
+	'891494da-2c90-4d31-a9cd-4eab0aed1309': 'Sésame',
+	'f3809540-7f14-49c1-a8b3-8f813b225541': 'Enpass',
+	'b5397666-4885-aa6b-cebf-e52262a439a2': 'Chromium Browser',
+}
+
+const passkeyProviderName = (aaguid, transports = []) => {
+	if (aaguid && PASSKEY_PROVIDERS[aaguid]) return PASSKEY_PROVIDERS[aaguid]
+	if (transports.some((transport) => ['usb', 'nfc', 'ble'].includes(transport))) return 'Security key'
+	return ''
+}
+
+// "Chrome on macOS" when nothing better is known.
+const defaultPasskeyName = (req) => {
+	const { browser, os } = describeUserAgent(req.get('user-agent') || '')
+	return [browser, os].filter(Boolean).join(' · ') || 'Passkey'
+}
 
 export const createPasskeyRegistrationOptions = async (req, res) => {
 	try {
@@ -79,8 +115,9 @@ export const verifyPasskeyRegistration = async (req, res) => {
 			return res.status(400).json({ message: 'Passkey setup session expired' })
 		}
 		const { rpID, expectedOrigin } = getPasskeyRp()
+		const { passkeyName, ...attestation } = req.body
 		const verification = await verifyRegistrationResponse({
-			response: req.body,
+			response: attestation,
 			expectedChallenge: user.passkeyRegistrationChallenge,
 			expectedOrigin,
 			expectedRPID: rpID,
@@ -89,15 +126,18 @@ export const verifyPasskeyRegistration = async (req, res) => {
 		if (!verification.verified || !verification.registrationInfo) {
 			return res.status(400).json({ message: 'Passkey could not be verified' })
 		}
-		const { credential } = verification.registrationInfo
+		const { credential, aaguid } = verification.registrationInfo
 		const credentialId = credential.id
 		const alreadyRegistered = user.passkeys.some((passkey) => passkey.credentialID === credentialId)
 		if (!alreadyRegistered) {
+			const provider = passkeyProviderName(aaguid, credential.transports)
 			user.passkeys.push({
 				credentialID: credentialId,
 				publicKey: Buffer.from(credential.publicKey),
 				counter: credential.counter,
 				transports: credential.transports || [],
+				name: passkeyName || provider || defaultPasskeyName(req),
+				provider,
 				createdAt: new Date(),
 			})
 		}
@@ -131,6 +171,21 @@ export const removePasskey = async (req, res) => {
 		if (error.statusCode) return res.status(error.statusCode).json({ message: 'Current password is incorrect' })
 		console.error('Passkey removal error:', error)
 		return res.status(500).json({ message: 'Could not remove passkey' })
+	}
+}
+
+export const renamePasskey = async (req, res) => {
+	try {
+		const credentialId = req.params.credentialId
+		const result = await User.updateOne(
+			{ _id: req.user._id, 'passkeys.credentialID': credentialId },
+			{ $set: { 'passkeys.$.name': req.body.name } },
+		)
+		if (!result.matchedCount) return res.status(404).json({ message: 'Passkey not found' })
+		return res.status(204).send()
+	} catch (error) {
+		console.error('Passkey rename error:', error)
+		return res.status(500).json({ message: 'Could not rename passkey' })
 	}
 }
 
@@ -191,8 +246,9 @@ export const authenticateWithPasskey = async (req, res) => {
 		})
 		if (!verification.verified) return res.status(400).json({ message: 'Passkey is not valid' })
 		storedCredential.counter = verification.authenticationInfo.newCounter
+		storedCredential.lastUsedAt = new Date()
 		await user.save()
-		generateToken(user._id, res, user.sessionVersion)
+		await startSession(req, res, user, 'passkey')
 		return res.json({
 			_id: user._id,
 			email: user.email,
@@ -363,7 +419,7 @@ export const socialSignin = async (req, res) => {
 				return res.status(409).json({ message: 'Provider identity changed. Please try again.' })
 			}
 		}
-		generateToken(user._id, res, user.sessionVersion)
+		await startSession(req, res, user, provider)
 
 		return res.status(200).json({
 			_id: user._id,
@@ -420,7 +476,7 @@ export const socialSignup = async (req, res) => {
 			emailVerified: true,
 			profileSetup: false,
 		})
-		generateToken(user._id, res, user.sessionVersion)
+		await startSession(req, res, user, provider)
 		return res
 			.status(201)
 			.json({
@@ -504,6 +560,7 @@ export const connectSocialAccount = async (req, res) => {
 			try {
 				await sendProviderLinkedEmail({
 					email: user.email,
+					language: user.language,
 					provider,
 					settingsUrl: `${env.frontendUrl}/settings#security`,
 				})
@@ -625,6 +682,7 @@ export const setSocialPassword = async (req, res) => {
 		try {
 			await sendPasswordAddedEmail({
 				email: user.email,
+				language: user.language,
 				settingsUrl: `${env.frontendUrl}/settings`,
 			})
 		} catch (mailError) {
@@ -726,6 +784,7 @@ export const signup = async (req, res) => {
 			try {
 				await sendAccountVerificationEmail({
 					email: newUser.email,
+					language: newUser.language,
 					verificationUrl,
 				})
 			} catch (mailError) {
@@ -742,7 +801,7 @@ export const signup = async (req, res) => {
 			})
 		}
 
-		generateToken(newUser._id, res, newUser.sessionVersion)
+		await startSession(req, res, newUser, 'signup')
 		return res.status(201).json({
 			_id: newUser._id,
 			email: newUser.email,
@@ -789,7 +848,7 @@ export const login = async (req, res) => {
 
 		// Generate token even if email is not verified
 		// This allows the user to verify their email
-		generateToken(user._id, res, user.sessionVersion)
+		await startSession(req, res, user, 'password')
 
 		if (!user.emailVerified) {
 			return res.status(200).json({
@@ -885,7 +944,7 @@ export const requestPasswordReset = async (req, res) => {
 		const resetUrl = `${env.frontendUrl}/login/resetpassword?token=${rawToken}`
 
 		try {
-			await sendPasswordResetEmail({ email: user.email, resetUrl })
+			await sendPasswordResetEmail({ email: user.email, resetUrl, language: user.language })
 		} catch (mailError) {
 			await PasswordResetToken.deleteOne({ tokenHash })
 			console.error('Password reset email failed:', mailError.message)
@@ -961,6 +1020,7 @@ export const resetPassword = async (req, res) => {
 		user.hasPassword = true
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
+		await endOtherSessions(user._id)
 		await PasswordResetToken.deleteMany({
 			user: user._id,
 			_id: { $ne: claimedToken._id },
@@ -1034,7 +1094,7 @@ export const resendVerificationEmail = async (req, res) => {
 		}
 
 		const user = await User.findById(req.user._id).select(
-			'email emailVerified emailVerificationLastSentAt emailVerificationTokenHash emailVerificationTokenExpiresAt'
+			'email language emailVerified emailVerificationLastSentAt emailVerificationTokenHash emailVerificationTokenExpiresAt'
 		)
 		if (!user) {
 			return res.status(401).json({ message: 'Unauthorized - User not found' })
@@ -1073,7 +1133,7 @@ export const resendVerificationEmail = async (req, res) => {
 		const verificationUrl = `${env.frontendUrl}/verify-email?token=${rawToken}`
 
 		try {
-			await sendAccountVerificationEmail({ email: user.email, verificationUrl })
+			await sendAccountVerificationEmail({ email: user.email, verificationUrl, language: user.language })
 		} catch (mailError) {
 			console.error('Verification email resend failed:', mailError.message)
 			return res.status(503).json({
@@ -1106,8 +1166,19 @@ export const resendVerificationEmail = async (req, res) => {
 	}
 }
 
-export const logout = (req, res) => {
+// Log out works with any cookie, even an expired one; it only needs the device's name.
+const sidFromCookie = (token) => {
 	try {
+		return jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'], ignoreExpiration: true })?.sid || null
+	} catch {
+		return null
+	}
+}
+
+export const logout = async (req, res) => {
+	try {
+		const sid = sidFromCookie(req.cookies?.jwt)
+		if (sid) await endSession(sid)
 		clearAuthCookie(res)
 		res.status(200).json({
 			message: 'Logged out successfully',
@@ -1134,7 +1205,10 @@ export const getAuthUser = async (req, res) => {
 			linkedProviders: user.linkedProviders?.map(({ provider, linkedAt }) => ({ provider, linkedAt })) || [],
 			passkeys: user.passkeys.map((passkey) => ({
 				id: passkey.credentialID,
+				name: passkey.name,
+				provider: passkey.provider,
 				createdAt: passkey.createdAt,
+				lastUsedAt: passkey.lastUsedAt,
 			})),
 		})
 	} catch (error) {
@@ -1147,10 +1221,17 @@ export const getAuthUser = async (req, res) => {
 
 export const updateSettings = async (req, res) => {
 	try {
+		// Preferences are merged key by key; the frequency and the old on/off switch stay in step.
+		const { emailPreferences, ...rest } = req.body
+		const update = { ...rest }
+		for (const [key, value] of Object.entries(emailPreferences || {})) update[`emailPreferences.${key}`] = value
+		if (rest.emailFrequency) update.emailNotifications = rest.emailFrequency !== 'never'
+		else if (rest.emailNotifications === false) update.emailFrequency = 'never'
+		else if (rest.emailNotifications === true) update.emailFrequency = 'instant'
 		const user = await User.findByIdAndUpdate(
 			req.user._id,
-			{ $set: req.body },
-			{ new: true, runValidators: true },
+			{ $set: update },
+			{ returnDocument: 'after', runValidators: true },
 		).select(publicUserFields)
 
 		if (!user) return res.status(404).json({ message: 'User not found' })
@@ -1189,8 +1270,9 @@ export const changePassword = async (req, res) => {
 		user.password = await bcrypt.hash(newPassword, salt)
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
-		// Other sessions are revoked by the version bump; keep this one signed in.
-		generateToken(user._id, res, user.sessionVersion)
+		// Other devices are signed out; this one stays signed in with a fresh cookie.
+		await endOtherSessions(user._id, req.sessionId, res)
+		await renewSession(res, user, req.sessionId)
 		return res.status(200).json({ message: 'Password changed successfully' })
 	} catch (error) {
 		console.error('Password change failed:', error)
@@ -1202,15 +1284,44 @@ export const changePassword = async (req, res) => {
 // device gets a fresh one, and open tabs elsewhere are told to check their session.
 export const signOutOtherSessions = async (req, res) => {
 	try {
-		const user = await User.findByIdAndUpdate(req.user._id, { $inc: { sessionVersion: 1 } }, { new: true }).select('sessionVersion')
+		const user = await User.findByIdAndUpdate(req.user._id, { $inc: { sessionVersion: 1 } }, { returnDocument: 'after' }).select('sessionVersion')
 		if (!user) return res.status(404).json({ message: 'User not found' })
-		generateToken(user._id, res, user.sessionVersion)
+		const count = await endOtherSessions(user._id, req.sessionId, res)
+		await renewSession(res, user, req.sessionId)
 		// Only after this device has its new cookie, so it never checks with the old one.
 		res.on('finish', () => emitUserEvent(user._id.toString(), 'session:changed', {}))
-		return res.status(204).send()
+		return res.status(200).json({ signedOut: count })
 	} catch (error) {
 		console.error('Signing out other sessions failed:', error)
 		return res.status(500).json({ message: 'Could not sign out other sessions' })
+	}
+}
+
+/** Every device signed in to this account, this one first. */
+export const getSessions = async (req, res) => {
+	try {
+		const sessions = await listSessions(req.user._id, req.sessionId)
+		sessions.sort((a, b) => Number(b.current) - Number(a.current))
+		return res.status(200).json(sessions)
+	} catch (error) {
+		console.error('Listing sessions failed:', error)
+		return res.status(500).json({ message: 'Could not load your devices' })
+	}
+}
+
+/** Signs out one other device. This device signs out with the usual log out. */
+export const revokeSession = async (req, res) => {
+	try {
+		if (req.params.id === 'current') return res.status(400).json({ message: 'Use log out to sign out this device.' })
+		if (!/^[a-f0-9]{24}$/i.test(req.params.id)) return res.status(404).json({ message: 'Device not found' })
+		const session = await Session.findOne({ _id: req.params.id, user: req.user._id }).select('sid')
+		if (!session) return res.status(404).json({ message: 'Device not found' })
+		if (session.sid === req.sessionId) return res.status(400).json({ message: 'Use log out to sign out this device.' })
+		await endSession(session.sid)
+		return res.status(204).send()
+	} catch (error) {
+		console.error('Signing out a device failed:', error)
+		return res.status(500).json({ message: 'Could not sign out that device' })
 	}
 }
 

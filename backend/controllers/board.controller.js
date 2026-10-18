@@ -1407,10 +1407,14 @@ export const createBoardInvite = async (req, res) => {
 		let emailSent = false
 		if (email) {
 			try {
+				// In the invitee's language when they already have an account, else the inviter's.
+				const invitee = await User.findOne({ email }).select('language').lean()
 				await sendBoardInviteEmail({
 					email,
 					boardName: board.name,
 					boardUrl: inviteUrl,
+					inviterName: req.user.name || req.user.email,
+					language: invitee?.language || req.user.language,
 				})
 				emailSent = true
 			} catch (error) {
@@ -2060,7 +2064,11 @@ export const updateTask = async (req, res) => {
 		const contentBefore = describeTaskContent(task)
 		if (title !== undefined) task.title = title.trim()
 		if (description !== undefined) task.description = description
+		const originalDueTime = task.dueDate ? new Date(task.dueDate).getTime() : null
 		if (dueDate !== undefined) task.dueDate = dueDate || null
+		const dueChanged = dueDate !== undefined && (task.dueDate ? new Date(task.dueDate).getTime() : null) !== originalDueTime
+		// A new due date earns a new reminder.
+		if (dueChanged) task.dueReminderSentAt = null
 		if (assignees !== undefined) task.assignees = assignees
 		if (labels !== undefined) task.labels = labels
 		if (checklist !== undefined) task.checklist = checklist
@@ -2175,6 +2183,36 @@ export const updateTask = async (req, res) => {
 				board,
 				actorId: req.user._id,
 			})
+		}
+		// People taken off the card, and everyone still on it when its due date changes.
+		const removedAssigneeIds = assignees === undefined ? [] : originalAssigneeIds
+			.filter((assigneeId) => !assignees.map((assignee) => assignee.toString()).includes(assigneeId))
+		if (removedAssigneeIds.length) {
+			await notifyTaskAssignees({
+				userIds: removedAssigneeIds,
+				task: updatedTask,
+				board,
+				actorId: req.user._id,
+				type: 'task_unassigned',
+				title: 'Removed from a card',
+				message: `You were removed from “${updatedTask.title}”.`,
+			})
+		}
+		if (dueChanged && updatedTask.dueDate) {
+			const keptAssigneeIds = updatedTask.assignees.map((assignee) => (assignee._id || assignee).toString())
+				.filter((assigneeId) => !newlyAssignedIds.includes(assigneeId))
+			if (keptAssigneeIds.length) {
+				await notifyTaskAssignees({
+					userIds: keptAssigneeIds,
+					task: updatedTask,
+					board,
+					actorId: req.user._id,
+					type: 'task_due_changed',
+					title: 'Due date changed',
+					message: `“${updatedTask.title}” has a new due date.`,
+					details: { dueDate: updatedTask.dueDate },
+				})
+			}
 		}
 		if (moved && Array.isArray(assignees ?? task.assignees)) {
 			const nextAssigneeIds = [...new Set((assignees ?? task.assignees).map((assignee) => assignee.toString()))]

@@ -5,6 +5,8 @@ export const publicUserFields = [
 	'jobTitle',
 	'timezone',
 	'emailNotifications',
+	'emailFrequency',
+	'emailPreferences',
 	'taskNotifications',
 	'weeklyDigest',
 	'language',

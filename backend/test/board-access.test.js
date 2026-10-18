@@ -1118,7 +1118,18 @@ describe('board access and invitation flow', () => {
 			.send({ title: 'Quiet task', assignees: [member._id.toString()] })
 
 		assert.equal(response.status, 201)
-		assert.equal(await Notification.countDocuments({ user: member._id, task: response.body._id }), 0)
+		// Nothing under the bell; the email still gets its record, kept hidden.
+		assert.equal(await Notification.countDocuments({ user: member._id, task: response.body._id, hidden: { $ne: true } }), 0)
+		const listed = await request(app).get('/api/notifications').set('Cookie', authCookie(member._id))
+		assert.equal(listed.body.length, 0)
+
+		member.emailFrequency = 'never'
+		await member.save()
+		const second = await request(app)
+			.post(`/api/board/columns/${column._id}/task`)
+			.set('Cookie', authCookie(owner._id))
+			.send({ title: 'Quieter task', assignees: [member._id.toString()] })
+		assert.equal(await Notification.countDocuments({ user: member._id, task: second.body._id }), 0, 'no bell and no email: nothing at all')
 	})
 
 	it('creates a task commentary notification for the assignees', async () => {

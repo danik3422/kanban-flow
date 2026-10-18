@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/user.model.js'
 import { env } from '../config/env.js'
+import { resolveSession } from '../lib/sessions.js'
 import { publicUserFields } from '../lib/userProjection.js'
 
 export const authMiddleware = async (req, res, next) => {
@@ -29,10 +30,16 @@ export const authMiddleware = async (req, res, next) => {
 		if (Number(decoded.sessionVersion || 0) !== Number(user.sessionVersion || 0)) {
 			return res.status(401).json({ message: 'Unauthorized - Session expired' })
 		}
+		// This device may have been signed out from another one.
+		const session = await resolveSession(req, res, user, decoded)
+		if (!session) {
+			return res.status(401).json({ message: 'Unauthorized - Session expired' })
+		}
 
 		const publicUser = user.toObject()
 		delete publicUser.sessionVersion
 		req.user = publicUser
+		req.sessionId = session.sid
 
 		next()
 	} catch (error) {
@@ -61,7 +68,7 @@ export const optionalAuthMiddleware = async (req, res, next) => {
 		if (!token) return next()
 		const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] })
 		const user = await User.findById(decoded?.userId).select(`${publicUserFields} sessionVersion`)
-		if (user && Number(decoded.sessionVersion || 0) === Number(user.sessionVersion || 0)) {
+		if (user && Number(decoded.sessionVersion || 0) === Number(user.sessionVersion || 0) && await resolveSession(req, null, user, decoded)) {
 			const publicUser = user.toObject()
 			delete publicUser.sessionVersion
 			req.user = publicUser

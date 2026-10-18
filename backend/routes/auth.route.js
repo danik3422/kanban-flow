@@ -12,11 +12,14 @@ import {
 	login,
 	logout,
 	removePasskey,
+	renamePasskey,
 	reauthenticate,
 	requestPasswordReset,
 	resetPassword,
 	resendVerificationEmail,
 	setupProfile,
+	getSessions,
+	revokeSession,
 	signOutOtherSessions,
 	verifyPasskeyRegistration,
 	authenticateWithPasskey,
@@ -41,6 +44,8 @@ import {
 	passkeyAuthenticateSchema,
 	verifyEmailSchema,
 	removePasskeySchema,
+	renamePasskeySchema,
+	verifyPasskeySchema,
 	signupSchema,
 } from '../lib/validation.js'
 import { authMiddleware, verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
@@ -51,6 +56,7 @@ import {
 	passwordResetLimiter,
 	passwordResetRequestLimiter,
 	passwordChangeLimiter,
+	sessionLimiter,
 	verificationEmailIpLimiter,
 	verificationEmailLimiter,
 } from '../middlewares/security.middleware.js'
@@ -128,10 +134,13 @@ router.patch(
 	validateBody(changePasswordSchema),
 	changePassword,
 )
-router.post('/sessions/sign-out-others', verifiedAuthMiddleware, passwordChangeLimiter, signOutOtherSessions)
+router.get('/sessions', verifiedAuthMiddleware, getSessions)
+router.delete('/sessions/:id', verifiedAuthMiddleware, sessionLimiter, revokeSession)
+router.post('/sessions/sign-out-others', verifiedAuthMiddleware, sessionLimiter, signOutOtherSessions)
 router.post('/reauthenticate', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(reauthenticateSchema), reauthenticate)
 router.post('/passkeys/options', verifiedAuthMiddleware, authLimiter, createPasskeyRegistrationOptions)
-router.post('/passkeys/verify', verifiedAuthMiddleware, authLimiter, verifyPasskeyRegistration)
+router.post('/passkeys/verify', verifiedAuthMiddleware, authLimiter, validateBody(verifyPasskeySchema), verifyPasskeyRegistration)
+router.patch('/passkeys/:credentialId', verifiedAuthMiddleware, validateBody(renamePasskeySchema), renamePasskey)
 router.delete('/passkeys/:credentialId', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(removePasskeySchema), removePasskey)
 router.post('/passkeys/auth-options', authLimiter, validateBody(passkeyAuthOptionsSchema), createPasskeyAuthenticationOptions)
 router.post('/passkeys/authenticate', authLimiter, validateBody(passkeyAuthenticateSchema), authenticateWithPasskey)

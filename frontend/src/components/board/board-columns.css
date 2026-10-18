@@ -102,7 +102,7 @@ html[data-theme='dark'] .bc-add-list { background: rgb(255 255 255 / 0.06); }
 	.bc-scroll { scroll-snap-type: x mandatory; scroll-padding: 0 16px; scrollbar-width: none; }
 	.bc-scroll::-webkit-scrollbar { display: none; }
 	.bc-board { gap: 10px; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
-	.bc-column, .bc-add-list { flex-basis: calc(100vw - 48px); width: calc(100vw - 48px); scroll-snap-align: start; }
+	.bc-column, .bc-add-list, .bc-skeleton__column { flex-basis: calc(100vw - 48px); width: calc(100vw - 48px); scroll-snap-align: start; }
 	.bc-column__header { cursor: default; }
 	.bc-column__collapse { display: none; }
 	.bc-column__header .ui-icon-btn { --btn-size: 40px; }
@@ -122,7 +122,25 @@ html[data-theme='dark'] .bc-column.is-dragging { background: rgb(255 255 255 / 0
 .bc-ghost { position: fixed; z-index: 100; margin: 0; pointer-events: none; transform-origin: 50% 12%; box-shadow: 0 2px 6px rgb(0 0 0 / 0.16); transition: transform 160ms cubic-bezier(0.2, 0, 0, 1), box-shadow 160ms ease; will-change: left, top, transform; }
 .bc-ghost.is-lifted { transform: rotate(3deg) scale(1.02); box-shadow: 0 14px 28px rgb(0 0 0 / 0.22), 0 28px 60px rgb(0 0 0 / 0.18); }
 .bc-ghost.is-landing { transform: none; box-shadow: 0 2px 6px rgb(0 0 0 / 0.16); transition: left 190ms cubic-bezier(0.2, 0, 0, 1), top 190ms cubic-bezier(0.2, 0, 0, 1), transform 190ms ease, box-shadow 190ms ease; }
-body.is-dragging-list, body.is-dragging-list * { cursor: grabbing !important; user-select: none; }
+body.is-dragging-list, body.is-dragging-list * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 @media (prefers-reduced-motion: reduce) {
 	.bc-ghost, .bc-ghost.is-lifted, .bc-ghost.is-landing { transition: none; transform: none; }
+}
+
+/* Loading: the skeleton only fades in if loading takes a moment, so quick loads never flash. */
+.bc-skeleton { animation: bc-skeleton-in 200ms ease 180ms both; }
+.bc-skeleton__column { display: flex; flex: 0 0 288px; flex-direction: column; gap: 8px; width: 288px; padding: 12px 8px 10px; border-radius: 16px; background: var(--ui-surface-2); box-shadow: 0 1px 0 rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.08); }
+html[data-theme='dark'] .bc-skeleton__column { background: #161d1c; }
+html[data-theme='dark'] .bc-skeleton__card.ui-skeleton { background: #232d2b; }
+html[data-theme='dark'] .bc-skeleton__column .ui-skeleton:not(.bc-skeleton__card) { background: #2a3533; }
+.bc-skeleton__head { padding: 2px 4px 6px; }
+.bc-skeleton__cards { display: flex; flex-direction: column; gap: 8px; }
+.bc-skeleton__card.ui-skeleton { background: var(--ui-surface); box-shadow: 0 1px 1px rgb(0 0 0 / 0.06); animation: bc-skeleton-pulse 1.4s ease-in-out infinite; }
+.bc-skeleton__foot { padding: 4px 4px 0; }
+.has-board-background .bc-skeleton__column { background: color-mix(in srgb, var(--ui-surface-2) 88%, transparent); }
+@keyframes bc-skeleton-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bc-skeleton-pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+	.bc-skeleton { animation: none; }
+	.bc-skeleton__card.ui-skeleton { animation: none; }
 }

@@ -45,6 +45,18 @@ export const passwordResetLimiter = rateLimit({
 	keyGenerator: getRateLimitKey,
 })
 
+// Signing devices out: generous enough to clean up a long list, with its own message.
+export const sessionLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	limit: 40,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: {
+		message: 'Too many requests. Please try again later.',
+	},
+	keyGenerator: getRateLimitKey,
+})
+
 export const passwordChangeLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	limit: 8,

@@ -127,6 +127,7 @@ await page.mouse.down()
 await page.mouse.move(third.x + third.width - 20, third.y + 40, { steps: 25 })
 await page.waitForTimeout(300)
 check('a tilted ghost follows the pointer', (await page.locator('.bc-ghost.is-lifted').count()) === 1)
+check('dragging a list selects no text on the board', await page.evaluate(() => window.getSelection().toString() === ''), await page.evaluate(() => window.getSelection().toString().slice(0, 40)))
 const during = await page.locator('.bc-board > .bc-column').evaluateAll((items) => items.map((item) => (item.classList.contains('is-dragging') ? 'slot' : item.querySelector('.bc-column__title')?.innerText)))
 check('the slot moves to where the list will land', during.indexOf('slot') === 2, during.join(','))
 await page.mouse.up()
@@ -134,6 +135,28 @@ await page.waitForTimeout(500)
 check('the ghost is gone after the drop', (await page.locator('.bc-ghost').count()) === 0)
 const order = (await me.call('GET', `/board/boards/${alpha._id}/content`)).map((column) => column.title)
 check('the new order is saved', order.join(',') === 'Doing,Done,To do', order.join(','))
+
+// Grabbing the empty part of a header and starting slowly (as a hand does) selects
+// nothing either; Safari used to highlight the neighbouring lists here.
+{
+	const header = await page.locator('.bc-board > .bc-column').nth(1).locator('.bc-column__header').boundingBox()
+	const sx = header.x + header.width - 110, sy = header.y + 14
+	await page.mouse.move(sx, sy)
+	await page.mouse.down()
+	for (let step = 1; step <= 7; step++) { await page.mouse.move(sx + step, sy + step * 2); await page.waitForTimeout(40) }
+	await page.mouse.move(header.x + 2, header.y + 300, { steps: 30 })
+	await page.mouse.move(header.x + 500, header.y + 400, { steps: 20 })
+	const selected = await page.evaluate(() => window.getSelection().toString())
+	check('a slow start from the header selects nothing', selected === '', selected.replace(/\s+/g, ' ').slice(0, 50))
+	await page.mouse.move(sx, sy, { steps: 20 })
+	await page.mouse.up()
+	await page.waitForTimeout(400)
+}
+
+// A click on a list's title still opens it for renaming.
+await page.locator('.bc-board > .bc-column').first().locator('.bc-column__title').click()
+check('clicking a title still renames it', (await page.locator('.bc-board > .bc-column').first().locator('textarea, input').count()) > 0)
+await page.keyboard.press('Escape')
 
 // Phone: no dock; the switcher opens from the top bar.
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: await ctx.storageState() })

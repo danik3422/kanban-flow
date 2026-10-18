@@ -1,14 +1,15 @@
 import { startRegistration } from '@simplewebauthn/browser'
-import { Fingerprint, KeyRound, LockKeyhole, MonitorSmartphone, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { Fingerprint, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ProviderIcon } from '../auth/AuthParts'
+import DevicesList from './DevicesList'
 import PasswordDialog from './PasswordDialog'
 import { useI18n } from '../../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../../i18n/translate'
 import { axiosInstance } from '../../lib/axios'
 import { useAuthStore } from '../../store/useAuthStore'
-import { Badge, Button, ConfirmDialog, Field, IconButton, PasswordInput } from '../../ui'
+import { Badge, Button, ConfirmDialog, Field, IconButton, Input, PasswordInput } from '../../ui'
 
 const PROVIDERS = ['google', 'microsoft', 'apple']
 const PROVIDER_LABELS = { google: 'Google', microsoft: 'Microsoft', apple: 'Apple', local: 'Email' }
@@ -27,7 +28,7 @@ const Row = ({ icon, title, description, children, className }) => (
 	</li>
 )
 
-/** Password, linked providers, passkeys and ending other sessions. */
+/** Password, linked providers, named passkeys and the devices you are signed in on. */
 const SecuritySection = () => {
 	const { t, language } = useI18n()
 	const { authUser, checkAuth, connectSocialAccount, setSocialPassword } = useAuthStore()
@@ -35,6 +36,10 @@ const SecuritySection = () => {
 	const [dialog, setDialog] = useState(null)
 	const [password, setPassword] = useState('')
 	const [passwordError, setPasswordError] = useState('')
+	const [passkeyName, setPasskeyName] = useState('')
+	const [nameError, setNameError] = useState('')
+	const nameRef = useRef(null)
+	const passwordRef = useRef(null)
 	const [isBusy, setIsBusy] = useState(false)
 
 	const primary = authUser?.provider || 'local'
@@ -49,12 +54,16 @@ const SecuritySection = () => {
 	const open = (next) => {
 		setPassword('')
 		setPasswordError('')
+		setPasskeyName(next.kind === 'renamePasskey' ? next.passkey.name || '' : '')
+		setNameError('')
 		setDialog(next)
 	}
+	const passkeyLabel = (passkey, index) => passkey.name || t('settings.passkeys.item', { number: index + 1 })
 	const close = () => {
 		if (!isBusy) setDialog(null)
 	}
-	const needsPassword = dialog && (dialog.kind === 'connect' || (dialog.kind !== 'signOutOthers' && hasPassword))
+	const needsPassword = dialog && (dialog.kind === 'connect' || (dialog.kind !== 'renamePasskey' && hasPassword))
+	const asksName = dialog && (dialog.kind === 'addPasskey' || dialog.kind === 'renamePasskey')
 
 	const reauthenticate = async () => {
 		await axiosInstance.post('/auth/reauthenticate', { currentPassword: password })
@@ -66,32 +75,27 @@ const SecuritySection = () => {
 		else toast.error(translateServerMessageCurrent(message, fallbackKey))
 	}
 
-	const registerPasskey = async () => {
+	// The name rides along with the device's answer; empty means "name it after where it is saved".
+	const registerPasskey = async (name) => {
+		const known = new Set(passkeys.map((passkey) => passkey.id))
 		const { data: options } = await axiosInstance.post('/auth/passkeys/options')
 		const registration = await startRegistration({ optionsJSON: options })
-		await axiosInstance.post('/auth/passkeys/verify', registration)
-		await checkAuth()
-		toast.success(t('settings.passkeys.added'))
+		await axiosInstance.post('/auth/passkeys/verify', { ...registration, passkeyName: name.trim() || undefined })
+		const user = await checkAuth()
+		const added = (user?.passkeys || useAuthStore.getState().authUser?.passkeys || []).find((passkey) => !known.has(passkey.id))
+		toast.success(t('settings.passkeys.added', { name: added?.name || name.trim() || t('settings.passkeys.title') }))
 	}
 
-	const addPasskey = async () => {
-		if (!supportsPasskeys) return
-		if (hasPassword) {
-			open({ kind: 'addPasskey' })
-			return
-		}
-		setIsBusy(true)
-		try {
-			await registerPasskey()
-		} catch (error) {
-			toast.error(error.name === 'NotAllowedError' ? t('settings.passkeys.cancelled') : translateServerMessageCurrent(error.response?.data?.message, 'settings.passkeys.addError'))
-		} finally {
-			setIsBusy(false)
-		}
+	const addPasskey = () => {
+		if (supportsPasskeys) open({ kind: 'addPasskey' })
 	}
 
 	const confirm = async () => {
 		if (!dialog || isBusy) return
+		if (dialog.kind === 'renamePasskey' && !passkeyName.trim()) {
+			setNameError(t('settings.passkeys.nameRequired'))
+			return
+		}
 		if (needsPassword && !password) {
 			setPasswordError(t('settings.password.currentRequired'))
 			return
@@ -112,21 +116,22 @@ const SecuritySection = () => {
 				toast.success(t('settings.methods.disconnected', { provider: PROVIDER_LABELS[dialog.provider] }))
 				setDialog(null)
 			} else if (dialog.kind === 'addPasskey') {
-				await reauthenticate()
+				if (hasPassword) await reauthenticate()
 				setDialog(null)
 				try {
-					await registerPasskey()
+					await registerPasskey(passkeyName)
 				} catch (error) {
-					toast.error(error.name === 'NotAllowedError' ? t('settings.passkeys.cancelled') : translateServerMessageCurrent(error.response?.data?.message, 'settings.passkeys.addError'))
+					toast.error(error.name === 'NotAllowedError' ? t('settings.passkeys.cancelled') : error.name === 'InvalidStateError' ? t('settings.passkeys.exists') : translateServerMessageCurrent(error.response?.data?.message, 'settings.passkeys.addError'))
 				}
 			} else if (dialog.kind === 'removePasskey') {
 				await axiosInstance.delete(`/auth/passkeys/${encodeURIComponent(dialog.passkey.id)}`, { data: { currentPassword: password } })
 				await checkAuth()
 				toast.success(t('settings.passkeys.removed'))
 				setDialog(null)
-			} else if (dialog.kind === 'signOutOthers') {
-				await axiosInstance.post('/auth/sessions/sign-out-others')
-				toast.success(t('settings.sessions.done'))
+			} else if (dialog.kind === 'renamePasskey') {
+				await axiosInstance.patch(`/auth/passkeys/${encodeURIComponent(dialog.passkey.id)}`, { name: passkeyName.trim() })
+				await checkAuth()
+				toast.success(t('settings.passkeys.renamed'))
 				setDialog(null)
 			}
 		} catch (error) {
@@ -139,9 +144,9 @@ const SecuritySection = () => {
 	const dialogCopy = dialog && {
 		connect: { title: t('settings.methods.connectTitle', { provider: PROVIDER_LABELS[dialog.provider] }), text: t('settings.methods.connectText', { provider: PROVIDER_LABELS[dialog.provider] }), confirm: t('settings.methods.continue'), tone: 'primary' },
 		disconnect: { title: t('settings.methods.disconnectTitle', { provider: PROVIDER_LABELS[dialog.provider] }), text: t('settings.methods.disconnectText', { provider: PROVIDER_LABELS[dialog.provider] }), confirm: t('settings.methods.disconnect'), tone: 'danger' },
-		addPasskey: { title: t('settings.passkeys.addTitle'), text: t('settings.passkeys.addText'), confirm: t('settings.methods.continue'), tone: 'primary' },
-		removePasskey: { title: t('settings.passkeys.removeTitle'), text: t('settings.passkeys.removeText'), confirm: t('settings.passkeys.remove'), tone: 'danger' },
-		signOutOthers: { title: t('settings.sessions.confirmTitle'), text: t('settings.sessions.confirmText'), confirm: t('settings.sessions.confirm'), tone: 'primary' },
+		addPasskey: { title: t('settings.passkeys.addTitle'), text: hasPassword ? t('settings.passkeys.addTextPassword') : t('settings.passkeys.addText'), confirm: t('settings.methods.continue'), tone: 'primary' },
+		renamePasskey: { title: t('settings.passkeys.renameTitle'), confirm: t('common.save'), tone: 'primary' },
+		removePasskey: { title: t('settings.passkeys.removeTitle', { name: dialog.label }), text: t('settings.passkeys.removeText'), confirm: t('settings.passkeys.remove'), tone: 'danger' },
 	}[dialog.kind]
 
 	return (
@@ -193,16 +198,29 @@ const SecuritySection = () => {
 
 			<h3 className='st-subtitle'>{t('settings.passkeys.title')}</h3>
 			<ul className='st-card'>
-				{passkeys.map((passkey, index) => (
-					<Row
-						key={passkey.id}
-						icon={<Fingerprint size={16} />}
-						title={t('settings.passkeys.item', { number: index + 1 })}
-						description={passkey.createdAt ? t('settings.passkeys.addedOn', { date: formatDate(passkey.createdAt) }) : ''}
-					>
-						<IconButton icon={Trash2} size='sm' label={t('settings.passkeys.removeLabel', { number: index + 1 })} onClick={() => open({ kind: 'removePasskey', passkey })} />
-					</Row>
-				))}
+				{passkeys.map((passkey, index) => {
+					const label = passkeyLabel(passkey, index)
+					return (
+						<Row
+							key={passkey.id}
+							className='st-passkey'
+							icon={<Fingerprint size={16} />}
+							title={<span data-i18n-ignore>{label}</span>}
+							description={(
+								<span className='st-passkey__details'>
+									{passkey.provider && passkey.provider !== label && <span data-i18n-ignore>{passkey.provider}</span>}
+									{passkey.createdAt && <span>{t('settings.passkeys.addedOn', { date: formatDate(passkey.createdAt) })}</span>}
+									<span>{passkey.lastUsedAt ? t('settings.passkeys.usedOn', { date: formatDate(passkey.lastUsedAt) }) : t('settings.passkeys.neverUsed')}</span>
+								</span>
+							)}
+						>
+							<span className='st-row__actions'>
+								<IconButton icon={Pencil} size='sm' label={t('settings.passkeys.renameLabel', { name: label })} onClick={() => open({ kind: 'renamePasskey', passkey })} />
+								<IconButton icon={Trash2} size='sm' label={t('settings.passkeys.removeLabel', { name: label })} onClick={() => open({ kind: 'removePasskey', passkey, label })} />
+							</span>
+						</Row>
+					)
+				})}
 				{!passkeys.length && (
 					<Row icon={<KeyRound size={16} />} title={t('settings.passkeys.none')} description={supportsPasskeys ? t('settings.passkeys.text') : t('settings.passkeys.unsupported')} />
 				)}
@@ -216,11 +234,9 @@ const SecuritySection = () => {
 				)}
 			</ul>
 
-			<ul className='st-card st-card--spaced'>
-				<Row className='st-row--stack' icon={<MonitorSmartphone size={16} />} title={t('settings.sessions.title')} description={t('settings.sessions.text')}>
-					<Button variant='secondary' size='sm' data-action='sign-out-others' onClick={() => open({ kind: 'signOutOthers' })}>{t('settings.sessions.action')}</Button>
-				</Row>
-			</ul>
+			<h3 className='st-subtitle'>{t('settings.sessions.title')}</h3>
+			<p className='st-section__text st-devices__intro'>{t('settings.sessions.text')}</p>
+			<DevicesList />
 
 			<PasswordDialog
 				open={Boolean(passwordMode)}
@@ -243,9 +259,27 @@ const SecuritySection = () => {
 				title={dialogCopy?.title || ''}
 				description={dialogCopy?.text}
 				confirmLabel={dialogCopy?.confirm}
+				initialFocusRef={asksName ? nameRef : needsPassword ? passwordRef : undefined}
 			>
-				{needsPassword && (
+				{(needsPassword || asksName) && (
 					<form className='st-dialog' onSubmit={(event) => { event.preventDefault(); confirm() }}>
+						{asksName && (
+							<Field label={t('settings.passkeys.name')} hint={dialog.kind === 'addPasskey' ? t('settings.passkeys.nameHint') : undefined} error={nameError}>
+								<Input
+									ref={nameRef}
+									id='st-passkey-name'
+									value={passkeyName}
+									onChange={(event) => {
+										setPasskeyName(event.target.value)
+										setNameError('')
+									}}
+									placeholder={t('settings.passkeys.namePlaceholder')}
+									maxLength={60}
+									autoComplete='off'
+								/>
+							</Field>
+						)}
+						{needsPassword && (
 						<Field label={t('settings.password.current')} error={passwordError}>
 							<PasswordInput
 								value={password}
@@ -253,11 +287,12 @@ const SecuritySection = () => {
 									setPassword(event.target.value)
 									setPasswordError('')
 								}}
+								ref={passwordRef}
 								id='st-confirm-password'
 								autoComplete='current-password'
-								autoFocus
 							/>
 						</Field>
+						)}
 					</form>
 				)}
 			</ConfirmDialog>

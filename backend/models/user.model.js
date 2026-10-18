@@ -9,6 +9,21 @@ const userSchema = new mongoose.Schema(
 		jobTitle: { type: String, default: '' },
 		timezone: { type: String, default: 'UTC' },
 		emailNotifications: { type: Boolean, default: true },
+		// Email about board activity: never, an hourly digest, or one email per event.
+		emailFrequency: { type: String, enum: ['never', 'periodic', 'instant'], default: 'instant' },
+		// Which kinds of board activity email covers. Being added to a card, invites and
+		// account security always email (unless the frequency is "never" for activity).
+		emailPreferences: {
+			type: new mongoose.Schema({
+				comments: { type: Boolean, default: true },
+				dueDates: { type: Boolean, default: true },
+				removed: { type: Boolean, default: true },
+				cardsCreated: { type: Boolean, default: true },
+				cardsMoved: { type: Boolean, default: true },
+			}, { _id: false }),
+			default: () => ({}),
+		},
+		lastDigestSentAt: { type: Date, default: null },
 		taskNotifications: { type: Boolean, default: true },
 		taskNotificationEmailLastSentAt: { type: Date, default: null },
 		weeklyDigest: { type: Boolean, default: false },
@@ -37,7 +52,11 @@ const userSchema = new mongoose.Schema(
 			publicKey: { type: Buffer, required: true },
 			counter: { type: Number, default: 0 },
 			transports: [{ type: String }],
+			// What the owner called it, and which password manager or device holds it.
+			name: { type: String, default: '', maxlength: 60 },
+			provider: { type: String, default: '' },
 			createdAt: { type: Date, default: Date.now },
+			lastUsedAt: { type: Date, default: null },
 		}],
 		passkeyRegistrationChallenge: { type: String, default: '' },
 		passkeyRegistrationChallengeExpiresAt: { type: Date, default: null },

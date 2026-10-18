@@ -168,6 +168,11 @@ select.ui-control.ui-control {
 	background: var(--ui-accent) var(--ui-check-icon) center / 14px no-repeat;
 	border-color: var(--ui-accent);
 }
+/* Some but not all picked: a dash. */
+.ui-check__box.ui-check__box:indeterminate {
+	background: var(--ui-accent) linear-gradient(#fff, #fff) center / 10px 2px no-repeat;
+	border-color: var(--ui-accent);
+}
 .ui-check__box.ui-check__box:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
 
 .ui-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-4); cursor: pointer; }
@@ -424,7 +429,7 @@ select.ui-control.ui-control {
 
 /* On phones a modal becomes a bottom sheet within thumb reach. */
 @media (max-width: 720px) {
-	.ui-overlay { place-items: end stretch; padding: 0; }
+	.ui-overlay { grid-template-columns: minmax(0, 1fr); place-items: end stretch; padding: 0; }
 	.ui-modal {
 		width: 100%;
 		max-height: 92dvh;

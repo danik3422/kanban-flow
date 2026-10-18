@@ -1,4 +1,4 @@
-import { AlertTriangle, BriefcaseBusiness, Camera, Check, CheckCircle2, Circle, Clock3, LayoutGrid, ListTodo, LocateFixed, Settings2, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, BriefcaseBusiness, Camera, Check, CheckCircle2, Circle, Clock3, LayoutGrid, ListTodo, Settings2, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -6,23 +6,16 @@ import AvatarEditor from '../components/profile/AvatarEditor'
 import '../components/profile/profile.css'
 import WorkspaceSidebar from '../components/WorkspaceSidebar'
 import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import { normalizeTimezone, timezoneOptions } from '../data/timezones'
+import TimezonePicker from '../components/timezone/TimezonePicker'
+import { normalizeTimezone } from '../data/timezones'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { Avatar, Badge, Button, ConfirmDialog, Field, Input, Menu, PageHeader, Select, Skeleton } from '../ui'
+import { Avatar, Badge, Button, ConfirmDialog, Field, Input, Menu, PageHeader, Skeleton } from '../ui'
 import { getDueDateKey, getLocalDateKey } from '../utils/dueDate'
-
-const browserTimezone = () => {
-	try {
-		return normalizeTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || '')
-	} catch {
-		return ''
-	}
-}
 
 const timeIn = (timezone, language) => {
 	try {
@@ -33,7 +26,7 @@ const timeIn = (timezone, language) => {
 }
 
 const Profile = () => {
-	const { t, tNode, language } = useI18n()
+	const { t, language } = useI18n()
 	const navigate = useNavigate()
 	const { authUser, checkAuth } = useAuthStore()
 	const { isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
@@ -69,9 +62,6 @@ const Profile = () => {
 
 	const dirty = form.name !== saved.name || form.jobTitle !== saved.jobTitle || form.timezone !== saved.timezone
 	const displayName = authUser?.name || authUser?.email || ''
-	const detected = browserTimezone()
-	const timezoneChoices = timezoneOptions.some((option) => option.value === form.timezone) ? timezoneOptions : [{ value: form.timezone, label: form.timezone }, ...timezoneOptions]
-	const canDetect = detected && detected !== form.timezone && timezoneOptions.some((option) => option.value === detected)
 	const memberSince = authUser?.createdAt ? new Intl.DateTimeFormat(intlLocale(language), { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(authUser.createdAt)) : ''
 
 	const todayKey = getLocalDateKey()
@@ -216,13 +206,8 @@ const Profile = () => {
 									<Input id='profile-job' icon={BriefcaseBusiness} value={form.jobTitle} onChange={update('jobTitle')} placeholder={t('auth.setup.jobPlaceholder')} autoComplete='organization-title' maxLength={120} />
 								</Field>
 								<Field label={t('auth.setup.timezone')} hint={t('profile.timezoneHint', { time: timeIn(form.timezone, language) })}>
-									<Select id='profile-timezone' value={form.timezone} onChange={update('timezone')} options={timezoneChoices} />
+									<TimezonePicker id='profile-timezone' value={form.timezone} onChange={(timezone) => setForm((current) => ({ ...current, timezone }))} />
 								</Field>
-								{canDetect && (
-									<button type='button' className='pf-link' onClick={() => setForm((current) => ({ ...current, timezone: detected }))}>
-										<LocateFixed size={14} aria-hidden='true' /> <span>{tNode('profile.useDetected', { zone: <span data-i18n-ignore>{detected}</span> })}</span>
-									</button>
-								)}
 								<div className={`pf-savebar${dirty ? ' is-visible' : ''}`} aria-hidden={!dirty}>
 									<span className='pf-savebar__text'>{t('profile.unsaved')}</span>
 									<Button variant='ghost' onClick={() => setForm(saved)} disabled={!dirty || isSaving} tabIndex={dirty ? 0 : -1}>{t('profile.discard')}</Button>

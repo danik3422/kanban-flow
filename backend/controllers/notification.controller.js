@@ -18,6 +18,7 @@ export const getNotifications = async (req, res) => {
 		const accessibleBoardIds = await getAccessibleBoardIds(req.user._id)
 		const notifications = await Notification.find({
 			user: req.user._id,
+			hidden: { $ne: true },
 			$or: [
 				{ board: { $in: accessibleBoardIds } },
 				{ board: { $exists: false } },

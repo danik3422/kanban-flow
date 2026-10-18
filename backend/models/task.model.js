@@ -14,6 +14,8 @@ const taskSchema = new mongoose.Schema(
 			type: Date,
 			default: null,
 		},
+		// When assignees were reminded that the due date is close (cleared when it changes).
+		dueReminderSentAt: { type: Date, default: null },
 		column: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Column',

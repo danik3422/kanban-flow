@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Bell, BellOff, Check, CheckCheck, ClipboardList, MessageCircle, PencilLine, Trash2, X } from 'lucide-react'
+import { AlarmClock, ArrowRightLeft, Bell, CalendarClock, BellOff, Check, CheckCheck, ClipboardList, MessageCircle, PencilLine, Trash2, UserMinus, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import { acquireSocket, releaseSocket } from '../lib/socket'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button, EmptyState, IconButton, Modal, SegmentedControl, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
+import { showDesktopNotification } from '../utils/desktopNotifications'
 import { describeNotification } from '../utils/notificationText'
 import { relativeTime } from '../utils/relativeTime'
 import './app/notifications.css'
@@ -19,6 +20,9 @@ const TYPE_LOOK = {
 	task_commented: { icon: MessageCircle, tone: 'info' },
 	task_moved: { icon: ArrowRightLeft, tone: 'warning' },
 	task_updated: { icon: PencilLine, tone: 'neutral' },
+	task_unassigned: { icon: UserMinus, tone: 'neutral' },
+	task_due_soon: { icon: AlarmClock, tone: 'warning' },
+	task_due_changed: { icon: CalendarClock, tone: 'warning' },
 }
 
 const PHONE_QUERY = '(max-width: 720px)'
@@ -56,6 +60,8 @@ const NotificationCenter = () => {
 	const wrapperRef = useRef(null)
 	const triggerRef = useRef(null)
 	const panelRef = useRef(null)
+	// The latest opener, for desktop notifications clicked later.
+	const openRef = useRef(null)
 
 	useEffect(() => {
 		if (isDevAuthBypass) return undefined
@@ -84,6 +90,13 @@ const NotificationCenter = () => {
 			setNotifications((current) => mergeNotifications([notification], current))
 			const text = describeNotification(translateCurrent, notification)
 			toast.info(text.title, { description: [text.message, text.actor].filter(Boolean).join(' · ') })
+			// On the desktop too, when this tab is in the background.
+			showDesktopNotification({
+				title: text.title,
+				body: [text.message, text.context, text.actor].filter(Boolean).join(' · '),
+				tag: notification._id,
+				onClick: () => openRef.current?.(notification),
+			})
 		}
 		// Another device ended the other sessions; a stale one finds out on this check.
 		let sessionTimer
@@ -94,7 +107,11 @@ const NotificationCenter = () => {
 		socket.on('connect', handleConnect)
 		socket.on('notification:new', handleNotification)
 		socket.on('session:changed', handleSessionChanged)
+		// A device signed in or out: Settings refreshes its list of devices.
+		const handleSessionsUpdated = () => window.dispatchEvent(new Event('kh:sessions-updated'))
+		socket.on('sessions:updated', handleSessionsUpdated)
 		return () => {
+			socket.off('sessions:updated', handleSessionsUpdated)
 			window.clearTimeout(sessionTimer)
 			socket.off('connect', handleConnect)
 			socket.off('notification:new', handleNotification)
@@ -174,6 +191,9 @@ const NotificationCenter = () => {
 			navigate(`/workspaces/${notification.board}`, { state: { notificationTaskId: notification.task } })
 		}
 	}
+	useEffect(() => {
+		openRef.current = openNotification
+	})
 
 	const groups = ['today', 'yesterday', 'earlier']
 		.map((key) => ({ key, items: visible.filter((notification) => dayGroup(notification.createdAt) === key) }))
