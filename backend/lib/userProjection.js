@@ -7,6 +7,7 @@ export const publicUserFields = [
 	'emailNotifications',
 	'emailFrequency',
 	'emailPreferences',
+	'desktopNotifications',
 	'taskNotifications',
 	'weeklyDigest',
 	'language',

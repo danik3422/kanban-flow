@@ -1031,7 +1031,7 @@ const en = {
 			bellTitle: 'Notifications under the bell',
 			bellText: 'Assignments, comments, moves and due dates on your boards.',
 			desktopTitle: 'Desktop notifications',
-			desktopText: 'Pop-ups on this device while KanbanHub is in the background.',
+			desktopText: 'Pop-ups while KanbanHub is in the background. Saved to your account; each browser asks for permission once.',
 			desktopAllow: 'Allow',
 			desktopBlocked: 'Blocked in this browser. Allow notifications for this site in the browser settings, then come back.',
 			desktopUnsupported: 'This browser can’t show desktop notifications.',

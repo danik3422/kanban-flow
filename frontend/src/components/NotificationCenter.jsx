@@ -93,7 +93,8 @@ const NotificationCenter = () => {
 			// On the desktop too, when this tab is in the background.
 			showDesktopNotification({
 				title: text.title,
-				body: [text.message, text.context, text.actor].filter(Boolean).join(' · '),
+				// The card on the first line, where and who on the second.
+				body: [text.message, [text.context, text.actor].filter(Boolean).join(' · ')].filter(Boolean).join('\n'),
 				tag: notification._id,
 				onClick: () => openRef.current?.(notification),
 			})

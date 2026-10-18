@@ -46,6 +46,9 @@ const boardModel = new mongoose.Schema(
 				color: String,
 				author: String,
 				authorUrl: String,
+				// Where the photo is from (Unsplash, Wikimedia Commons) and its licence, for the credit.
+				source: String,
+				license: String,
 			}, { _id: false }),
 			default: null,
 		},

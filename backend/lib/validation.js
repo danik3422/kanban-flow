@@ -39,6 +39,7 @@ export const passwordResetConfirmSchema = z.object({
 export const settingsSchema = z.object({
 	emailNotifications: z.boolean().optional(),
 	emailFrequency: z.enum(['never', 'periodic', 'instant']).optional(),
+	desktopNotifications: z.boolean().optional(),
 	emailPreferences: z.object({
 		comments: z.boolean(),
 		dueDates: z.boolean(),
@@ -106,12 +107,14 @@ const boardBackground = z.union([
 	z.object({
 		type: z.literal('photo'),
 		id: z.string().max(64),
-		url: z.string().max(600).optional(),
-		thumb: z.string().max(600).optional(),
+		url: z.string().max(1000).optional(),
+		thumb: z.string().max(1000).optional(),
 		color: z.string().max(16).optional(),
 		author: z.string().max(120).optional(),
 		authorUrl: z.string().max(600).optional(),
 		downloadLocation: z.string().max(600).optional(),
+		source: z.string().max(40).optional(),
+		license: z.string().max(60).optional(),
 	}),
 ]).nullable()
 

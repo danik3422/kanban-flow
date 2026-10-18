@@ -24,6 +24,8 @@ const userSchema = new mongoose.Schema(
 			default: () => ({}),
 		},
 		lastDigestSentAt: { type: Date, default: null },
+		// Pop-ups on the desktop; each browser still has to allow them once.
+		desktopNotifications: { type: Boolean, default: true },
 		taskNotifications: { type: Boolean, default: true },
 		taskNotificationEmailLastSentAt: { type: Date, default: null },
 		weeklyDigest: { type: Boolean, default: false },

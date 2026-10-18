@@ -64,6 +64,18 @@ check('never is saved', (await me.call('GET', '/auth/get-user')).emailFrequency 
 await page.reload(); await page.waitForSelector('.st-frequency')
 check('the choice survives a reload', await page.getByRole('radio', { name: /Never/ }).isChecked())
 
+// Signing out and back in (no reload) still shows what the account chose.
+await page.locator('.app-account-trigger').click()
+await page.getByRole('menuitem', { name: /log ?out|sign out/i }).click()
+await page.waitForURL(/\/login|\/$/)
+await page.goto(`${APP}/login`); await uiLogin(page, ME.email, ME.password); await page.waitForURL(/\/workspaces/)
+await page.locator('.app-account-trigger').click()
+await page.getByRole('menuitem', { name: 'Settings' }).click()
+await page.waitForSelector('.st-frequency')
+await page.evaluate(() => document.getElementById('notifications').scrollIntoView())
+check('after signing in again, Never is still chosen', await page.getByRole('radio', { name: /Never/ }).isChecked())
+check('…and the email kinds still say email is off', await page.locator('.st-prefs-off').isVisible())
+
 // Never: no email; the bell still rings, and a desktop notification shows in the background.
 await page.evaluate(() => { window.__background = true })
 const before = mails().length
@@ -73,9 +85,21 @@ check('never sends no email', mails().length === before)
 const shown = await page.evaluate(() => window.__shown)
 check('a desktop notification shows while in the background', shown.some((item) => item.title === 'Assigned to you' && item.body.includes('Write release notes')), JSON.stringify(shown))
 await page.locator('.st-desktop input[type=checkbox]').uncheck()
+await page.waitForTimeout(500)
+check('the desktop switch is saved to the account', (await me.call('GET', '/auth/get-user')).desktopNotifications === false)
 await owner.call('POST', `/board/columns/${todo._id}/task`, { title: 'Quiet card', assignees: [user._id] })
 await page.waitForTimeout(1200)
-check('desktop notifications can be turned off on this device', !(await page.evaluate(() => window.__shown)).some((item) => item.body?.includes('Quiet card')))
+check('desktop notifications can be turned off for the account', !(await page.evaluate(() => window.__shown)).some((item) => item.body?.includes('Quiet card')))
+// Another browser of the same account sees it off too (after allowing notifications there).
+const second = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+await second.grantPermissions(['notifications'], { origin: APP })
+const secondPage = await second.newPage(); watch(secondPage, 'second')
+await secondPage.goto(`${APP}/login`); await uiLogin(secondPage, ME.email, ME.password); await secondPage.waitForURL(/\/workspaces/)
+await secondPage.goto(`${APP}/settings#notifications`); await secondPage.waitForSelector('.st-desktop')
+check('another browser shows the account’s desktop choice', !(await secondPage.locator('.st-desktop input[type=checkbox]').isChecked()))
+await second.close()
+await page.locator('.st-desktop input[type=checkbox]').check()
+await page.waitForTimeout(500)
 await page.evaluate(() => { window.__background = false })
 
 // Instantly: one email per event, with a link that opens the card.

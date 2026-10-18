@@ -54,6 +54,6 @@ export const paletteBackground = (type, key) => ({ type, key })
 export const backgroundPayload = (background) => {
 	if (!background) return null
 	if (background.type !== 'photo') return { type: background.type, key: background.key }
-	const { id, url, thumb, color, author, authorUrl, downloadLocation } = background
-	return Object.fromEntries(Object.entries({ type: 'photo', id, url, thumb, color, author, authorUrl, downloadLocation }).filter(([, value]) => value))
+	const { id, url, thumb, color, author, authorUrl, downloadLocation, source, license } = background
+	return Object.fromEntries(Object.entries({ type: 'photo', id, url, thumb, color, author, authorUrl, downloadLocation, source, license }).filter(([, value]) => value))
 }

@@ -7,7 +7,7 @@ import { axiosInstance } from '../../lib/axios'
 import { isDevAuthBypass } from '../../lib/devMode'
 import { useAuthStore } from '../../store/useAuthStore'
 import { Alert, Button, Checkbox, RadioCards, Switch } from '../../ui'
-import { desktopEnabled, desktopPermission, requestDesktopPermission, setDesktopEnabled, showDesktopNotification } from '../../utils/desktopNotifications'
+import { desktopPermission, requestDesktopPermission, showDesktopNotification } from '../../utils/desktopNotifications'
 
 const PREFS = ['comments', 'dueDates', 'removed', 'cardsCreated', 'cardsMoved']
 const FREQUENCY_ICONS = { never: MailX, periodic: Clock3, instant: Zap }
@@ -32,7 +32,7 @@ const NotificationSettings = () => {
 	const authUser = useAuthStore((state) => state.authUser)
 	const [saving, setSaving] = useState(false)
 	const [permission, setPermission] = useState(desktopPermission)
-	const [desktopOn, setDesktopOn] = useState(desktopEnabled)
+	const desktopOn = authUser?.desktopNotifications !== false
 
 	const frequency = frequencyOf(authUser)
 	const prefs = { comments: true, dueDates: true, removed: true, cardsCreated: true, cardsMoved: true, ...authUser?.emailPreferences }
@@ -57,16 +57,14 @@ const NotificationSettings = () => {
 	}
 	const savePrefs = (next) => save({ emailPreferences: next }, { emailPreferences: { ...prefs, ...next } })
 
+	// Allowing in the browser also switches them on for the account.
 	const allowDesktop = async () => {
 		const result = await requestDesktopPermission()
 		setPermission(result)
-		setDesktopOn(desktopEnabled())
+		if (result === 'granted' && !desktopOn) save({ desktopNotifications: true })
 		if (result === 'denied') toast.error(t('settings.notify.desktopDenied'))
 	}
-	const toggleDesktop = (on) => {
-		setDesktopEnabled(on)
-		setDesktopOn(on)
-	}
+	const toggleDesktop = (on) => save({ desktopNotifications: on })
 	const sendTest = () => showDesktopNotification({ title: t('settings.notify.desktopTestTitle'), body: t('settings.notify.desktopTestBody'), tag: 'kh-test', force: true })
 
 	return (
@@ -95,6 +93,7 @@ const NotificationSettings = () => {
 								label={t('settings.notify.desktopTitle')}
 								description={t('settings.notify.desktopText')}
 								checked={desktopOn}
+								disabled={saving}
 								onChange={(event) => toggleDesktop(event.target.checked)}
 							/>
 						) : (

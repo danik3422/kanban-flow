@@ -1166,7 +1166,7 @@ export const getTeam = async (req, res) => {
 		const boards = await Board.find({
 			$or: [{ createdBy: req.user._id }, { _id: { $in: memberBoardIds } }],
 		})
-			.select('name createdBy visibility')
+			.select('name createdBy visibility background')
 			.lean()
 		const members = await BoardMember.find({ board: { $in: boards.map((board) => board._id) } })
 			.populate('user', 'name email avatar provider')

@@ -10,6 +10,16 @@ import { translateCurrent, translateServerMessageCurrent } from '../i18n/transla
 
 const providerName = (provider) => ({ google: 'Google', microsoft: 'Microsoft', apple: 'Apple' })[provider] || provider
 
+// A sign-in answer has only the basics; the full profile (settings, notification
+// choices, passkeys, linked accounts) follows at once, so nothing shows defaults.
+const signIn = (set, user) => {
+	set({ authUser: user })
+	if (isDevAuthBypass) return
+	axiosInstance.get('/auth/get-user')
+		.then((response) => set((state) => (state.authUser?._id === response.data._id ? { authUser: response.data } : {})))
+		.catch(() => {})
+}
+
 export const useAuthStore = create((set, get) => ({
 	authUser: null,
 	clearAuth: () => {
@@ -53,7 +63,7 @@ export const useAuthStore = create((set, get) => ({
 			}
 
 			toast.success(translateCurrent('auth.toast.socialAccountCreated'))
-			set({ authUser: responseData })
+			signIn(set, responseData)
 			return { success: true, requiresVerification: false }
 		} catch (error) {
 			toast.error(translateServerMessageCurrent(error.response?.data?.message))
@@ -70,7 +80,7 @@ export const useAuthStore = create((set, get) => ({
 			
 			if (res.data.requiresVerification) {
 				toast.info(translateCurrent('auth.toast.verifyToContinue'))
-				set({ authUser: res.data })
+				signIn(set, res.data)
 				return {
 					success: true,
 					requiresVerification: true,
@@ -79,7 +89,7 @@ export const useAuthStore = create((set, get) => ({
 			}
 			
 			toast.success(translateCurrent('auth.toast.signedIn'))
-			set({ authUser: res.data })
+			signIn(set, res.data)
 			return { success: true, requiresVerification: false }
 		} catch (error) {
 			toast.error(translateServerMessageCurrent(error.response?.data?.message))
@@ -93,7 +103,7 @@ export const useAuthStore = create((set, get) => ({
 		set({ isLoggingIn: true })
 		try {
 			const res = await axiosInstance.post('/auth/passkeys/authenticate', response)
-			set({ authUser: res.data })
+			signIn(set, res.data)
 			toast.success(translateCurrent('auth.toast.signedInPasskey'))
 			return { success: true, requiresVerification: Boolean(res.data.requiresVerification) }
 		} catch (error) {
@@ -146,7 +156,7 @@ export const useAuthStore = create((set, get) => ({
 				{ withCredentials: true },
 			)
 
-			set({ authUser: response.data })
+			signIn(set, response.data)
 			toast.success(translateCurrent('auth.toast.socialSignedIn', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
@@ -171,7 +181,7 @@ export const useAuthStore = create((set, get) => ({
 			const result = await firebase.signInWithPopup(firebase.auth, firebaseProvider)
 			const idToken = await result.user.getIdToken()
 			const response = await axiosInstance.post('/auth/social/signup', { idToken, provider }, { withCredentials: true })
-			set({ authUser: response.data })
+			signIn(set, response.data)
 			toast.success(translateCurrent('auth.toast.socialAccountCreated'))
 			return { success: true, user: response.data }
 		} catch (error) {
@@ -202,7 +212,7 @@ export const useAuthStore = create((set, get) => ({
 			const result = await firebase.signInWithPopup(firebase.auth, firebaseProvider)
 			const idToken = await result.user.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider, currentPassword }, { withCredentials: true })
-			set({ authUser: response.data })
+			signIn(set, response.data)
 			toast.success(translateCurrent('auth.toast.providerConnected', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
@@ -233,7 +243,7 @@ export const useAuthStore = create((set, get) => ({
 			const idToken = await redirectUser.getIdToken(true)
 			const response = await axiosInstance.post('/auth/social/connect', { idToken, provider }, { withCredentials: true })
 			sessionStorage.removeItem('pending-social-provider')
-			set({ authUser: response.data })
+			signIn(set, response.data)
 			toast.success(translateCurrent('auth.toast.providerConnected', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {

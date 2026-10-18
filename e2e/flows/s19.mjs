@@ -35,29 +35,63 @@ await page.keyboard.press('Escape')
 check('Escape steps back instead of closing', (await page.locator('.ui-modal__title').innerText()) === 'Board background')
 await page.getByRole('button', { name: 'View more' }).first().click()
 await page.waitForSelector('.bg-photos .bg-swatch')
-const allPhotos = await page.locator('.bg-photos .bg-swatch').count()
-await page.getByLabel('Search photos').fill('mountains')
-await page.waitForTimeout(900)
-const mountainPhotos = await page.locator('.bg-photos .bg-swatch').count()
-check('photo search narrows the list', mountainPhotos > 0 && mountainPhotos < allPhotos + 1, `${allPhotos} → ${mountainPhotos}`)
-await page.getByLabel('Search photos').fill('zzzzqq')
-await page.waitForTimeout(900)
+// Scrolling keeps loading: past the 40 curated photos into endless ones.
+const photoCount = () => page.locator('.bg-photos .bg-swatch').count()
+const scrollPhotos = async (times) => {
+	for (let step = 0; step < times; step++) {
+		await page.locator('.ui-modal__body').evaluate((body) => body.scrollTo(0, body.scrollHeight))
+		await page.waitForTimeout(900)
+	}
+}
+await scrollPhotos(5)
+const browsed = await photoCount()
+check('scrolling loads more photos than the curated set', browsed > 45, String(browsed))
+check('the extra photos credit their authors', (await page.locator('.bg-photos .bg-photo__credit').count()) > 20)
+
+// Searching: curated matches first, then any word from Wikimedia Commons.
+const searchPhotos = async (text) => {
+	const answered = page.waitForResponse((response) => response.url().includes('/backgrounds/photos') && new URL(response.url()).searchParams.get('query') === text, { timeout: 20000 })
+	await page.getByLabel('Search photos').fill(text)
+	const body = await (await answered).json()
+	await page.waitForTimeout(300)
+	return body
+}
+const mountains = await searchPhotos('mountains')
+check('photo search starts with the matching curated photos', mountains.source === 'curated' && (await photoCount()) === mountains.photos.length, `${mountains.source} ${await photoCount()}`)
+const lighthouse = await searchPhotos('lighthouse')
+const lighthouses = await photoCount()
+check('a word outside the curated topics still finds photos', lighthouse.source === 'commons' && lighthouses > 10, `${lighthouse.source} ${lighthouses}`)
+check('they credit author and licence', (await page.locator('.bg-photos .bg-photo__credit').first().getAttribute('title')).includes('CC BY'))
+await scrollPhotos(2)
+check('search results keep loading as you scroll', (await photoCount()) > lighthouses, `${lighthouses} → ${await photoCount()}`)
+check('Wikimedia Commons is credited', (await page.locator('.bg-photos__source').innerText()).includes('Wikimedia Commons'))
+const lighthouseFirst = await page.locator('.bg-photos .bg-photo__credit').first().innerText()
+const mayak = await searchPhotos('маяк')
+check('a Russian word finds photos too', mayak.photos.length > 0 && (await photoCount()) === mayak.photos.length, `${mayak.photos.length} ${await photoCount()} after ${lighthouseFirst}`)
+await searchPhotos('zzzzqq')
 check('a search with no results says so', (await page.getByText('No photos found').count()) === 1)
-await page.getByLabel('Search photos').fill('lake')
-await page.waitForTimeout(900)
+// A Commons photo becomes the new board's background.
+await searchPhotos('lighthouse')
 await page.locator('.bg-photos .bg-swatch').first().click()
+check('a Commons photo can be picked', (await page.locator('.bg-photos .bg-swatch.is-selected').count()) === 1)
 await page.getByRole('button', { name: 'Done' }).click()
-check('Done returns to the form with the photo chosen', (await page.locator('#board-name').count()) === 1 && (await preview()).includes('images.unsplash.com'))
+check('Done returns to the form with the photo chosen', (await page.locator('#board-name').count()) === 1 && (await preview()).includes('wikimedia.org'))
 const created = page.waitForResponse((response) => response.url().endsWith('/api/board/boards') && response.request().method() === 'POST')
 await page.click('button[form="create-board-form"]')
 const board = await (await created).json()
-check('the board is created with that photo', board.background?.type === 'photo' && board.background.url.startsWith('https://images.unsplash.com/'), JSON.stringify(board.background))
+check('the board is created with that photo, its author and licence', board.background?.type === 'photo' && board.background.source === 'Wikimedia Commons' && board.background.license?.startsWith('CC') && /wikimedia\.org\//.test(board.background.url), JSON.stringify(board.background))
 await page.waitForURL(new RegExp(`/workspaces/${board._id}$`))
 
 // The open board, its sidebar tile and its card show the background.
 await page.waitForTimeout(600)
 check('the open board stands on its background', await page.locator('.workspace-main.has-board-background').count() === 1)
 check('the sidebar tile shows the background', (await page.locator('.app-sidebar .board-tile--background').count()) >= 1)
+// Every page's sidebar shows it, not only the board's (Team loads boards on its own).
+for (const path of ['/team', '/calendar', '/my-tasks', '/settings', '/profile', '/workspaces']) {
+	await page.goto(`${APP}${path}`); await page.waitForSelector('.app-sidebar .board-tile'); await page.waitForTimeout(500)
+	check(`the sidebar keeps the background on ${path}`, (await page.locator('.app-sidebar .board-tile--background').count()) >= 1)
+}
+await page.goto(`${APP}/workspaces/${board._id}`); await page.waitForSelector('.bc-column, .bc-add-list')
 
 // Change it from the board menu, then remove it.
 await page.locator('.workspace-more-trigger').click()

@@ -24,7 +24,7 @@ export const BackgroundSwatch = ({ background, selected, label, onSelect, size =
 
 const photoLabel = (t, photo) => (photo.author ? t('backgrounds.photoBy', { name: photo.author }) : t('backgrounds.photo'))
 
-/** Photos from the server: the curated set, or Unsplash when the server has a key. */
+/** Photos from the server, page by page: Unsplash with a key, else curated photos, Picsum and Wikimedia Commons. */
 export const usePhotoSearch = (query, enabled = true) => {
 	const [state, setState] = useState({ photos: [], page: 0, hasMore: false, source: 'curated', loading: false, failed: false })
 	const requestId = useRef(0)
@@ -157,7 +157,8 @@ export const PhotosPanel = ({ value, onChange }) => {
 		}, { rootMargin: '200px' })
 		observer.observe(sentinel)
 		return () => observer.disconnect()
-	}, [search.photos.length])
+		// Re-observing after every page catches a sentinel that is still in view.
+	}, [search.photos.length, search.page])
 
 	return (
 		<div className='bg-browser bg-photos'>
@@ -172,7 +173,7 @@ export const PhotosPanel = ({ value, onChange }) => {
 						<div key={photo.id} className='bg-photo'>
 							<BackgroundSwatch size='xl' background={{ type: 'photo', ...photo }} selected={sameBackground(value, { type: 'photo', id: photo.id })} label={photoLabel(t, photo)} onSelect={onChange} />
 							{photo.author && (
-								<a className='bg-photo__credit' href={photo.authorUrl} target='_blank' rel='noopener noreferrer' data-i18n-ignore>{photo.author}</a>
+								<a className='bg-photo__credit' href={photo.authorUrl} target='_blank' rel='noopener noreferrer' title={[photo.author, photo.license, photo.source].filter(Boolean).join(' · ')} data-i18n-ignore>{photo.author}</a>
 							)}
 						</div>
 					))}
@@ -182,6 +183,7 @@ export const PhotosPanel = ({ value, onChange }) => {
 			<div ref={sentinelRef} className='bg-photos__sentinel' aria-hidden='true'>{search.loading && search.photos.length > 0 && <Loader2 size={18} className='bg-spin' />}</div>
 			<p className='bg-photos__source'>
 				{t('backgrounds.photosBy')} <a href='https://unsplash.com/?utm_source=kanbanhub&utm_medium=referral' target='_blank' rel='noopener noreferrer'>Unsplash</a>
+				{search.source === 'commons' && <> · <a href='https://commons.wikimedia.org/wiki/Commons:Quality_images' target='_blank' rel='noopener noreferrer'>Wikimedia Commons</a></>}
 			</p>
 		</div>
 	)
