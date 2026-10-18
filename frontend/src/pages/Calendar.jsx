@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, RotateCcw, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import MyTaskRow from '../components/app/MyTaskRow'
@@ -79,14 +79,43 @@ const Calendar = () => {
 			.finally(() => setBoardsLoaded(true))
 	}, [authUser?._id])
 
-	// The previous month stays on screen (dimmed) while the next one loads.
+	// Months already seen (and the ones either side) come from memory, so turning
+	// a page is instant; each visit still refreshes in the background.
+	const cacheRef = useRef(new Map())
+	const cacheScopeRef = useRef('')
 	useEffect(() => {
-		let ignore = false
-		axiosInstance.get('/board/calendar', { params: { from: rangeFrom, to: rangeTo, scope, ...(boardFilter && { board: boardFilter }) } })
+		const cacheScope = `${scope}|${boardFilter}|${reloadKey}`
+		if (cacheScopeRef.current !== cacheScope) {
+			cacheRef.current.clear()
+			cacheScopeRef.current = cacheScope
+		}
+		const params = (from, to) => ({ from, to, scope, ...(boardFilter && { board: boardFilter }) })
+		const fetchRange = (from, to) => axiosInstance.get('/board/calendar', { params: params(from, to) })
 			.then(({ data }) => {
+				const list = Array.isArray(data) ? data : []
+				cacheRef.current.set(`${from}|${to}`, list)
+				return list
+			})
+		let ignore = false
+		const cached = cacheRef.current.get(`${rangeFrom}|${rangeTo}`)
+		queueMicrotask(() => {
+			if (ignore) return
+			if (cached) {
+				setTasks(cached)
+				setIsLoading(false)
+			} else setIsLoading(true)
+		})
+		fetchRange(rangeFrom, rangeTo)
+			.then((list) => {
 				if (ignore) return
-				setTasks(Array.isArray(data) ? data : [])
+				setTasks(list)
 				setLoadError('')
+				for (const step of [-1, 1]) {
+					const grid = monthGrid(shiftMonth(cursor, step), weekStart)
+					const from = grid[0].key
+					const to = grid[grid.length - 1].key
+					if (!cacheRef.current.has(`${from}|${to}`)) fetchRange(from, to).catch(() => {})
+				}
 			})
 			.catch((error) => {
 				if (!ignore) setLoadError(translateServerMessageCurrent(error.response?.data?.message, 'calendar.loadError'))
@@ -97,7 +126,7 @@ const Calendar = () => {
 		return () => {
 			ignore = true
 		}
-	}, [rangeFrom, rangeTo, scope, reloadKey, boardFilter])
+	}, [rangeFrom, rangeTo, scope, reloadKey, boardFilter, cursor, weekStart])
 
 	const tasksByKey = useMemo(() => {
 		const map = new Map()
@@ -118,17 +147,22 @@ const Calendar = () => {
 	const overdueCount = monthTasks.filter(isOverdue).length
 	const selectedTasks = tasksByKey.get(selectedKey) || []
 
-	const goToMonth = (months) => {
-		setIsLoading(true)
-		const next = shiftMonth(cursor, months)
+	// Turning to a month already in memory shows its tasks in the same frame as its days.
+	const showMonth = (next) => {
+		const grid = monthGrid(next, weekStart)
+		const cached = cacheRef.current.get(`${grid[0].key}|${grid[grid.length - 1].key}`)
+		if (cached) setTasks(cached)
 		setCursor(next)
+	}
+	const goToMonth = (months) => {
+		const next = shiftMonth(cursor, months)
+		showMonth(next)
 		setSelectedKey(next.getMonth() === new Date().getMonth() && next.getFullYear() === new Date().getFullYear() ? todayKey : getLocalDateKey(next))
 	}
 	const goToday = () => {
 		const now = new Date()
 		if (now.getMonth() !== cursor.getMonth() || now.getFullYear() !== cursor.getFullYear()) {
-			setIsLoading(true)
-			setCursor(new Date(now.getFullYear(), now.getMonth(), 1))
+			showMonth(new Date(now.getFullYear(), now.getMonth(), 1))
 		}
 		setSelectedKey(todayKey)
 	}
@@ -136,8 +170,7 @@ const Calendar = () => {
 		setSelectedKey(key)
 		const date = dateFromKey(key)
 		if (date.getMonth() !== cursor.getMonth() || date.getFullYear() !== cursor.getFullYear()) {
-			setIsLoading(true)
-			setCursor(new Date(date.getFullYear(), date.getMonth(), 1))
+			showMonth(new Date(date.getFullYear(), date.getMonth(), 1))
 		}
 	}
 	const changeScope = (value) => {
@@ -263,26 +296,29 @@ const Calendar = () => {
 						/>
 					) : (
 						<>
-							{!isLoading && !loadError && !monthTasks.length && (
-								<p className='cal-empty-month'>
-									{t('calendar.emptyMonth')}
-									{scope === 'mine' && <Button variant='ghost' size='sm' onClick={() => changeScope('all')}>{t('calendar.showAll')}</Button>}
-								</p>
-							)}
 							<div className={cx('cal-layout', isLoading && 'is-loading')}>
-								<MonthGrid
-									days={days}
-									weekdays={weekdays}
-									tasksByKey={tasksByKey}
-									todayKey={todayKey}
-									selectedKey={selectedKey}
-									onSelect={selectDay}
-									onOpenTask={openTask}
-									onMoveTask={moveTask}
-									onCreate={openCreate}
-									onShiftMonth={goToMonth}
-									isOverdue={isOverdue}
-								/>
+								{/* The note sits under the month, so the grid never moves when it comes and goes. */}
+								<div className='cal-month'>
+									<MonthGrid
+										days={days}
+										weekdays={weekdays}
+										tasksByKey={tasksByKey}
+										todayKey={todayKey}
+										selectedKey={selectedKey}
+										onSelect={selectDay}
+										onOpenTask={openTask}
+										onMoveTask={moveTask}
+										onCreate={openCreate}
+										onShiftMonth={goToMonth}
+										isOverdue={isOverdue}
+									/>
+									{!isLoading && !loadError && !monthTasks.length && (
+										<p className='cal-empty-month'>
+											{t('calendar.emptyMonth')}
+											{scope === 'mine' && <Button variant='ghost' size='sm' onClick={() => changeScope('all')}>{t('calendar.showAll')}</Button>}
+										</p>
+									)}
+								</div>
 								{dayPanel}
 							</div>
 						</>

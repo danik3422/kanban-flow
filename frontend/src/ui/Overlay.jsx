@@ -10,6 +10,8 @@ import { isTextEntry, isTouchScreen } from '../utils/autoFocus'
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 let openModals = 0
+// Open dialogs, newest last: only the top one answers Escape and Tab.
+const modalStack = []
 
 /**
  * Dialog with focus trap, Escape to close, background scroll lock and focus
@@ -31,6 +33,8 @@ export const Modal = ({ open, onClose, onBack, title, description, size = 'md', 
 		if (!open) return undefined
 		const previouslyFocused = document.activeElement
 		openModals += 1
+		const token = {}
+		modalStack.push(token)
 		document.body.style.overflow = 'hidden'
 		// Lets fixed page chrome (the phone bottom bar) step aside while a dialog is open.
 		document.body.classList.add('has-modal')
@@ -40,6 +44,7 @@ export const Modal = ({ open, onClose, onBack, title, description, size = 'md', 
 		focusTarget?.focus({ preventScroll: true })
 
 		const handleKeyDown = (event) => {
+			if (modalStack.at(-1) !== token) return
 			if (event.key === 'Escape') {
 				event.stopPropagation()
 				// A sub-view steps back first; the dialog closes from its main view.
@@ -63,6 +68,7 @@ export const Modal = ({ open, onClose, onBack, title, description, size = 'md', 
 		document.addEventListener('keydown', handleKeyDown)
 		return () => {
 			document.removeEventListener('keydown', handleKeyDown)
+			modalStack.splice(modalStack.indexOf(token), 1)
 			openModals -= 1
 			if (openModals === 0) {
 				document.body.style.overflow = ''

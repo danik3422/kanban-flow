@@ -27,7 +27,11 @@ const SiteHeader = () => {
 					<LanguageMenu />
 					<ThemeMenu />
 					{authUser ? (
-						<Button as={Link} to='/workspaces' size='sm' iconRight={ArrowRight}>{t('site.openWorkspace')}</Button>
+						<Button as={Link} to='/workspaces' size='sm' iconRight={ArrowRight} aria-label={t('site.openWorkspace')}>
+							<span className='site-header__open-full'>{t('site.openWorkspace')}</span>
+							{/* Phones: a short label, so the header fits in one row in every language. */}
+							<span className='site-header__open-short' aria-hidden='true'>{t('site.openShort')}</span>
+						</Button>
 					) : (
 						<>
 							<Button as={Link} to='/login' variant='secondary' size='sm'>{t('site.login')}</Button>

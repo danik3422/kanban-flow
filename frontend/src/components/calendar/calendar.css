@@ -18,7 +18,10 @@
 	.cal-layout { grid-template-columns: minmax(0, 1fr) 340px; }
 	.cal-day { position: sticky; top: 72px; }
 }
-.cal-layout.is-loading .cal-grid { opacity: 0.55; transition: opacity var(--ui-duration) var(--ui-ease); }
+.cal-month { display: flex; flex-direction: column; gap: var(--ui-space-3); min-width: 0; }
+.cal-grid { transition: opacity var(--ui-duration) var(--ui-ease); }
+/* Dim only when a load is actually slow, so quick page turns never flash. */
+.cal-layout.is-loading .cal-grid { opacity: 0.6; transition-delay: 250ms; }
 
 /* Grid */
 .cal-grid { overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface); }
@@ -26,8 +29,10 @@
 .cal-grid__head { border-bottom: 1px solid var(--ui-border); }
 .cal-grid__weekday { padding: var(--ui-space-2) var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; text-transform: capitalize; }
 .cal-grid__week + .cal-grid__week { border-top: 1px solid var(--ui-border); }
+/* Swiping: the month follows the finger (moved from script), vertical scrolling stays with the page. */
+.cal-grid__body { touch-action: pan-y; will-change: transform; }
 
-.cal-cell { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; min-height: 112px; padding: 6px; transition: background var(--ui-duration) var(--ui-ease); }
+.cal-cell { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; height: 132px; overflow: hidden; padding: 6px; transition: background var(--ui-duration) var(--ui-ease); }
 .cal-cell + .cal-cell { border-left: 1px solid var(--ui-border); }
 .cal-cell.is-weekend { background: color-mix(in srgb, var(--ui-surface-2) 60%, var(--ui-surface)); }
 .cal-cell.is-outside { background: var(--ui-surface-3); }
@@ -58,13 +63,13 @@
 .cal-cell__more:hover { text-decoration: underline; }
 
 @media (min-width: 721px) and (max-width: 1023px) {
-	.cal-cell { min-height: 96px; }
+	.cal-cell { height: 132px; }
 }
 
 /* Phones: a compact month with dots; the day's tasks follow below the grid. */
 @media (max-width: 720px) {
 	.cal-grid__weekday { padding: var(--ui-space-2) 0; text-align: center; }
-	.cal-cell { min-height: 52px; padding: 2px; align-items: stretch; }
+	.cal-cell { height: 56px; min-height: 0; padding: 2px; align-items: stretch; overflow: visible; }
 	.cal-cell + .cal-cell { border-left: 0; }
 	.cal-grid__week + .cal-grid__week { border-top: 0; }
 	.cal-cell.is-weekend { background: transparent; }

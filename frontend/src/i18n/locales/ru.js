@@ -254,6 +254,7 @@ const ru = {
 		login: 'Войти',
 		signup: 'Начать',
 		openWorkspace: 'Открыть пространство',
+		openShort: 'Открыть',
 		footerTagline: 'Спокойное общее место для работы, которая важна сейчас.',
 		support: 'Поддержка',
 		portfolio: 'Портфолио',

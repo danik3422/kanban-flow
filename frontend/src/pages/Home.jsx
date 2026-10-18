@@ -159,7 +159,7 @@ const Home = () => {
 					</div>
 				</section>
 
-				<section className='home-section' aria-labelledby='home-how'>
+				<section className='home-section home-section--how' aria-labelledby='home-how'>
 					<div className='home-section__head'>
 						<p className='home-eyebrow'>{t('home.how.eyebrow')}</p>
 						<h2 id='home-how' className='home-section__title'>{t('home.how.title')}</h2>

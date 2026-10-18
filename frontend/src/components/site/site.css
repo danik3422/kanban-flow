@@ -34,6 +34,11 @@
 .site-header__link { display: inline-flex; align-items: center; min-height: 40px; white-space: nowrap; padding: 0 var(--ui-space-3); border-radius: var(--ui-radius-md); color: var(--ui-text-2); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
 .site-header__link:hover, .site-header__link.active { color: var(--ui-text); background: var(--ui-surface-2); }
 .site-header__github { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--ui-radius-md); color: var(--ui-text-2); }
+.site-header__open-short { display: none; }
+@media (max-width: 560px) {
+	.site-header__open-full { display: none; }
+	.site-header__open-short { display: inline; }
+}
 .site-header__github:hover { color: var(--ui-text); background: var(--ui-surface-2); }
 .site-header__link:focus-visible, .site-header__github:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
 @media (max-width: 720px) {
@@ -46,6 +51,10 @@
 	/* Small phones keep the mark and one way in; the hero repeats the sign-up call. */
 	.site-header .brand-lockup__word { display: none; }
 	.site-header__signup { display: none; }
+	/* GitHub stays one tap away in the footer and on the About page. */
+	.site-header__github { display: none; }
+	.site-header__actions { gap: 0; }
+	.site-header__link { padding: 0 var(--ui-space-2); }
 }
 
 /* Shared section pieces */
@@ -433,7 +442,7 @@ body.is-demo-dragging, body.is-demo-dragging * { cursor: grabbing !important; }
 .about-terminal__bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: #18222d; }
 .about-terminal__bar i { width: 10px; height: 10px; border-radius: 50%; background: #3a4754; }
 .about-terminal__bar span { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #8ba0b0; font-size: 12px; }
-.about-terminal pre { margin: 0; padding: 16px 18px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.7; }
+.about-terminal pre { margin: 0; padding: 16px 18px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.7; }
 .about-terminal pre code::before { content: none; }
 .about-terminal__note { margin: 0; padding: 0 18px 16px; color: #8ba0b0; font-size: 13px; line-height: 1.5; }
 .about-self__checks { display: flex; flex-wrap: wrap; gap: var(--ui-space-2) var(--ui-space-5); margin: 0; padding: 0; list-style: none; color: var(--ui-text-2); }
@@ -444,4 +453,42 @@ body.is-demo-dragging, body.is-demo-dragging * { cursor: grabbing !important; }
 	.about-self .home-section__head, .about-self__ways { grid-column: 1; }
 	.about-terminal { grid-column: 2; grid-row: 1 / span 2; }
 	.about-self__checks { grid-column: 1 / -1; }
+}
+
+/* Phones: the same story in fewer, lighter blocks — no long lists or repeated explanations. */
+@media (max-width: 640px) {
+	.home-section { padding-top: var(--ui-space-8); padding-bottom: var(--ui-space-8); }
+	.home-section__head { gap: var(--ui-space-2); margin-bottom: var(--ui-space-5); }
+	.home-section__lead { font-size: var(--ui-text-md); }
+	.home-hero { padding-bottom: var(--ui-space-6); }
+	.home-hero__lead { font-size: var(--ui-text-md); }
+	.home-hero__proof { display: none; }
+
+	/* Features: a 2×4 grid of icon and name. */
+	.home-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
+	.home-feature, .home-feature:first-child { display: flex; flex-direction: column; gap: var(--ui-space-2); padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-top: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); }
+	.home-feature .home-feature__icon { width: 36px; height: 36px; }
+	.home-feature h3 { font-size: var(--ui-text-sm); line-height: 1.3; }
+	.home-feature p { display: none; }
+
+	/* The card: the picture tells it, the list stays for wider screens. */
+	.home-spotlight { gap: var(--ui-space-4); }
+	.home-spotlight .home-section__head { margin-bottom: 0; }
+	.home-checks { display: none; }
+	.home-spotlight__visual { padding: var(--ui-space-5) var(--ui-space-3); }
+
+	.home-section--how { display: none; }
+
+	/* Open source: three short points, no paragraphs. */
+	.home-open { gap: var(--ui-space-4); padding: var(--ui-space-5) var(--ui-space-4); }
+	.home-open__list { gap: var(--ui-space-3); }
+	.home-open__list li { align-items: center; }
+	.home-open__list li .home-feature__icon { width: 36px; height: 36px; }
+	.home-open__list li > span:last-child > span { display: none; }
+	.home-open__list strong { margin: 0; }
+	.home-open__actions .ui-btn { flex: 1 1 0; }
+
+	.home-cta { margin-bottom: var(--ui-space-8); padding: var(--ui-space-8) var(--ui-space-4); }
+	.public-footer__links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+	.public-footer__links a { justify-content: center; padding: 0 var(--ui-space-2); }
 }

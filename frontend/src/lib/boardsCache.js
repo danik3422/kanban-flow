@@ -5,6 +5,13 @@ const BOARDS_CACHE_TTL = 5 * 60 * 1000
 let inMemoryBoards = null
 let inMemoryCachedAt = 0
 let inMemoryUserId = null
+// The sidebar listens, so every page shows the same boards from its first frame.
+const listeners = new Set()
+const notify = () => listeners.forEach((listener) => listener())
+export const subscribeBoards = (listener) => {
+	listeners.add(listener)
+	return () => listeners.delete(listener)
+}
 
 const getCacheKey = (userId) => `${BOARDS_CACHE_KEY}:${userId || 'anonymous'}`
 
@@ -62,6 +69,7 @@ export const setCachedBoards = (userId, boards) => {
 	inMemoryCachedAt = Date.now()
 	inMemoryUserId = userId
 	writeSessionCache(userId, inMemoryBoards)
+	notify()
 	return inMemoryBoards
 }
 
@@ -69,6 +77,7 @@ export const clearBoardsCache = () => {
 	inMemoryBoards = null
 	inMemoryCachedAt = 0
 	inMemoryUserId = null
+	notify()
 	if (typeof window === 'undefined') return
 	try {
 		Object.keys(window.sessionStorage)

@@ -176,8 +176,11 @@
 	.cm-main, .cm-side { max-height: calc(92dvh - 60px); padding: var(--ui-space-4) var(--ui-space-4) 96px; }
 	.cm-title { font-size: 20px; }
 	.cm-actions, .cm-meta { padding-left: 0; }
-	.cm-actions { flex-wrap: nowrap; margin: 0 calc(var(--ui-space-4) * -1); padding: 0 var(--ui-space-4) 2px; overflow-x: auto; scrollbar-width: none; }
-	.cm-actions > .ui-btn { flex: 0 0 auto; }
+	/* All actions visible at once: a grid that fits the sheet, nothing scrolls sideways. */
+	.cm-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+	.cm-actions > .ui-btn { min-width: 0; justify-content: flex-start; padding: 0 10px; }
+	.cm-actions > .ui-btn > span, .cm-actions > .ui-btn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+	.cm-main, .cm-side { overflow-x: hidden; touch-action: pan-y; }
 	.cm-section > :not(.cm-section__head) { margin-left: 0; }
 	.cm-description-empty { width: 100%; }
 	.cm-time__fields { grid-template-columns: 1fr; }

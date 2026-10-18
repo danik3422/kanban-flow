@@ -254,6 +254,7 @@ const uk = {
 		login: 'Увійти',
 		signup: 'Почати',
 		openWorkspace: 'Відкрити простір',
+		openShort: 'Відкрити',
 		footerTagline: 'Спокійне спільне місце для роботи, яка важлива зараз.',
 		support: 'Підтримка',
 		portfolio: 'Портфоліо',

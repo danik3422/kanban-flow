@@ -1,9 +1,10 @@
 import { CalendarDays, ClipboardList, LayoutGrid, Plus, Users } from 'lucide-react'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../store/useAuthStore'
+import { getCachedBoards, subscribeBoards } from '../lib/boardsCache'
 import { useBoardPrefs } from '../store/useBoardPrefs'
 import { selectMyOpenTasks, useBoardStats } from '../store/useBoardStats'
 import { Button, IconButton } from '../ui'
@@ -37,7 +38,8 @@ const useNavigationData = (boards) => {
 	const loadStats = useBoardStats((state) => state.load)
 	const myOpenTasks = useBoardStats(selectMyOpenTasks)
 
-	useEffect(() => {
+	// Before the first paint, so starred and recent boards never blink in.
+	useLayoutEffect(() => {
 		load(authUser?._id)
 	}, [authUser?._id, load])
 
@@ -45,13 +47,16 @@ const useNavigationData = (boards) => {
 		if (authUser?._id) loadStats()
 	}, [authUser?._id, loadStats])
 
-	const byId = new Map(boards.map((board) => [board._id, board]))
+	// Pages pass their boards once loaded; until then the shared cache fills in.
+	const cachedBoards = useSyncExternalStore(subscribeBoards, () => getCachedBoards(authUser?._id))
+	const list = boards.length ? boards : cachedBoards || []
+	const byId = new Map(list.map((board) => [board._id, board]))
 	const starredBoards = starred.map((id) => byId.get(id)).filter(Boolean).slice(0, MAX_STARRED)
 	const recentBoards = recent
 		.map((entry) => byId.get(entry.id))
 		.filter((board) => board && !starred.includes(board._id))
 		.slice(0, MAX_RECENT)
-	return { starredBoards, recentBoards, myOpenTasks }
+	return { starredBoards, recentBoards, myOpenTasks, hasBoards: list.length > 0 }
 }
 
 /**
@@ -64,7 +69,7 @@ const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreat
 	const navigate = useNavigate()
 	const isRail = useSyncExternalStore(subscribeRail, isRailWidth, () => false)
 	const collapsed = isCollapsed || isRail
-	const { starredBoards, recentBoards, myOpenTasks } = useNavigationData(boards)
+	const { starredBoards, recentBoards, myOpenTasks, hasBoards } = useNavigationData(boards)
 
 	const createBoard = () => (onCreateBoard ? onCreateBoard() : navigate('/workspaces', { state: { createBoard: true } }))
 	const isActive = (to) => (to === '/workspaces' ? location.pathname.startsWith('/workspaces') : location.pathname === to)
@@ -135,7 +140,7 @@ const WorkspaceSidebar = ({ boards = [], selectedBoardId, onBoardSelect, onCreat
 				<div className='app-sidebar__boards'>
 					{section(t('app.nav.starred'), starredBoards)}
 					{section(t('app.nav.recent'), recentBoards, { text: t('app.nav.clearRecent'), label: t('app.nav.clearRecentLabel'), onClick: clearRecent })}
-					{!collapsed && !starredBoards.length && !recentBoards.length && boards.length > 0 && (
+					{!collapsed && !starredBoards.length && !recentBoards.length && hasBoards && (
 						<p className='app-sidebar__hint'>{t('app.nav.starHint')}</p>
 					)}
 				</div>

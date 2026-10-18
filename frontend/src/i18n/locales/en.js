@@ -257,6 +257,7 @@ const en = {
 		login: 'Log in',
 		signup: 'Get started',
 		openWorkspace: 'Open workspace',
+		openShort: 'Open',
 		footerTagline: 'A calm, shared place for the work that matters next.',
 		support: 'Support',
 		portfolio: 'Portfolio',

@@ -5,6 +5,7 @@ import {
 	Routes,
 	useLocation,
 	useNavigate,
+	useNavigationType,
 } from 'react-router-dom'
 import Toaster from './ui/Toaster'
 
@@ -81,6 +82,7 @@ import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
 	const location = useLocation()
+	const navigationType = useNavigationType()
 	const navigate = useNavigate()
 	const handledSocialRedirectRef = useRef(false)
 	const { language } = useI18n()
@@ -88,6 +90,13 @@ export const App = () => {
 	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
 	// so the board, sidebar and socket are not torn down and loaded twice.
 	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
+
+	// A link to another page opens it at the top; Back/Forward keep the browser's own
+	// scroll restoration, and #anchors scroll to their section.
+	useEffect(() => {
+		if (navigationType === 'POP' || location.hash) return
+		window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+	}, [location.pathname, location.hash, navigationType])
 
 	useEffect(() => {
 		applyPageMeta(pageMetaFor(location.pathname, language))
