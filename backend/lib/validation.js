@@ -126,8 +126,14 @@ export const createBoardSchema = z.object({
 
 export const updateBoardSchema = z.object({
 	name: boardName.optional(),
+	description: z.string().max(1000, 'The description is too long').optional(),
 	visibility: boardVisibility.optional(),
 	background: boardBackground.optional(),
+})
+
+export const copyBoardSchema = z.object({
+	name: boardName,
+	keepCards: z.boolean().default(true),
 })
 
 export const createInviteSchema = z.object({

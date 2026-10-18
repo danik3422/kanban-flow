@@ -138,6 +138,20 @@ const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, 
 const phonePage = await phone.newPage(); watch(phonePage, 'phone')
 await phonePage.goto(`${APP}/settings#notifications`); await phonePage.waitForSelector('.st-frequency')
 check('the notification settings fit a phone', await phonePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+// Toasts on a phone drop in under the top bar and keep clear of the bottom bar.
+await phonePage.locator('.st-frequency .ui-radio-card').nth(2).click()
+await phonePage.waitForSelector('[data-sonner-toast]')
+await phonePage.waitForTimeout(500)
+const toast = await phonePage.locator('[data-sonner-toast]').first().boundingBox()
+const topBar = await phonePage.locator('.app-topbar').boundingBox()
+const bottomBar = await phonePage.locator('.app-bottom-nav').boundingBox()
+check('a phone toast sits under the top bar', toast.y >= topBar.y + topBar.height - 1, `${toast.y} vs ${topBar.y + topBar.height}`)
+check('a phone toast never covers the bottom bar', toast.y + toast.height < bottomBar.y, `${toast.y + toast.height} vs ${bottomBar.y}`)
+const iconOffset = await phonePage.locator('[data-sonner-toast] [data-icon]').first().evaluate((tile) => {
+	const a = tile.getBoundingClientRect(), b = tile.querySelector('svg').getBoundingClientRect()
+	return Math.max(Math.abs(b.x + b.width / 2 - (a.x + a.width / 2)), Math.abs(b.y + b.height / 2 - (a.y + a.height / 2)))
+})
+check('the toast icon sits in the middle of its tile', iconOffset < 1, String(iconOffset))
 await phone.close()
 
 await browser.close(); done()

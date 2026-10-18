@@ -134,11 +134,6 @@ body.has-modal .app-bottom-nav { transform: translateY(110%); }
 	.app-topbar { padding-inline: var(--ui-space-6); }
 }
 .app-topbar__context { display: flex; flex: 1; align-items: center; min-width: 0; font-family: var(--ui-font-display); font-weight: 600; }
-/* Titles passed by pages still use the older markup; show just the name. */
-.app-topbar__context .workspace-context-label { display: none; }
-.app-topbar__context .workspace-context-copy, .app-topbar__context .workspace-board-title-row { display: flex; flex: 1; align-items: center; justify-content: flex-start; min-width: 0; width: 100%; margin: 0; }
-.app-topbar__context .workspace-board-name { display: flex; margin: 0; padding: 0; align-items: center; min-width: 0; overflow: hidden; color: var(--ui-text); font-size: var(--ui-text-lg); white-space: nowrap; text-overflow: ellipsis; }
-.app-topbar__context .workspace-board-name > svg:first-child { display: none; }
 .app-topbar__actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--ui-space-1); }
 
 .app-search-trigger {

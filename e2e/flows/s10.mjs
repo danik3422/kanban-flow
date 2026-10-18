@@ -111,7 +111,8 @@ await uiLogin(page, DEMO.email, DEMO.password)
 await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10000 })
 await page.waitForTimeout(1500)
 const toast = await page.locator('[data-sonner-toast]').first().textContent().catch(() => '')
-check('a missing board explains itself in the chosen language', toast.includes('дошки'), toast)
+// After signing in the account's own language applies (this account was created in Russian).
+check('a missing board explains itself in the account’s language', toast.includes('доски'), toast)
 check('a missing board lands on the board list', new URL(page.url()).pathname === '/workspaces', page.url())
 
 // Signed in: the home page offers the workspace, 404 offers the boards.

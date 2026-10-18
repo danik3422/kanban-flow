@@ -94,8 +94,8 @@ for (const path of ['/team', '/calendar', '/my-tasks', '/settings', '/profile', 
 await page.goto(`${APP}/workspaces/${board._id}`); await page.waitForSelector('.bc-column, .bc-add-list')
 
 // Change it from the board menu, then remove it.
-await page.locator('.workspace-more-trigger').click()
-await page.locator('.workspace-topbar-background').click()
+await page.locator('.bh-actions .bh-menu').click()
+await page.locator('.bh-menu-item', { hasText: 'Change background' }).click()
 await page.waitForSelector('.board-bg-dialog')
 const patched = page.waitForResponse((response) => response.url().endsWith(`/api/board/boards/${board._id}`) && response.request().method() === 'PATCH')
 await page.getByRole('button', { name: 'Sunset' }).click()
@@ -118,8 +118,8 @@ const memberPage = await memberCtx.newPage(); watch(memberPage, 'member')
 await memberPage.goto(`${APP}/login`); await uiLogin(memberPage, MEMBER.email, MEMBER.password); await memberPage.waitForURL(/\/workspaces/)
 await memberPage.goto(`${APP}/workspaces/${board._id}`); await memberPage.waitForTimeout(1500)
 check('members see the background', await memberPage.locator('.workspace-main.has-board-background').count() === 1)
-await memberPage.locator('.workspace-more-trigger').click()
-check('members have no background button', (await memberPage.locator('.workspace-topbar-background').count()) === 0)
+await memberPage.locator('.bh-actions .bh-menu').click(); await memberPage.waitForSelector('.bh-menu-body')
+check('members have no background button', (await memberPage.locator('.bh-menu-item', { hasText: 'Change background' }).count()) === 0)
 await memberCtx.close()
 
 // Phone: the dialog fits and its swatches are big enough to tap.

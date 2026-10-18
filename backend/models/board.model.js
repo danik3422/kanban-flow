@@ -11,6 +11,8 @@ const boardModel = new mongoose.Schema(
 			ref: 'User',
 			required: true,
 		},
+		// "About this board": what it is for, shown in the board menu.
+		description: { type: String, default: '', maxlength: 1000 },
 		visibility: {
 			type: String,
 			enum: ['private', 'workspace', 'public'],

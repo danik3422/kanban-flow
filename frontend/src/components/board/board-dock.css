@@ -82,7 +82,3 @@
 @media (prefers-reduced-motion: reduce) {
 	.bd-tip, .bs-tile__open, .bs-tile__star { transition: none; }
 }
-.bd-phone-switch { display: none; flex: 0 0 auto; }
-@media (max-width: 720px) {
-	.bd-phone-switch { display: inline-flex; }
-}

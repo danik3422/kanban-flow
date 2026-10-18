@@ -6,7 +6,7 @@ import {
 	useLocation,
 	useNavigate,
 } from 'react-router-dom'
-import { Toaster } from 'sonner'
+import Toaster from './ui/Toaster'
 
 import AppLoader from './components/AppLoader'
 import { axiosInstance } from './lib/axios'
@@ -168,7 +168,7 @@ export const App = () => {
 
 	return (
 		<>
-			<Toaster position='bottom-right' richColors />
+			<Toaster />
 			<Suspense fallback={<AppLoader page />}>
 			<Routes key={routesKey}>
 				{needsVerification ? (

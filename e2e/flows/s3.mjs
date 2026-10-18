@@ -28,14 +28,18 @@ await b.getByRole('button', { name: /join board/i }).click()
 await b.waitForURL(new RegExp(`/workspaces/${board._id}`), { timeout: 10000 }).catch(() => {})
 check('Join board opens the shared board', b.url().includes(board._id), b.url())
 await b.waitForTimeout(1500)
-check('Bob sees "Leave room" as a member', await b.locator('[aria-label="Leave room"]').count() === 1)
+await b.locator('.bh-actions .bh-menu').click(); await b.waitForSelector('.bh-menu-body')
+check('Bob sees "Leave board" as a member', await b.locator('.bh-menu-item', { hasText: 'Leave board' }).count() === 1)
+await b.keyboard.press('Escape')
 
 // Alice transfers ownership; Bob's open board updates live
 const bobMembership = (await (await a.request.get(`${API}/board/boards/${board._id}/members`)).json()).find((m) => m.user.email === bobEmail)
 const transfer = await a.request.patch(`${API}/board/boards/${board._id}/members/${bobMembership._id}`, { data: { role: 'owner' } })
 check('ownership transfer succeeds', transfer.status() === 200)
 await b.waitForTimeout(1500)
-check('Bob sees owner actions live after the transfer', await b.locator('[aria-label="Delete room"]').count() === 1)
+await b.locator('.bh-actions .bh-menu').click(); await b.waitForSelector('.bh-menu-body')
+check('Bob sees owner actions live after the transfer', await b.locator('.bh-menu-item', { hasText: 'Delete board' }).count() === 1)
+await b.keyboard.press('Escape')
 
 // Bob removes Alice; Alice's open board is closed live
 await a.goto(`${APP}/workspaces/${board._id}`); await a.waitForTimeout(2000)

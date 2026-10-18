@@ -163,7 +163,7 @@ const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, 
 const phonePage = await phone.newPage(); watch(phonePage, 'phone')
 await phonePage.goto(`${APP}/workspaces/${alpha._id}`); await phonePage.waitForSelector('.bc-column')
 check('phones have no floating dock', !(await phonePage.locator('.bd').isVisible()))
-await phonePage.locator('.bd-phone-switch').click()
+await phonePage.locator('.bh-title .bh-phone-only').click()
 check('phones open the switcher from the top bar', (await phonePage.locator('.bs').count()) === 1)
 check('the switcher does not scroll sideways', await phonePage.evaluate(() => [...document.querySelectorAll('.ui-modal__body')].every((body) => body.scrollWidth <= body.clientWidth)))
 await phone.close()

@@ -167,6 +167,74 @@ export const createBoard = async (req, res) => {
 	}
 }
 
+const COPIED_CARD_FIELDS = 'title description dueDate labels checklist priority position'
+
+/**
+ * Copy a board (Trello's "Copy board"): its lists, optionally its cards (without
+ * assignees, comments or time), background and description. The copy is private
+ * and belongs to whoever copied it.
+ */
+export const copyBoard = async (req, res) => {
+	const session = await mongoose.startSession()
+	try {
+		const source = req.board
+		const { name, keepCards } = req.body
+		// Only people on the board can copy it.
+		const { allowed } = await ensureBoardAccess(req.user._id, source)
+		if (!allowed) return res.status(404).json({ message: 'Board not found' })
+		const columns = await Column.find({ board: source._id }).sort({ position: 1 }).lean()
+		const tasks = keepCards ? await Task.find({ column: { $in: columns.map((column) => column._id) } }).select(`${COPIED_CARD_FIELDS} column`).lean() : []
+		let copy
+		await session.withTransaction(async () => {
+			;[copy] = await Board.create([{
+				name: name.trim(),
+				description: source.description || '',
+				createdBy: req.user._id,
+				visibility: 'private',
+				background: source.background || null,
+			}], { session })
+			await BoardMember.create([{ board: copy._id, user: req.user._id, role: 'admin' }], { session })
+			const newColumns = await Column.insertMany(columns.map((column) => ({
+				board: copy._id,
+				title: column.title,
+				position: column.position,
+				color: column.color,
+				sortBy: column.sortBy,
+			})), { session })
+			const columnMap = new Map(columns.map((column, index) => [column._id.toString(), newColumns[index]._id]))
+			if (tasks.length) {
+				await Task.insertMany(tasks.map((task) => ({
+					title: task.title,
+					description: task.description,
+					dueDate: task.dueDate,
+					labels: task.labels,
+					checklist: (task.checklist || []).map(({ text, completed }) => ({ text, completed })),
+					priority: task.priority,
+					position: task.position,
+					column: columnMap.get(task.column.toString()),
+				})), { session })
+			}
+			await recordBoardActivity({
+				boardId: copy._id,
+				userId: req.user._id,
+				action: 'created',
+				entityType: 'board',
+				entityId: copy._id,
+				entityName: copy.name,
+				details: `copied this board from ${source.name}`,
+				session,
+				emit: false,
+			})
+		})
+		return res.status(201).json({ ...copy.toObject(), access: 'owned', role: 'owner' })
+	} catch (error) {
+		console.error('Board copy failed:', error)
+		return res.status(500).json({ message: 'Could not copy the board' })
+	} finally {
+		await session.endSession()
+	}
+}
+
 export const getBoardById = async (req, res) => {
 	try {
 		const boardId = req.params.id
@@ -758,7 +826,7 @@ export const updateBoard = async (req, res) => {
 	try {
 		const board = req.board
 		const userId = req.user._id
-		const { name, visibility, background } = req.body
+		const { name, visibility, background, description } = req.body
 		let nextBackground
 		try {
 			nextBackground = background === undefined ? undefined : normalizeBackground(background)
@@ -796,6 +864,8 @@ export const updateBoard = async (req, res) => {
 		const previousName = board.name
 		const previousVisibility = board.visibility
 		board.name = trimmedName
+		const descriptionChanged = description !== undefined && description.trim() !== (board.description || '')
+		if (description !== undefined) board.description = description.trim()
 		if (nextBackground !== undefined) {
 			board.background = nextBackground
 			if (nextBackground?.type === 'photo') reportUnsplashUse(background)
@@ -820,6 +890,17 @@ export const updateBoard = async (req, res) => {
 				entityId: board._id,
 				entityName: trimmedName,
 				details: `renamed this board from ${previousName} to ${trimmedName}`,
+			})
+		}
+		if (descriptionChanged) {
+			await recordBoardActivity({
+				boardId: board._id,
+				userId,
+				action: 'updated',
+				entityType: 'board',
+				entityId: board._id,
+				entityName: trimmedName,
+				details: 'updated the board description',
 			})
 		}
 		if (visibility !== undefined && previousVisibility !== visibility) {

@@ -20,7 +20,8 @@ const SetupProfile = () => {
 	const { authUser, checkAuth } = useAuthStore()
 	const [name, setName] = useState(() => authUser?.name || '')
 	const [jobTitle, setJobTitle] = useState(() => authUser?.jobTitle || '')
-	const [timezone, setTimezone] = useState(() => authUser?.timezone || getDetectedTimezone())
+	// A first setup starts from this device's timezone; the account's is only a default until then.
+	const [timezone, setTimezone] = useState(() => (authUser?.profileSetup && authUser?.timezone) || getDetectedTimezone())
 	// A cropped, compressed photo ready to upload; the saved one shows until then.
 	const [avatarData, setAvatarData] = useState('')
 	const [isEditorOpen, setIsEditorOpen] = useState(false)

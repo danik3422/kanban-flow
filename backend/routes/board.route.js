@@ -2,6 +2,7 @@ import express from 'express'
 import {
 	acceptBoardInvite,
 	copyBoardInviteLink,
+	copyBoard,
 	createBoard,
 	createBoardInvite,
 	createColumn,
@@ -66,6 +67,7 @@ import {
 	memberRoleSchema,
 	reorderTasksSchema,
 	taskCommentSchema,
+	copyBoardSchema,
 	updateBoardSchema,
 	updateColumnSchema,
 	updateTaskSchema,
@@ -98,6 +100,7 @@ router.get('/boards/:id/activity', verifiedAuthMiddleware, boardMiddleware, getB
 router.patch('/boards/:id', verifiedAuthMiddleware, boardMiddleware, validateBody(updateBoardSchema), updateBoard)
 router.delete('/boards/:id', verifiedAuthMiddleware, boardMiddleware, removeBoard)
 router.post('/boards/:id/leave', verifiedAuthMiddleware, boardMiddleware, leaveBoard)
+router.post('/boards/:id/copy', verifiedAuthMiddleware, boardMiddleware, validateBody(copyBoardSchema), copyBoard)
 
 // Members
 router.get(
