@@ -9,14 +9,12 @@ import {
 import { Toaster } from 'sonner'
 
 import AppLoader from './components/AppLoader'
-import Navbar from './components/Navbar'
 import { axiosInstance } from './lib/axios'
 // Page chunks, keyed so the one for the opened address can start downloading
 // while the session is still being checked instead of after it.
 const PAGES = {
 	BoardInvite: () => import('./pages/BoardInvite'),
 	Calendar: () => import('./pages/Calendar'),
-	EditProfile: () => import('./pages/EditProfile'),
 	Home: () => import('./pages/Home'),
 	Login: () => import('./pages/Login'),
 	MyTasks: () => import('./pages/MyTasks'),
@@ -33,7 +31,6 @@ const PAGES = {
 }
 const BoardInvite = lazy(PAGES.BoardInvite)
 const CalendarPage = lazy(PAGES.Calendar)
-const EditProfile = lazy(PAGES.EditProfile)
 const Home = lazy(PAGES.Home)
 const Login = lazy(PAGES.Login)
 const MyTasks = lazy(PAGES.MyTasks)
@@ -61,20 +58,20 @@ const EXACT_PAGES = {
 	'/calendar': 'Calendar',
 	'/team': 'Team',
 	'/profile': 'Profile',
-	'/profile/edit': 'EditProfile',
+	'/profile/edit': 'Profile',
 	'/settings': 'Settings',
 }
 const pageFor = (pathname) => {
 	if (EXACT_PAGES[pathname]) return EXACT_PAGES[pathname]
 	if (pathname.startsWith('/workspaces/')) return 'Workspace'
-	if (pathname.startsWith('/invite/')) return 'BoardInvite'
+	if (pathname === '/invite' || pathname.startsWith('/invite/')) return 'BoardInvite'
 	if (pathname.startsWith('/public/')) return 'PublicBoard'
 	return 'NotFound'
 }
 // Pages not yet moved to the new design still rely on the old top bar.
-const LEGACY_NAVBAR_PAGES = new Set(['Profile', 'EditProfile', 'Settings', 'BoardInvite', 'PublicBoard'])
 
 import { shouldBlockAccountGateRoute } from './lib/authRouteRules'
+import { startPagePath } from './utils/preferences'
 import { useAuthStore } from './store/useAuthStore'
 
 export const App = () => {
@@ -82,9 +79,6 @@ export const App = () => {
 	const navigate = useNavigate()
 	const handledSocialRedirectRef = useRef(false)
 	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
-	// These pages bring their own header (logo, language and theme).
-	const usesAuthLayout = ['/login', '/signup', '/login/resetpassword', '/login/verify-email', '/verify-email', '/setup-profile'].includes(location.pathname)
-		|| Boolean(authUser && (authUser.emailVerified === false || authUser.profileSetup === false))
 	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
 	// so the board, sidebar and socket are not torn down and loaded twice.
 	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
@@ -163,7 +157,7 @@ export const App = () => {
 		// Same-origin paths only: "//host" and "/\host" both resolve to another site.
 		requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//') && !requestedRedirect.includes('\\')
 			? requestedRedirect
-			: '/workspaces'
+			: startPagePath()
 
 	if (isCheckingAuth) return <AppLoader />
 
@@ -171,12 +165,10 @@ export const App = () => {
 	const signInFirst = (
 		<Navigate to={`/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`} replace />
 	)
-	const showLegacyNavbar = !usesAuthLayout && LEGACY_NAVBAR_PAGES.has(pageFor(location.pathname))
 
 	return (
 		<>
 			<Toaster position='bottom-right' richColors />
-			{showLegacyNavbar && <Navbar />}
 			<Suspense fallback={<AppLoader page />}>
 			<Routes key={routesKey}>
 				{needsVerification ? (
@@ -184,6 +176,7 @@ export const App = () => {
 						<Route path='/verify-email' element={<VerifyEmail />} />
 						<Route path='/login/verify-email' element={<VerifyEmail />} />
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
+						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route
 							path='*'
 							element={
@@ -198,7 +191,9 @@ export const App = () => {
 				) : needsSetup ? (
 					<>
 						<Route path='/setup-profile' element={<SetupProfile />} />
+						<Route path='/verify-email' element={<Navigate to='/setup-profile' replace />} />
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
+						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route
 							path='*'
 							element={
@@ -219,6 +214,7 @@ export const App = () => {
 								!authUser ? <Login /> : <Navigate to={loginRedirect} replace />
 							}
 						/>
+						<Route path='/invite' element={<BoardInvite />} />
 						<Route path='/invite/:token' element={<BoardInvite />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route
@@ -270,7 +266,7 @@ export const App = () => {
 						<Route
 							path='/profile/edit'
 							element={
-								authUser ? <EditProfile /> : signInFirst
+								authUser ? <Navigate to='/profile' replace /> : signInFirst
 							}
 						/>
 						<Route

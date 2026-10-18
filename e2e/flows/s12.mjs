@@ -6,7 +6,7 @@ const stamp = Date.now()
 const ME = { email: `mytasks-${stamp}@example.com`, password: 'Password123!', name: 'Tia Tasks' }
 const me = await createVerifiedUser(ME, 'Lead')
 await me.call('PATCH', '/auth/settings', { language: 'en' })
-const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+const day = (offset) => new Date(Date.now() + offset * 86400000).toLocaleDateString('sv-SE')
 
 const launchBoard = await me.call('POST', '/board/boards', { name: 'Launch' })
 const todo = await me.call('POST', `/board/boards/${launchBoard._id}/columns`, { title: 'To do', position: 0 })

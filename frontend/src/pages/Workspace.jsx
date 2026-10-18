@@ -21,12 +21,23 @@ import {
 	UserMinus,
 	UserRound,
 	X,
+	Layers,
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
 import CreateBoardModal from '../components/app/CreateBoardModal'
+import BoardBackgroundDialog from '../components/boards/BoardBackgroundDialog'
+import BoardColumn, { ListComposer } from '../components/board/BoardColumn'
+import ColumnActions from '../components/board/ColumnActions'
+import BoardDock from '../components/board/BoardDock'
+import BoardSwitcher from '../components/board/BoardSwitcher'
+import '../components/board/board-columns.css'
+import useIsPhone from '../hooks/useIsPhone'
+import useFlipColumns from '../hooks/useFlipColumns'
+import { ConfirmDialog, IconButton } from '../ui'
+import { backgroundCss, backgroundPayload } from '../utils/boardBackground'
 import { useBoardPrefs } from '../store/useBoardPrefs'
 import { useBoardStats } from '../store/useBoardStats'
 import { toast } from 'sonner'
@@ -41,7 +52,7 @@ import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../utils/taskSorting'
 import { formatDueDate, getDueDateKey, getDueDateState } from '../utils/dueDate'
-import { getColumnInsertionIndex, reorderColumns } from '../utils/columnOrdering'
+import { getColumnDropIndex, reorderColumns } from '../utils/columnOrdering'
 import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
 import useBoardRealtime from '../hooks/useBoardRealtime'
 import {
@@ -150,10 +161,12 @@ const Workspace = () => {
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isCreatingBoard, setIsCreatingBoard] = useState(false)
-	const [isCreatingColumn, setIsCreatingColumn] = useState(false)
 	const [activeTaskColumn, setActiveTaskColumn] = useState(null)
 	const [newBoardName, setNewBoardName] = useState('')
 	const [newBoardVisibility, setNewBoardVisibility] = useState('private')
+	// undefined until chosen: the create dialog then preselects its first photo.
+	const [newBoardBackground, setNewBoardBackground] = useState(undefined)
+	const [isBackgroundOpen, setIsBackgroundOpen] = useState(false)
 	const [isSubmittingBoard, setIsSubmittingBoard] = useState(false)
 	const [createBoardError, setCreateBoardError] = useState('')
 	const [isVisibilityOpen, setIsVisibilityOpen] = useState(false)
@@ -161,8 +174,6 @@ const Workspace = () => {
 	const [isPublicVisibilityConfirmOpen, setIsPublicVisibilityConfirmOpen] = useState(false)
 	const [boardNameDraft, setBoardNameDraft] = useState('')
 	const [isEditingBoardName, setIsEditingBoardName] = useState(false)
-	const [newColumnTitle, setNewColumnTitle] = useState('')
-	const [newTaskTitle, setNewTaskTitle] = useState('')
 	const [boardMembers, setBoardMembers] = useState([])
 	const [boardMemberRecords, setBoardMemberRecords] = useState([])
 	const [boardInvites, setBoardInvites] = useState([])
@@ -170,7 +181,6 @@ const Workspace = () => {
 	const [publicBoardLink, setPublicBoardLink] = useState('')
 	const [boardActivities, setBoardActivities] = useState([])
 	const [isActivityLoading, setIsActivityLoading] = useState(false)
-	const [selectedAssignees, setSelectedAssignees] = useState([])
 	const [editingTask, setEditingTask] = useState(null)
 	const [editingTitle, setEditingTitle] = useState('')
 	const [draggedTask, setDraggedTask] = useState(null)
@@ -213,36 +223,20 @@ const Workspace = () => {
 	const [removeMemberTarget, setRemoveMemberTarget] = useState(null)
 	const [deleteColumnTarget, setDeleteColumnTarget] = useState(null)
 	const [deleteTaskTarget, setDeleteTaskTarget] = useState(null)
-	const [openColumnMenuId, setOpenColumnMenuId] = useState(null)
-	const [editingColumn, setEditingColumn] = useState(null)
-	const [editingColumnTitle, setEditingColumnTitle] = useState('')
 	const [columnSortBy, setColumnSortBy] = useState({}) // { columnId: 'sortType' }
-	const [sortSubmenuOpen, setSortSubmenuOpen] = useState(null) // null or columnId
+	const [columnMenu, setColumnMenu] = useState(null) // { columnId, anchor }
+	// While a list is dragged: where it would land (index among the other lists),
+	// and which list is still settling after the drop.
+	const [columnPreviewIndex, setColumnPreviewIndex] = useState(null)
+	const [landingColumnId, setLandingColumnId] = useState(null)
+	const boardListRef = useRef(null)
+	const [isSwitcherOpen, setIsSwitcherOpen] = useState(false)
+	const [collapsedColumnIds, setCollapsedColumnIds] = useState([])
+	const isPhone = useIsPhone()
 	const isBoardContentLoading = isLoading || Boolean(
 		selectedBoard && !isDevAuthBypass && isRefreshing && columns.length === 0,
 	)
 
-	const toggleColumnPin = async (columnId) => {
-		const column = columns.find((item) => item._id === columnId)
-		if (!column) return
-		const nextPinned = !column.pinned
-		try {
-			const { data } = await axiosInstance.patch(
-				`/board/columns/${columnId}`,
-				{ pinned: nextPinned },
-			)
-			setColumns((current) =>
-				current.map((item) =>
-					item._id === columnId
-						? { ...item, pinned: data.pinned }
-						: item,
-				),
-			)
-			toast.success(nextPinned ? 'List pinned' : 'List unpinned')
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not update pinned list')
-		}
-	}
 
 	const applyLoadedColumns = useCallback((loadedColumns) => {
 		setColumns(
@@ -258,22 +252,6 @@ const Workspace = () => {
 		)
 	}, [])
 
-	const refreshBoard = async (board) => {
-		if (!board) return
-		setIsRefreshing(true)
-		if (isDevAuthBypass) {
-			setColumns(devColumns)
-			setIsRefreshing(false)
-			return
-		}
-		try {
-			applyLoadedColumns(await fetchColumns(board._id))
-		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not load this board')
-		} finally {
-			setIsRefreshing(false)
-		}
-	}
 
 	const moveColumn = useCallback(async (column, targetColumnOrId, requestedIndex = null) => {
 		if (!column) {
@@ -291,6 +269,10 @@ const Workspace = () => {
 		const insertionIndex = requestedIndex === null
 			? Math.max(0, Math.min(targetIndex < 0 ? remainingColumns.length : targetIndex, remainingColumns.length))
 			: Math.max(0, Math.min(requestedIndex, remainingColumns.length))
+		if (insertionIndex === sourceIndex) {
+			setDraggedColumn(null)
+			return
+		}
 		const reorderedColumns = reorderColumns(columns, column._id, insertionIndex)
 		setColumns(reorderedColumns.map((item, index) => ({ ...item, position: index })))
 		setDraggedColumn(null)
@@ -422,8 +404,7 @@ const Workspace = () => {
 		setTaskDetails(null)
 		setEditingTask(null)
 		setActiveTaskColumn(null)
-		setOpenColumnMenuId(null)
-		setEditingColumn(null)
+		setColumnMenu(null)
 		setDeleteColumnTarget(null)
 		setDeleteTaskTarget(null)
 		setRemoveMemberTarget(null)
@@ -471,7 +452,7 @@ const Workspace = () => {
 				event.target instanceof Element
 					? event.target
 					: event.target.parentElement
-			const columnElement = targetElement?.closest('.kanban-column')
+			const columnElement = targetElement?.closest('.bc-column')
 			if (!columnElement) return
 
 			document
@@ -483,7 +464,7 @@ const Workspace = () => {
 			)
 			if (!targetColumn) return
 
-			const taskList = columnElement.querySelector('.task-list')
+			const taskList = columnElement.querySelector('.bc-tasks')
 			if (!taskList) return
 
 			const taskListRect = taskList.getBoundingClientRect()
@@ -500,7 +481,7 @@ const Workspace = () => {
 			)
 			const currentCard = targetElement?.closest('.task-card')
 			const isSelfCard = currentCard?.dataset?.taskId === draggedId
-			if (currentCard && !isSelfCard && currentCard.closest('.task-list') === taskList) {
+			if (currentCard && !isSelfCard && currentCard.closest('.bc-tasks') === taskList) {
 				const taskIndex = cards.indexOf(currentCard)
 				const rect = currentCard.getBoundingClientRect()
 				const isBefore = event.clientY < rect.top + rect.height / 2
@@ -564,69 +545,73 @@ const Workspace = () => {
 			if (!session.active && distance < 6) return
 			if (!session.active) {
 				session.active = true
+				// Measure once: the other lists slide while dragging, so live positions would jitter.
+				session.scroller = session.element.closest('.bc-scroll')
+				session.scrollStart = session.scroller?.scrollLeft || 0
+				session.centers = Object.fromEntries(columns.map((column) => {
+					const rect = document.querySelector(`.bc-board > .bc-column[data-column-id="${column._id}"]`)?.getBoundingClientRect()
+					return [column._id, rect ? rect.left + rect.width / 2 : Number.POSITIVE_INFINITY]
+				}))
+				// Until the pointer says otherwise, the list stays where it was.
+				session.targetIndex = columns.findIndex((column) => column._id === session.column._id)
+				session.targetId = columns[session.targetIndex + 1]?._id || null
+				setColumnPreviewIndex(session.targetIndex)
 				setDraggedColumn(session.column)
+				document.body.classList.add('is-dragging-list')
 			}
 			event.preventDefault()
 			let preview = columnDragOverlayRef.current
 			if (!preview) {
 				preview = session.element.cloneNode(true)
-				preview.classList.remove('is-dragging', 'column-drop-target')
-				preview.classList.add('drag-preview', 'drag-preview-column', 'column-drag-dom-preview')
+				preview.classList.remove('is-dragging', 'is-drop-target', 'is-placeholder')
+				preview.classList.add('bc-ghost', 'column-drag-dom-preview')
 				preview.dataset.dragPreview = 'true'
 				preview.setAttribute('aria-hidden', 'true')
-				preview.style.pointerEvents = 'none'
-				preview.style.opacity = '1'
-				preview.style.zIndex = '100'
-				preview.style.boxShadow = '0 8px 16px rgba(44, 68, 59, 0.14), 0 24px 42px rgba(44, 68, 59, 0.22)'
+				// The ghost leaves the board, so it carries the board's theme variables with it.
+				if (session.element.closest('.has-board-background')) preview.classList.add('on-board-background')
 				document.body.appendChild(preview)
 				columnDragOverlayRef.current = preview
+				requestAnimationFrame(() => preview.classList.add('is-lifted'))
 			}
 			Object.assign(preview.style, {
 				width: `${session.width}px`,
 				height: `${session.height}px`,
-				left: `${event.clientX}px`,
-				top: `${event.clientY}px`,
-				transform: `translate(-${session.grabOffsetX}px, -${session.grabOffsetY}px) rotate(1deg)`,
+				left: `${event.clientX - session.grabOffsetX}px`,
+				top: `${event.clientY - session.grabOffsetY}px`,
 			})
+			// Near an edge, the board scrolls by itself so far lists can be reached.
+			const scroller = session.scroller
+			if (scroller) {
+				const bounds = scroller.getBoundingClientRect()
+				const edge = 72
+				if (event.clientX < bounds.left + edge) scroller.scrollLeft -= Math.ceil((bounds.left + edge - event.clientX) / 4)
+				else if (event.clientX > bounds.right - edge) scroller.scrollLeft += Math.ceil((event.clientX - bounds.right + edge) / 4)
+			}
 			if (!session.pinned) {
-				const movableColumns = columns.filter((column) => !column.pinned)
-				const centers = Object.fromEntries(
-					movableColumns.map((column) => {
-						const element = document.querySelector(
-							`.kanban-column[data-column-id="${column._id}"]:not([data-drag-preview="true"])`,
-						)
-						const rect = element?.getBoundingClientRect()
-						return [column._id, rect ? rect.left + rect.width / 2 : Number.POSITIVE_INFINITY]
-					}),
-				)
-				const normalizedIndex = getColumnInsertionIndex(
-					movableColumns,
-					session.column._id,
-					centers,
-					event.clientX,
-				)
-				const remainingMovable = movableColumns.filter((column) => column._id !== session.column._id)
-				const targetId = remainingMovable[normalizedIndex]?._id || null
-				const remainingColumns = columns.filter((column) => column._id !== session.column._id)
-				const sourceMovableIndex = movableColumns.findIndex(
-					(column) => column._id === session.column._id,
-				)
-				const targetMovableIndex = movableColumns.findIndex(
-					(column) => column._id === targetId,
-				)
-				const movingRight = targetId && sourceMovableIndex < targetMovableIndex
-				const rawIndex = targetId
-					? remainingColumns.findIndex((column) => column._id === targetId) + (movingRight ? 1 : 0)
-					: remainingColumns.length
+				const centers = session.centers
+				const pointerX = event.clientX + ((scroller?.scrollLeft || 0) - session.scrollStart)
+				// The dragged list's own centre decides, so where it was grabbed does not matter.
+				const draggedCenter = pointerX - session.grabOffsetX + session.width / 2
+				const rawIndex = getColumnDropIndex(columns, session.column._id, centers, draggedCenter)
+				const targetId = columns.filter((column) => column._id !== session.column._id)[rawIndex]?._id || null
 				if (session.targetIndex !== rawIndex) {
 					session.targetIndex = rawIndex
 					session.targetId = targetId
-					setColumnDropTarget(targetId)
+					setColumnPreviewIndex(rawIndex)
 				}
 			}
 		}
 		const handlePointerUp = () => {
 			const session = columnDragSessionRef.current
+			// A real drag ends with a click on the title; it must not start renaming.
+			if (session?.active) {
+				const swallow = (event) => {
+					event.stopPropagation()
+					event.preventDefault()
+				}
+				window.addEventListener('click', swallow, { capture: true, once: true })
+				window.setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
+			}
 			if (
 				session?.active &&
 				!session.pinned &&
@@ -634,12 +619,29 @@ const Workspace = () => {
 			) {
 				void moveColumn(session.column, session.targetId, session.targetIndex)
 			}
-			columnDragOverlayRef.current?.remove()
+			document.body.classList.remove('is-dragging-list')
+			const ghost = columnDragOverlayRef.current
 			columnDragOverlayRef.current = null
-			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
 			columnDragSessionRef.current = null
 			setDraggedColumn(null)
 			setColumnDropTarget(null)
+			setColumnPreviewIndex(null)
+			// The ghost settles into the list's new place before it disappears.
+			const slot = session?.active && session.element?.isConnected ? session.element.getBoundingClientRect() : null
+			const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+			if (ghost && slot && !reduceMotion) {
+				setLandingColumnId(session.column._id)
+				ghost.classList.add('is-landing')
+				ghost.classList.remove('is-lifted')
+				Object.assign(ghost.style, { left: `${slot.left}px`, top: `${slot.top}px` })
+				window.setTimeout(() => {
+					ghost.remove()
+					setLandingColumnId(null)
+				}, 200)
+			} else {
+				ghost?.remove()
+			}
+			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node !== ghost && node.remove())
 		}
 		const handleLostPointerCapture = () => {
 			if (columnDragSessionRef.current) handlePointerUp()
@@ -660,6 +662,7 @@ const Workspace = () => {
 			columnDragOverlayRef.current?.remove()
 			columnDragOverlayRef.current = null
 			document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
+			document.body.classList.remove('is-dragging-list')
 			setColumnDropTarget(null)
 		}
 	}, [columns, moveColumn])
@@ -716,13 +719,16 @@ const Workspace = () => {
 		'column:deleted': ({ columnId }) => {
 			setColumns((current) => removeColumn(current, columnId))
 			setActiveTaskColumn((current) => (current === columnId ? null : current))
-			setOpenColumnMenuId((current) => (current === columnId ? null : current))
-			setEditingColumn((current) => (current?._id === columnId ? null : current))
+			setColumnMenu((current) => (current?.columnId === columnId ? null : current))
 			// A card that was open in the deleted column no longer exists.
 			setTaskDetails((current) => (current?.column === columnId ? null : current))
 		},
 		'columns:reordered': ({ columns: reorderedColumns }) =>
 			setColumns((current) => applyColumnOrder(current, reorderedColumns)),
+		// Copying a list or moving all its cards changes many cards at once: reload them.
+		'board:content-changed': () => {
+			fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+		},
 	})
 
 	useEffect(() => {
@@ -823,6 +829,7 @@ const Workspace = () => {
 			const { data } = await axiosInstance.post('/board/boards', {
 				name: newBoardName.trim(),
 				visibility: newBoardVisibility,
+				background: backgroundPayload(newBoardBackground),
 			})
 			setBoards((current) => [data, ...current])
 			setSelectedBoard(data)
@@ -832,6 +839,7 @@ const Workspace = () => {
 			navigate(`/workspaces/${data._id}`)
 			setNewBoardName('')
 			setNewBoardVisibility('private')
+			setNewBoardBackground(undefined)
 			setIsCreatingBoard(false)
 			useBoardStats.getState().load({ force: true })
 			toast.success(tr('boards.create.created'))
@@ -839,6 +847,25 @@ const Workspace = () => {
 			setCreateBoardError(translateServerMessageCurrent(error.response?.data?.message, 'boards.create.error'))
 		} finally {
 			setIsSubmittingBoard(false)
+		}
+	}
+
+	// Applies at once and rolls back if the server refuses.
+	const changeBoardBackground = async (background) => {
+		if (!selectedBoard) return
+		const boardId = selectedBoard._id
+		const previous = selectedBoard.background || null
+		const apply = (value) => {
+			setSelectedBoard((current) => (current?._id === boardId ? { ...current, background: value } : current))
+			setBoards((current) => current.map((board) => (board._id === boardId ? { ...board, background: value } : board)))
+		}
+		apply(background)
+		try {
+			const { data } = await axiosInstance.patch(`/board/boards/${boardId}`, { background: backgroundPayload(background) })
+			apply(data.background || null)
+		} catch (error) {
+			apply(previous)
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'backgrounds.saveError'))
 		}
 	}
 
@@ -1329,47 +1356,6 @@ const Workspace = () => {
 		}
 	}
 
-	const updateColumn = async (columnId) => {
-		if (!editingColumnTitle.trim()) {
-			setEditingColumn(null)
-			return
-		}
-
-		if (editingColumnTitle === editingColumn.title) {
-			setEditingColumn(null)
-			return
-		}
-
-		if (isDevAuthBypass) {
-			setColumns((current) =>
-				current.map((col) =>
-					col._id === columnId
-						? { ...col, title: editingColumnTitle.trim() }
-						: col,
-				),
-			)
-			setEditingColumn(null)
-			toast.success('Demo column renamed')
-			return
-		}
-
-		try {
-			const { data } = await axiosInstance.patch(
-				`/board/columns/${columnId}`,
-				{ title: editingColumnTitle.trim() },
-			)
-			setColumns((current) =>
-				current.map((col) =>
-					col._id === columnId ? { ...col, title: data.title } : col,
-				),
-			)
-			setEditingColumn(null)
-			toast.success('Column renamed')
-		} catch (error) {
-			setEditingColumn(null)
-			toast.error(error.response?.data?.message || 'Could not rename column')
-		}
-	}
 
 	const sortColumnTasks = async (columnId, sortType) => {
 		const previousColumn = columns.find((column) => column._id === columnId)
@@ -1381,8 +1367,6 @@ const Workspace = () => {
 			}),
 		)
 		setColumnSortBy((prev) => ({ ...prev, [columnId]: sortType }))
-		setOpenColumnMenuId(null)
-		setSortSubmenuOpen(null)
 		if (isDevAuthBypass) {
 			saveLocalSorts(selectedBoard._id, authUser?._id, {
 				...readLocalSorts(selectedBoard._id, authUser?._id),
@@ -1417,97 +1401,167 @@ const Workspace = () => {
 		toast.success('Tasks sorted')
 	}
 
-	const createColumn = async (event) => {
-		event.preventDefault()
-		if (!newColumnTitle.trim() || !selectedBoard) return
-		if (isDevAuthBypass) {
-			setColumns((current) => [
-				...current,
-				{
-					_id: `dev-column-${Date.now()}`,
-					title: newColumnTitle.trim(),
-					position: current.length,
-					tasks: [],
-				},
-			])
-			setNewColumnTitle('')
-			setIsCreatingColumn(false)
-			toast.success('Demo column added locally')
-			return
-		}
+	// Folded lists are remembered per person and board on this device.
+	const collapsedKey = selectedBoard?._id && authUser?._id ? `kh:collapsed:${authUser._id}:${selectedBoard._id}` : ''
+	useEffect(() => {
+		if (!collapsedKey) return
+		let stored = []
 		try {
-			const { data } = await axiosInstance.post(
-				`/board/boards/${selectedBoard._id}/columns`,
-				{ title: newColumnTitle.trim(), position: columns.length },
-			)
-			setColumns((current) =>
-				current.some((column) => column._id === data._id)
-					? current
-					: [...current, { ...data, tasks: [] }],
-			)
-			setNewColumnTitle('')
-			setIsCreatingColumn(false)
-			toast.success('Column added')
+			stored = JSON.parse(localStorage.getItem(collapsedKey) || '[]')
+		} catch {
+			stored = []
+		}
+		queueMicrotask(() => setCollapsedColumnIds(Array.isArray(stored) ? stored : []))
+	}, [collapsedKey])
+	const toggleCollapsed = (columnId) => {
+		setCollapsedColumnIds((current) => {
+			const next = current.includes(columnId) ? current.filter((id) => id !== columnId) : [...current, columnId]
+			try {
+				if (collapsedKey) localStorage.setItem(collapsedKey, JSON.stringify(next))
+			} catch {
+				// Folding still works for this visit.
+			}
+			return next
+		})
+	}
+
+	const columnError = (error, fallbackKey) => toast.error(translateServerMessageCurrent(error.response?.data?.message, fallbackKey))
+
+	const renameColumn = async (columnId, title) => {
+		const previous = columns.find((column) => column._id === columnId)?.title
+		setColumns((current) => current.map((column) => (column._id === columnId ? { ...column, title } : column)))
+		try {
+			const { data } = await axiosInstance.patch(`/board/columns/${columnId}`, { title })
+			setColumns((current) => mergeColumn(current, { _id: data._id, title: data.title }))
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not create column')
+			setColumns((current) => current.map((column) => (column._id === columnId ? { ...column, title: previous } : column)))
+			columnError(error, 'columns.errors.rename')
 		}
 	}
 
-	const createTask = async (event, column) => {
-		event.preventDefault()
-		if (!newTaskTitle.trim()) return
-		if (isDevAuthBypass) {
-			setColumns((current) =>
-				current.map((item) =>
-					item._id === column._id
-						? {
-								...item,
-								tasks: [
-									...item.tasks,
-									{
-										_id: `dev-task-${Date.now()}`,
-										title: newTaskTitle.trim(),
-										position: item.tasks.length,
-									},
-								],
-							}
-						: item,
-				),
-			)
-			setNewTaskTitle('')
-			setActiveTaskColumn(null)
-			toast.success('Demo task added locally')
-			return
-		}
+	const addList = async (title) => {
+		if (!selectedBoard) return false
 		try {
-			const { data } = await axiosInstance.post(
-				`/board/columns/${column._id}/task`,
-				{
-					title: newTaskTitle.trim(),
-					position: column.tasks.length,
-					assignees: selectedAssignees,
-				},
-			)
-			setColumns((current) =>
-				current.map((item) =>
-					item._id === column._id
-						? {
-								...item,
-								tasks: item.tasks.some((task) => task._id === data._id)
-									? item.tasks
-									: [...item.tasks, data],
-							}
-						: item,
-				),
-			)
-			setNewTaskTitle('')
-			setSelectedAssignees([])
-			setActiveTaskColumn(null)
-			toast.success('Task added')
+			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/columns`, { title, position: columns.length })
+			setColumns((current) => (current.some((column) => column._id === data._id) ? current : [...current, { ...data, tasks: [] }]))
+			requestAnimationFrame(() => {
+				const scroller = document.querySelector('.bc-scroll')
+				scroller?.scrollTo({ left: scroller.scrollWidth, behavior: 'smooth' })
+			})
+			return true
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not create task')
+			columnError(error, 'columns.errors.create')
+			return false
 		}
 	}
+
+	const addCard = async (column, title) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/columns/${column._id}/task`, { title })
+			setColumns((current) => addTask(current, { ...data, column: data.column || column._id }))
+			requestAnimationFrame(() => {
+				const list = document.querySelector(`.bc-column[data-column-id="${column._id}"] .bc-tasks`)
+				list?.scrollTo({ top: list.scrollHeight })
+			})
+			return true
+		} catch (error) {
+			columnError(error, 'columns.errors.addCard')
+			return false
+		}
+	}
+
+	const updateColumnFields = async (column, fields, fallbackKey) => {
+		const previous = { color: column.color ?? null, pinned: Boolean(column.pinned) }
+		setColumns((current) => mergeColumn(current, { _id: column._id, ...fields }))
+		try {
+			const { data } = await axiosInstance.patch(`/board/columns/${column._id}`, fields)
+			setColumns((current) => mergeColumn(current, { _id: data._id, color: data.color ?? null, pinned: data.pinned }))
+		} catch (error) {
+			setColumns((current) => mergeColumn(current, { _id: column._id, ...previous }))
+			columnError(error, fallbackKey)
+		}
+	}
+
+	const runColumnAction = async (column, type, payload) => {
+		if (type === 'addCard') {
+			if (collapsedColumnIds.includes(column._id)) toggleCollapsed(column._id)
+			setActiveTaskColumn(column._id)
+		} else if (type === 'collapse') {
+			toggleCollapsed(column._id)
+		} else if (type === 'sort') {
+			sortColumnTasks(column._id, payload)
+		} else if (type === 'color') {
+			updateColumnFields(column, { color: payload }, 'columns.errors.update')
+		} else if (type === 'pin') {
+			updateColumnFields(column, { pinned: payload }, 'columns.errors.update')
+		} else if (type === 'delete') {
+			setDeleteColumnTarget(column)
+		} else if (type === 'move') {
+			moveColumn(column, null, payload)
+		} else if (type === 'watch') {
+			try {
+				const { data } = await axiosInstance.post(`/board/columns/${column._id}/watch`, { watching: payload })
+				setColumns((current) => mergeColumn(current, { _id: data._id, watchers: data.watchers }))
+				toast.success(payload ? tr('columns.toast.watching', { title: column.title }) : tr('columns.toast.unwatched', { title: column.title }))
+			} catch (error) {
+				columnError(error, 'columns.errors.update')
+			}
+		} else if (type === 'copy') {
+			try {
+				await axiosInstance.post(`/board/columns/${column._id}/copy`, { title: payload })
+				applyLoadedColumns(await fetchColumns(selectedBoard._id))
+				toast.success(tr('columns.toast.copied', { title: payload }))
+			} catch (error) {
+				columnError(error, 'columns.errors.copy')
+			}
+		} else if (type === 'moveCards') {
+			try {
+				const { data } = await axiosInstance.post(`/board/columns/${column._id}/move-tasks`, { targetColumnId: payload })
+				applyLoadedColumns(await fetchColumns(selectedBoard._id))
+				const target = columns.find((item) => item._id === payload)
+				toast.success(tr('columns.toast.cardsMoved', { count: data.moved, title: target?.title || '' }))
+			} catch (error) {
+				columnError(error, 'columns.errors.moveCards')
+			}
+		}
+	}
+
+	const selectedBoardIdForPlanner = selectedBoard?._id
+	const openPlanner = useCallback(() => {
+		if (selectedBoardIdForPlanner) navigate(`/calendar?board=${selectedBoardIdForPlanner}`)
+	}, [navigate, selectedBoardIdForPlanner])
+	const openSwitcher = useCallback(() => setIsSwitcherOpen(true), [])
+
+	const startColumnDrag = (event, column) => {
+		// Lists are reordered by dragging the header with a mouse or pen; on touch the
+		// header scrolls the board, and "Move list" in the menu does the job.
+		if (event.button !== 0 || event.pointerType === 'touch' || !canEditBoardName) return
+		// The title itself is a handle too; only the icon buttons and editors are not.
+		if (event.target.closest('.ui-icon-btn, input, textarea, form')) return
+		const element = event.currentTarget.closest('.bc-column')
+		const rect = element.getBoundingClientRect()
+		// No pointer capture: moves are tracked on the window, and capturing here would
+		// steal the click that opens the title for renaming.
+		setDraggedTask(null)
+		setDraggedTaskHeight(null)
+		columnDragSessionRef.current = {
+			column,
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			width: rect.width,
+			height: rect.height,
+			grabOffsetX: event.clientX - rect.left,
+			grabOffsetY: event.clientY - rect.top,
+			element,
+			active: false,
+			targetId: null,
+			pinned: Boolean(column.pinned),
+		}
+		document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
+	}
+
+
 
 	const updateTask = async (task) => {
 		if (!editingTitle.trim() || isDevAuthBypass) {
@@ -1790,6 +1844,13 @@ const Workspace = () => {
 	const visibleColumns = columns
 		.filter((column) => column.pinned)
 		.concat(columns.filter((column) => !column.pinned))
+	// During a drag the lists are drawn in the order they would have after the drop.
+	const previewColumns = draggedColumn && columnPreviewIndex !== null ? reorderColumns(columns, draggedColumn._id, columnPreviewIndex) : columns
+	const boardColumns = previewColumns
+		.filter((column) => column.pinned)
+		.concat(previewColumns.filter((column) => !column.pinned))
+	const boardOrderKey = boardColumns.map((column) => column._id).join(',')
+	useFlipColumns(boardListRef, boardOrderKey)
 
 	const isBoardOwner = selectedBoard?.createdBy === authUser?._id
 	const canEditBoardName = isBoardOwner || selectedBoard?.role === 'admin'
@@ -1806,7 +1867,10 @@ const Workspace = () => {
 				isCollapsed={isSidebarCollapsed}
 			/>
 
-			<main className='workspace-main flex-1 overflow-auto'>
+			<main
+				className={`workspace-main flex-1 overflow-auto${boardId && selectedBoard?.background ? ' has-board-background' : ''}`}
+				style={boardId && selectedBoard?.background ? { '--board-background': backgroundCss(selectedBoard.background) } : undefined}
+			>
 				<WorkspaceTopbar
 					isSidebarOpen={isSidebarOpen}
 					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
@@ -1822,6 +1886,7 @@ const Workspace = () => {
 							  }
 							: null
 					}
+					onBackgroundChange={selectedBoard && canEditBoardName ? () => setIsBackgroundOpen(true) : null}
 					onRoomAction={selectedBoard ? () => {
 						if (isBoardOwner) openDeleteBoardDialog()
 						else setIsLeaveBoardOpen(true)
@@ -1870,7 +1935,8 @@ const Workspace = () => {
 													</span>
 										)}
 									</span>
-									{/* Board actions live in the top bar's menu. */}
+									{/* Board actions live in the top bar's menu; phones switch boards here. */}
+									{selectedBoard && <IconButton className='bd-phone-switch' icon={Layers} size='sm' label={tr('boardDock.switch')} onClick={() => setIsSwitcherOpen(true)} />}
 								</div>
 							</div>
 							)}
@@ -1884,7 +1950,7 @@ const Workspace = () => {
 						onCreateBoard={() => setIsCreatingBoard(true)}
 					/>
 				) : (
-					<div className='workspace-content'>
+					<div className='workspace-content bc-content has-dock'>
 						{isBoardContentLoading ? (
 							!selectedBoard && !boardId ? (
 								<div className='workspace-overview-loading' role='status' aria-live='polite'>
@@ -1934,18 +2000,6 @@ const Workspace = () => {
 							</div>
 						) : (
 							<>
-								<div className='board-toolbar'>
-									<div className='board-toolbar-actions'>
-										<button
-											className='quiet-button'
-											onClick={() => refreshBoard(selectedBoard)}
-											disabled={isRefreshing}
-										>
-											<RefreshCw size={16} className={isRefreshing ? 'is-spinning' : ''} />{' '}
-											{isRefreshing ? 'Refreshing...' : 'Refresh'}
-										</button>
-									</div>
-								</div>
 							{isLeaveBoardOpen && selectedBoard && (
 								<div
 									className='modal-backdrop'
@@ -2041,211 +2095,33 @@ const Workspace = () => {
 									</div>
 								</div>
 							)}
-								<div className='board-scroll'>
-									<div className='kanban-grid' onClick={() => setOpenColumnMenuId(null)}>
-										{visibleColumns.map((column) => (
-											<Fragment key={column._id}>
-											<section
-																					className={`kanban-column ${column.pinned ? 'pinned-column' : ''} ${draggedTask ? 'drop-target-ready' : ''} ${draggedColumn?._id === column._id ? 'is-dragging' : ''} ${columnDropTarget === column._id ? 'column-drop-target' : ''}`}
+								<div className='bc-scroll'>
+									<div className='bc-board' ref={boardListRef}>
+										{boardColumns.map((column) => (
+											<BoardColumn
 												key={column._id}
-												data-column-id={column._id}
+												column={column}
+												canManage={canEditBoardName}
+												isCollapsed={!isPhone && collapsedColumnIds.includes(column._id)}
+												isWatching={(column.watchers || []).some((watcherId) => String(watcherId) === String(authUser?._id))}
+												isDragging={draggedColumn?._id === column._id || landingColumnId === column._id}
+												isDropTarget={columnDropTarget === column._id}
+												isTaskDragActive={Boolean(draggedTask)}
+												isComposing={activeTaskColumn === column._id}
+												onStartComposing={() => setActiveTaskColumn(column._id)}
+												onStopComposing={() => setActiveTaskColumn((current) => (current === column._id ? null : current))}
+												onAddCard={(title) => addCard(column, title)}
+												onRename={(title) => renameColumn(column._id, title)}
+												onToggleCollapse={() => toggleCollapsed(column._id)}
+												onOpenMenu={(anchor) => setColumnMenu({ columnId: column._id, anchor })}
+												onHeaderPointerDown={(event) => startColumnDrag(event, column)}
 												onDragOver={(event) => {
 													event.preventDefault()
-														event.dataTransfer.dropEffect = 'move'
+													event.dataTransfer.dropEffect = 'move'
 												}}
-												onDrop={() =>
-													draggedColumn
-														? moveColumn(draggedColumn, column)
-														: moveTask(draggedTask, column)
-											}
-												onClick={(event) => event.stopPropagation()}
+												onDrop={() => (draggedColumn ? moveColumn(draggedColumn, column) : moveTask(draggedTask, column))}
 											>
-												<div
-													className='column-header'
-												onPointerDown={(event) => {
-													if (event.button !== 0) return
-													if (editingColumn || event.target.closest('button, input, form')) return
-													event.currentTarget.setPointerCapture?.(event.pointerId)
-													setDraggedTask(null)
-													setDraggedTaskHeight(null)
-													columnDragSessionRef.current = {
-														column,
-														pointerId: event.pointerId,
-														startX: event.clientX,
-														startY: event.clientY,
-														width: event.currentTarget.closest('.kanban-column').getBoundingClientRect().width,
-														height: event.currentTarget.closest('.kanban-column').getBoundingClientRect().height,
-														grabOffsetX: event.clientX - event.currentTarget.closest('.kanban-column').getBoundingClientRect().left,
-														grabOffsetY: event.clientY - event.currentTarget.closest('.kanban-column').getBoundingClientRect().top,
-														element: event.currentTarget.closest('.kanban-column'),
-																active: false,
-																targetId: null,
-																pinned: Boolean(column.pinned),
-													}
-												document.querySelectorAll('.column-drag-dom-preview').forEach((node) => node.remove())
-												}}
-												>
-															<div className='column-heading'>
-														{editingColumn?._id === column._id ? (
-															<form
-																className='column-title-form'
-																onClick={(event) => event.stopPropagation()}
-																onSubmit={(event) => {
-																	event.preventDefault()
-																	updateColumn(column._id)
-																}}
-															>
-																<input
-																	autoFocus
-																			maxLength={60}
-																	value={editingColumnTitle}
-																	onChange={(event) =>
-																		setEditingColumnTitle(event.target.value)
-																	}
-																	onBlur={() => updateColumn(column._id)}
-																	onKeyDown={(event) => {
-																		if (event.key === 'Escape') {
-																			setEditingColumn(null)
-																		}
-																	}}
-																/>
-															</form>
-														) : (
-															<h2
-																onClick={() => {
-																	setEditingColumn(column)
-																	setEditingColumnTitle(column.title)
-																}}
-																style={{ cursor: 'pointer' }}
-																		title={column.title}
-																		aria-label={`Rename column ${column.title}`}
-															>
-																{column.title}
-															</h2>
-														)}
-														<span>{column.tasks.length}</span>
-													</div>
-												<div className='column-menu-wrap' style={{ position: 'relative' }}>
-													{column.pinned && (
-														<button
-															type='button'
-															className='icon-button subtle active'
-															onClick={(event) => {
-																event.stopPropagation()
-																toggleColumnPin(column._id)
-															}}
-															aria-label='Unpin list'
-															title='Unpin list'
-														>
-															<Pin size={16} fill='currentColor' />
-														</button>
-													)}
-													<button
-														className='icon-button subtle'
-														onClick={() => setOpenColumnMenuId(
-															openColumnMenuId === column._id ? null : column._id
-														)}
-														aria-label={`More options for ${column.title}`}
-														title='More options'
-													>
-														<MoreHorizontal size={18} />
-													</button>
-{openColumnMenuId === column._id && (
-															<div
-																className='column-menu-list'
-																onMouseDown={(event) => event.stopPropagation()}
-															>
-																<div className='column-menu-item-group'>
-																	<button
-																		type='button'
-																		onClick={() => setSortSubmenuOpen(
-																			sortSubmenuOpen === column._id ? null : column._id
-																		)}
-																		className={`column-menu-item-with-submenu ${sortSubmenuOpen === column._id ? 'active' : ''}`}
-																		aria-expanded={sortSubmenuOpen === column._id}
-																	>
-																		Sort by
-																	</button>
-																	{sortSubmenuOpen === column._id && (
-																		<div className='column-menu-submenu'>
-																			<button
-																				type='button'
-																				onClick={() => {
-																					sortColumnTasks(column._id, 'date-newest')
-																					setOpenColumnMenuId(null)
-																					setSortSubmenuOpen(null)
-																				}}
-																				className={columnSortBy[column._id] === 'date-newest' ? 'active' : ''}
-																			>
-																				Creation date (newest)
-																			</button>
-																			<button
-																				type='button'
-																				onClick={() => {
-																					sortColumnTasks(column._id, 'date-oldest')
-																					setOpenColumnMenuId(null)
-																					setSortSubmenuOpen(null)
-																				}}
-																				className={columnSortBy[column._id] === 'date-oldest' ? 'active' : ''}
-																			>
-																				Creation date (oldest)
-																			</button>
-																			<button
-																				type='button'
-																				onClick={() => {
-																					sortColumnTasks(column._id, 'name-alpha')
-																					setOpenColumnMenuId(null)
-																					setSortSubmenuOpen(null)
-																				}}
-																				className={columnSortBy[column._id] === 'name-alpha' ? 'active' : ''}
-																			>
-																				Name (alphabetically)
-																			</button>
-																		</div>
-																	)}
-																</div>
-																		<button
-																			type='button'
-																			className='column-menu-item'
-																			onClick={() => {
-																				setEditingColumn(column)
-																				setEditingColumnTitle(column.title)
-																				setOpenColumnMenuId(null)
-																			}}
-																		>
-																			<Pencil size={14} /> Rename column
-																		</button>
-																<button
-																type='button'
-																onClick={() => {
-																	toggleColumnPin(column._id)
-																	setOpenColumnMenuId(null)
-																}}
-																className='column-menu-item'
-																>
-																<Pin size={14} /> {column.pinned ? 'Unpin list' : 'Pin list'}
-																</button>
-																<div className='column-menu-divider' />
-																<button
-																	type='button'
-																	onClick={() => {
-																		setDeleteColumnTarget(column)
-																		setOpenColumnMenuId(null)
-																	}}
-																	className='column-menu-delete'
-																>
-																	<Trash2 size={14} /> Delete column
-																</button>
-															</div>
-														)}
-													</div>
-												</div>
-												<div className='task-list'>
-													{column.tasks.length === 0 ? (
-														<div className='column-empty'>
-															Drop a task here.
-														</div>
-													) : (
+													{column.tasks.length === 0 ? null : (
 														column.tasks.map((task, taskIndex) => (
 															<Fragment key={task._id}>
 																{draggedTask &&
@@ -2384,114 +2260,27 @@ const Workspace = () => {
 														aria-hidden='true'
 													/>
 												)}
-												</div>
-												{activeTaskColumn === column._id ? (
-													<form
-														className='inline-form'
-														onSubmit={(event) => createTask(event, column)}
-													>
-														<input
-															autoFocus
-															value={newTaskTitle}
-															onChange={(event) =>
-																setNewTaskTitle(event.target.value)
-															}
-															placeholder='What needs doing?'
-														/>
-														{boardMembers.length > 0 && (
-															<select
-																multiple
-																value={selectedAssignees}
-																onChange={(event) =>
-																	setSelectedAssignees(
-																		Array.from(
-																			event.target.selectedOptions,
-																			(option) => option.value,
-																		),
-																	)
-																}
-																aria-label='Assign people'
-															>
-																<option value='' disabled>
-																	Assign people
-																</option>
-																{boardMembers.map((member) => (
-																	<option key={member._id} value={member._id}>
-																		{member.name || member.email}
-																	</option>
-																))}
-															</select>
-														)}
-														<div>
-															<button type='submit' className='mini-primary'>
-																Add task
-															</button>
-															<button
-																type='button'
-																className='icon-button subtle'
-																onClick={() => setActiveTaskColumn(null)}
-																aria-label='Cancel'
-																title='Cancel'
-															>
-																<X size={16} />
-															</button>
-														</div>
-													</form>
-												) : (
-													<button
-														className='add-task-button'
-														onClick={() => setActiveTaskColumn(column._id)}
-													>
-														<Plus size={16} /> Add task
-													</button>
-												)}
-											</section>
-											</Fragment>
+											</BoardColumn>
 										))}
-										{isCreatingColumn ? (
-											<form
-												className='kanban-column add-column-form'
-												onSubmit={createColumn}
-											>
-												<input
-													autoFocus
-													value={newColumnTitle}
-													onChange={(event) =>
-														setNewColumnTitle(event.target.value)
-													}
-													placeholder='Column name'
-																													maxLength={60}
-												/>
-												<div>
-													<button type='submit' className='mini-primary'>
-														Add column
-													</button>
-													<button
-														type='button'
-														className='icon-button subtle'
-														onClick={() => setIsCreatingColumn(false)}
-														aria-label='Cancel'
-														title='Cancel'
-													>
-														<X size={16} />
-													</button>
-												</div>
-											</form>
-										) : (
-											<button
-												className='new-column-button'
-												onClick={() => setIsCreatingColumn(true)}
-											>
-												<CirclePlus size={18} /> Add column
-											</button>
-										)}
+										{canEditBoardName && <ListComposer onSubmit={addList} />}
 									</div>
 								</div>
 							</>
 						)}
 					</div>
 				)}
+				{boardId && selectedBoard && !isBoardContentLoading && (
+					<BoardDock onPlanner={openPlanner} onSwitchBoards={openSwitcher} />
+				)}
 			</main>
+			<BoardSwitcher
+				open={isSwitcherOpen}
+				onClose={() => setIsSwitcherOpen(false)}
+				boards={boards}
+				currentBoardId={selectedBoard?._id}
+				onOpenBoard={selectBoard}
+				onCreateBoard={() => setIsCreatingBoard(true)}
+			/>
 
 			<InviteMemberModal
 				isOpen={isInviteOpen}
@@ -2713,56 +2502,28 @@ const Workspace = () => {
 					</form>
 				</div>
 			)}
-			{deleteColumnTarget && (
-				<div
-					className='modal-backdrop'
-					onMouseDown={() => setDeleteColumnTarget(null)}
-					role='presentation'
-				>
-					<div
-						className='modal-panel delete-board-panel'
-						onMouseDown={(event) => event.stopPropagation()}
-						role='dialog'
-						aria-modal='true'
-						aria-labelledby='delete-column-title'
-					>
-						<div className='modal-title'>
-							<div>
-								<p className='eyebrow'>Permanent action</p>
-								<h2 id='delete-column-title'>Delete column?</h2>
-							</div>
-							<button
-								type='button'
-								className='icon-button'
-								onClick={() => setDeleteColumnTarget(null)}
-								aria-label='Close'
-								title='Close'
-							>
-								<X size={18} />
-							</button>
-						</div>
-						<p className='delete-board-copy'>
-							Column "{deleteColumnTarget.title}" and all tasks in it will be permanently deleted.
-						</p>
-						<div className='delete-board-actions'>
-							<button
-								type='button'
-								className='quiet-button'
-								onClick={() => setDeleteColumnTarget(null)}
-							>
-								Keep it
-							</button>
-							<button
-								type='button'
-								className='primary-button danger-button'
-								onClick={() => deleteColumn(deleteColumnTarget._id)}
-							>
-								Delete column
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
+			<ConfirmDialog
+				open={Boolean(deleteColumnTarget)}
+				onClose={() => setDeleteColumnTarget(null)}
+				onConfirm={() => deleteColumn(deleteColumnTarget._id)}
+				title={deleteColumnTarget ? tr('columns.delete.title', { title: deleteColumnTarget.title }) : ''}
+				description={deleteColumnTarget ? tr('columns.delete.text', { count: deleteColumnTarget.tasks?.length || 0 }) : ''}
+				confirmLabel={tr('columns.delete.confirm')}
+			/>
+			<ColumnActions
+				open={Boolean(columnMenu)}
+				anchor={columnMenu?.anchor}
+				column={columns.find((column) => column._id === columnMenu?.columnId)}
+				columns={visibleColumns}
+				canManage={canEditBoardName}
+				isWatching={(columns.find((column) => column._id === columnMenu?.columnId)?.watchers || []).some((watcherId) => String(watcherId) === String(authUser?._id))}
+				isCollapsed={collapsedColumnIds.includes(columnMenu?.columnId)}
+				onClose={() => setColumnMenu(null)}
+				onAction={(type, payload) => {
+					const column = columns.find((item) => item._id === columnMenu?.columnId)
+					if (column) runColumnAction(column, type, payload)
+				}}
+			/>
 			{deleteTaskTarget && (
 				<div
 					className='modal-backdrop'
@@ -3078,6 +2839,12 @@ const Workspace = () => {
 					</form>
 				</div>
 			)}
+			<BoardBackgroundDialog
+				open={isBackgroundOpen && Boolean(selectedBoard)}
+				onClose={() => setIsBackgroundOpen(false)}
+				value={selectedBoard?.background || null}
+				onChange={changeBoardBackground}
+			/>
 			<CreateBoardModal
 				open={isCreatingBoard}
 				onClose={closeCreateBoard}
@@ -3088,6 +2855,8 @@ const Workspace = () => {
 				}}
 				visibility={newBoardVisibility}
 				onVisibilityChange={setNewBoardVisibility}
+				background={newBoardBackground}
+				onBackgroundChange={setNewBoardBackground}
 				onSubmit={createBoard}
 				isSubmitting={isSubmittingBoard}
 				error={createBoardError}

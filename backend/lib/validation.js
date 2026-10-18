@@ -93,14 +93,30 @@ const taskFields = {
 	priority: taskPriority,
 }
 
+const boardBackground = z.union([
+	z.object({ type: z.enum(['gradient', 'color']), key: z.string().max(32) }),
+	z.object({
+		type: z.literal('photo'),
+		id: z.string().max(64),
+		url: z.string().max(600).optional(),
+		thumb: z.string().max(600).optional(),
+		color: z.string().max(16).optional(),
+		author: z.string().max(120).optional(),
+		authorUrl: z.string().max(600).optional(),
+		downloadLocation: z.string().max(600).optional(),
+	}),
+]).nullable()
+
 export const createBoardSchema = z.object({
 	name: boardName,
 	visibility: boardVisibility.default('private'),
+	background: boardBackground.optional(),
 })
 
 export const updateBoardSchema = z.object({
 	name: boardName.optional(),
 	visibility: boardVisibility.optional(),
+	background: boardBackground.optional(),
 })
 
 export const createInviteSchema = z.object({
@@ -120,12 +136,17 @@ export const createColumnSchema = z.object({
 export const updateColumnSchema = z.object({
 	title: columnTitle.optional(),
 	pinned: z.boolean().optional(),
+	color: z.enum(['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']).nullable().optional(),
 })
+
+export const copyColumnSchema = z.object({ title: columnTitle })
+export const moveColumnTasksSchema = z.object({ targetColumnId: objectId })
+export const watchColumnSchema = z.object({ watching: z.boolean() })
 
 export const columnPositionSchema = z.object({ position })
 
 export const columnSortSchema = z.object({
-	sortBy: z.enum(['date-newest', 'date-oldest', 'name-alpha', 'custom']).nullable(),
+	sortBy: z.enum(['date-newest', 'date-oldest', 'name-alpha', 'due-date', 'priority', 'custom']).nullable(),
 })
 
 export const reorderTasksSchema = z.object({

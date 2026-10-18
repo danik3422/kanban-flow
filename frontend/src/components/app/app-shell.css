@@ -185,6 +185,7 @@ body.has-modal .app-bottom-nav { transform: translateY(110%); }
 
 /* Board tile */
 .board-tile { display: grid; place-items: center; width: var(--tile-size); height: var(--tile-size); flex: 0 0 auto; border-radius: calc(var(--tile-size) * 0.28); font-family: var(--ui-font-display); font-size: calc(var(--tile-size) * 0.42); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.board-tile--background { color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 0.45); }
 
 /* Board list page */
 /* Every top-level page (boards, my tasks, calendar, team) shares one width and
@@ -260,6 +261,14 @@ body.has-modal .app-bottom-nav { transform: translateY(110%); }
 .board-card__star { position: absolute; top: var(--ui-space-4); right: var(--ui-space-4); color: var(--ui-text-muted); opacity: 0; transition: opacity var(--ui-duration) var(--ui-ease); }
 .board-card:hover .board-card__star, .board-card:focus-within .board-card__star, .board-card__star.is-starred { opacity: 1; }
 .board-card__star.is-starred { color: var(--ui-warning-soft-text); }
+/* A board with a background shows it as a cover band across the top of its card. */
+.board-card__cover { display: block; height: 64px; margin: calc(-1 * var(--ui-space-5)) calc(-1 * var(--ui-space-5)) 0; border-radius: calc(var(--ui-radius-xl) - 1px) calc(var(--ui-radius-xl) - 1px) 0 0; }
+.board-card.has-cover .board-card__star { background: rgb(15 23 42 / 0.45); color: #fff; opacity: 1; }
+.board-card.has-cover .board-card__star.is-starred { color: #fcd34d; }
+.board-card.has-cover .board-card__head { padding-right: 0; }
+@media (max-width: 720px) {
+	.board-card__cover { height: 56px; margin: calc(-1 * var(--ui-space-4)) calc(-1 * var(--ui-space-4)) 0; }
+}
 .board-card__star.is-starred svg { fill: currentColor; }
 @media (pointer: coarse), (max-width: 720px) {
 	.board-card__star { opacity: 1; }

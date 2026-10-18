@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
-import { axiosInstance } from '../lib/axios'
+import { axiosInstance, onSessionExpired } from '../lib/axios'
 import { clearBoardsCache } from '../lib/boardsCache'
 import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
@@ -270,3 +270,13 @@ export const useAuthStore = create((set, get) => ({
 		}
 	},
 }))
+
+// Signed out from another device (or the password was reset): leave cleanly once.
+onSessionExpired(() => {
+	if (!useAuthStore.getState().authUser) return
+	resetSocket()
+	clearBoardsCache()
+	useBoardStats.getState().reset()
+	useAuthStore.setState({ authUser: null })
+	toast.info(translateCurrent('auth.toast.sessionEnded'))
+})

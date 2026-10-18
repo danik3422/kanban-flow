@@ -46,4 +46,6 @@ export const env = {
 	passwordResetMinutes: Number(process.env.PASSWORD_RESET_MINUTES) || 30,
 	emailVerificationMinutes:
 		Number(process.env.EMAIL_VERIFICATION_MINUTES) || 60,
+	// Optional: with a key, board background search covers all of Unsplash.
+	unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || '',
 }

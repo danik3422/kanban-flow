@@ -4,6 +4,7 @@ import { FcGoogle } from 'react-icons/fc'
 import { useI18n } from '../../i18n'
 import { Button } from '../../ui'
 import { passwordChecksFor } from '../../utils/password'
+import './password-rules.css'
 
 export const AuthHeading = ({ title, subtitle }) => (
 	<div className='auth-heading'>
@@ -17,6 +18,8 @@ const PROVIDER_ICONS = {
 	microsoft: <FaMicrosoft size={16} aria-hidden='true' color='#00A4EF' />,
 	apple: <FaApple size={18} aria-hidden='true' />,
 }
+
+export const ProviderIcon = ({ provider }) => PROVIDER_ICONS[provider] || null
 
 export const ProviderButtons = ({ onSelect, disabled }) => {
 	const { t } = useI18n()

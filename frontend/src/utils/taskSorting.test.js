@@ -35,3 +35,13 @@ describe('sortTasks', () => {
 		)
 	})
 })
+
+it('sorts by due date with undated cards last, and by priority', () => {
+	const tasks = [
+		{ _id: 'a', title: 'A', position: 0, dueDate: null, priority: 'low' },
+		{ _id: 'b', title: 'B', position: 1, dueDate: '2026-10-20T00:00:00.000Z', priority: 'urgent' },
+		{ _id: 'c', title: 'C', position: 2, dueDate: '2026-10-18T00:00:00.000Z' },
+	]
+	assert.deepEqual(sortTasks(tasks, 'due-date').map((task) => task._id), ['c', 'b', 'a'])
+	assert.deepEqual(sortTasks(tasks, 'priority').map((task) => task._id), ['b', 'a', 'c'])
+})

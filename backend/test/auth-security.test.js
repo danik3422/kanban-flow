@@ -5,6 +5,8 @@ import { getAuth } from 'firebase-admin/auth'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import request from 'supertest'
+import jwt from 'jsonwebtoken'
+import { env } from '../config/env.js'
 
 import admin from '../lib/firebaseAdmin.js'
 import { app } from '../index.js'
@@ -258,5 +260,31 @@ describe('social auth security helpers', () => {
 
 		assert.equal(response.status, 401)
 		assert.equal(response.body.message, 'Re-authentication required.')
+	})
+})
+describe('signing out other sessions', () => {
+	const cookieFor = (user, sessionVersion = 0) => [`jwt=${jwt.sign({ userId: user._id.toString(), sessionVersion }, env.jwtSecret)}`]
+
+	it('ends every other session and keeps this device signed in', async () => {
+		const user = await User.create({ email: 'sessions@example.com', name: 'Sessions', emailVerified: true, profileSetup: true })
+		const thisDevice = cookieFor(user)
+		const otherDevice = cookieFor(user)
+
+		const response = await request(app).post('/api/auth/sessions/sign-out-others').set('Cookie', thisDevice)
+		assert.equal(response.status, 204)
+		const freshCookie = response.headers['set-cookie']?.find((cookie) => cookie.startsWith('jwt='))
+		assert.ok(freshCookie, 'this device gets a new session cookie')
+
+		const stale = await request(app).get('/api/auth/get-user').set('Cookie', otherDevice)
+		assert.equal(stale.status, 401)
+		const fresh = await request(app).get('/api/auth/get-user').set('Cookie', [freshCookie.split(';')[0]])
+		assert.equal(fresh.status, 200)
+		assert.equal(fresh.body.email, 'sessions@example.com')
+		assert.equal((await User.findById(user._id).select('sessionVersion')).sessionVersion, 1)
+	})
+
+	it('requires a signed-in session', async () => {
+		const response = await request(app).post('/api/auth/sessions/sign-out-others')
+		assert.equal(response.status, 401)
 	})
 })

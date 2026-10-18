@@ -1,6 +1,12 @@
 import axios from 'axios'
 import { apiBaseUrl } from './runtimeConfig'
 
+let sessionExpiredHandler = null
+// The auth store signs out when the server says this session was ended elsewhere.
+export const onSessionExpired = (handler) => {
+	sessionExpiredHandler = handler
+}
+
 export const axiosInstance = axios.create({
 	baseURL: apiBaseUrl,
 	withCredentials: true,
@@ -20,4 +26,7 @@ axiosInstance.interceptors.response.use((response) => {
 		return Promise.reject(error)
 	}
 	return response
+}, (error) => {
+	if (error.response?.status === 401 && error.response.data?.message === 'Unauthorized - Session expired') sessionExpiredHandler?.()
+	return Promise.reject(error)
 })

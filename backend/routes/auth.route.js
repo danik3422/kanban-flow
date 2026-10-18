@@ -17,6 +17,7 @@ import {
 	resetPassword,
 	resendVerificationEmail,
 	setupProfile,
+	signOutOtherSessions,
 	verifyPasskeyRegistration,
 	authenticateWithPasskey,
 	signup,
@@ -127,6 +128,7 @@ router.patch(
 	validateBody(changePasswordSchema),
 	changePassword,
 )
+router.post('/sessions/sign-out-others', verifiedAuthMiddleware, passwordChangeLimiter, signOutOtherSessions)
 router.post('/reauthenticate', verifiedAuthMiddleware, passwordChangeLimiter, validateBody(reauthenticateSchema), reauthenticate)
 router.post('/passkeys/options', verifiedAuthMiddleware, authLimiter, createPasskeyRegistrationOptions)
 router.post('/passkeys/verify', verifiedAuthMiddleware, authLimiter, verifyPasskeyRegistration)

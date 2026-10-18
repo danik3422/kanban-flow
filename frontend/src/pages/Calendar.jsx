@@ -1,6 +1,6 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, RotateCcw, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import MyTaskRow from '../components/app/MyTaskRow'
 import '../components/app/my-tasks.css'
@@ -18,7 +18,8 @@ import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
 import { Alert, Badge, Button, EmptyState, IconButton, SegmentedControl, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
-import { dayTitle, monthGrid, monthTitle, shiftMonth, weekdayNames, weekStartFor, dateFromKey } from '../utils/calendar'
+import { dayTitle, monthGrid, monthTitle, shiftMonth, weekdayNames, dateFromKey } from '../utils/calendar'
+import { resolveWeekStart } from '../utils/preferences'
 import { getDueDateKey, getLocalDateKey } from '../utils/dueDate'
 
 const SCOPE_KEY = 'kh:calendar-scope'
@@ -57,12 +58,15 @@ const Calendar = () => {
 	const [reloadKey, setReloadKey] = useState(0)
 	const [createDate, setCreateDate] = useState(null)
 	const { isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
+	// Opened from a board's planner: only that board's tasks.
+	const [searchParams, setSearchParams] = useSearchParams()
+	const boardFilter = searchParams.get('board') || ''
 	const { toggleDone, setDueDate, setPriority, canToggle, toggleHint, openTask, openBoard } = useTaskActions({
 		setTasks,
 		onChanged: () => setReloadKey((key) => key + 1),
 	})
 
-	const weekStart = weekStartFor(language)
+	const weekStart = resolveWeekStart(language)
 	const days = useMemo(() => monthGrid(cursor, weekStart), [cursor, weekStart])
 	const weekdays = useMemo(() => weekdayNames(language, weekStart), [language, weekStart])
 	const rangeFrom = days[0].key
@@ -78,7 +82,7 @@ const Calendar = () => {
 	// The previous month stays on screen (dimmed) while the next one loads.
 	useEffect(() => {
 		let ignore = false
-		axiosInstance.get('/board/calendar', { params: { from: rangeFrom, to: rangeTo, scope } })
+		axiosInstance.get('/board/calendar', { params: { from: rangeFrom, to: rangeTo, scope, ...(boardFilter && { board: boardFilter }) } })
 			.then(({ data }) => {
 				if (ignore) return
 				setTasks(Array.isArray(data) ? data : [])
@@ -93,7 +97,7 @@ const Calendar = () => {
 		return () => {
 			ignore = true
 		}
-	}, [rangeFrom, rangeTo, scope, reloadKey])
+	}, [rangeFrom, rangeTo, scope, reloadKey, boardFilter])
 
 	const tasksByKey = useMemo(() => {
 		const map = new Map()
@@ -159,11 +163,21 @@ const Calendar = () => {
 	const openCreate = (key) => setCreateDate(key || selectedKey)
 
 	const noBoards = boardsLoaded && !boards.length
+	const filteredBoard = boardFilter ? boards.find((board) => board._id === boardFilter) : null
 	const header = (
 		<div className='cal-header'>
 			<div className='cal-header__title'>
 				<h1 className='cal-title'>{monthTitle(cursor, language)}</h1>
 				{!isLoading && monthTasks.length > 0 && <Badge>{t('calendar.count', { count: monthTasks.length })}</Badge>}
+				{filteredBoard && (
+					<span className='cal-board-filter'>
+						<Link to={`/workspaces/${filteredBoard._id}`} className='cal-board-filter__link' title={t('calendar.backToBoard')}>
+							<ArrowLeft size={14} aria-hidden='true' />
+							<span data-i18n-ignore>{filteredBoard.name}</span>
+						</Link>
+						<IconButton icon={X} size='sm' label={t('calendar.clearBoard')} onClick={() => setSearchParams({}, { replace: true })} />
+					</span>
+				)}
 				{!isLoading && overdueCount > 0 && <Badge tone='danger'>{t('calendar.overdue', { count: overdueCount })}</Badge>}
 			</div>
 			<div className='cal-header__controls'>

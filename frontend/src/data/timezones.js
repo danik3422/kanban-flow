@@ -56,6 +56,23 @@ const popularTimezones = [
 	'Pacific/Auckland',
 ]
 
+// Browsers still report some zones by their old names ("Europe/Kiev"); show and
+// store the current ones so a city appears once and detection matches the list.
+const TIMEZONE_ALIASES = {
+	'Europe/Kiev': 'Europe/Kyiv',
+	'Europe/Uzhgorod': 'Europe/Kyiv',
+	'Europe/Zaporozhye': 'Europe/Kyiv',
+	'Asia/Calcutta': 'Asia/Kolkata',
+	'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+	'Asia/Katmandu': 'Asia/Kathmandu',
+	'Asia/Rangoon': 'Asia/Yangon',
+	'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+	'America/Godthab': 'America/Nuuk',
+	'Atlantic/Faeroe': 'Atlantic/Faroe',
+}
+
+export const normalizeTimezone = (timeZone = '') => TIMEZONE_ALIASES[timeZone] || timeZone
+
 const getTimezoneOffset = (timeZone) => {
 	const parts = new Intl.DateTimeFormat('en-US', {
 		timeZone,
@@ -75,7 +92,7 @@ const supportedTimezones =
 		? Intl.supportedValuesOf('timeZone')
 		: fallbackTimezones
 
-const allTimezones = ['UTC', ...popularTimezones, ...supportedTimezones].filter(
+const allTimezones = ['UTC', ...popularTimezones, ...supportedTimezones.map(normalizeTimezone)].filter(
 	(timeZone, index, timezones) => timezones.indexOf(timeZone) === index,
 )
 
@@ -85,7 +102,7 @@ export const timezoneOptions = allTimezones.map((timeZone) => ({
 }))
 
 export const getDetectedTimezone = () => {
-	const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+	const detectedTimezone = normalizeTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
 	return timezoneOptions.some((option) => option.value === detectedTimezone)
 		? detectedTimezone
 		: 'UTC'

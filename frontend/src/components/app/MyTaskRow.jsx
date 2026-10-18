@@ -1,22 +1,12 @@
 import { ArrowUpRight, CalendarDays, Check, Flag, ListChecks } from 'lucide-react'
 import { useRef } from 'react'
 import { useI18n } from '../../i18n'
-import { intlLocale } from '../../i18n/translate'
 import { AvatarGroup, Badge, IconButton, Menu } from '../../ui'
 import { cx } from '../../ui/utils'
-import { addDaysToKey, formatDueDate, getDueDateKey, getLocalDateKey } from '../../utils/dueDate'
+import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../../utils/dueDate'
+import { dueLabel, PRIORITY_TONE } from '../../utils/taskDisplay'
 
 const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent']
-const PRIORITY_TONE = { low: 'info', medium: 'warning', high: 'orange', urgent: 'danger' }
-
-// "Today", "Tomorrow", "Yesterday" or a short date in the interface language.
-const dueLabel = (dueKey, t, language) => {
-	const today = getLocalDateKey()
-	if (dueKey === today) return t('myTasks.dueToday')
-	if (dueKey === addDaysToKey(today, 1)) return t('myTasks.dueTomorrow')
-	if (dueKey === addDaysToKey(today, -1)) return t('myTasks.dueYesterday')
-	return formatDueDate(dueKey, { month: 'short', day: 'numeric' }, intlLocale(language))
-}
 
 /**
  * One assigned task: tick it done, open it on its board, and (with a mouse)

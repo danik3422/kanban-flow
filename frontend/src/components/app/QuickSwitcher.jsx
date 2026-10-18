@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardList, LayoutGrid, Search, Users } from 'lucide-react'
+import { Bell, CalendarDays, CircleUser, ClipboardList, LayoutGrid, Search, Settings, ShieldCheck, SlidersHorizontal, UserCog, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../../i18n'
@@ -28,6 +28,16 @@ const PAGES = [
 	{ key: 'myTasks', to: '/my-tasks', icon: ClipboardList },
 	{ key: 'calendar', to: '/calendar', icon: CalendarDays },
 	{ key: 'team', to: '/team', icon: Users },
+	{ key: 'profile', to: '/profile', icon: CircleUser },
+	{ key: 'settings', to: '/settings', icon: Settings },
+]
+
+// Settings sections show up once you type, found by their name or a related word.
+const SETTINGS = [
+	{ key: 'account', icon: UserCog, words: ['account', 'email', 'logout'] },
+	{ key: 'preferences', icon: SlidersHorizontal, words: ['theme', 'language', 'start page', 'week', 'dark'] },
+	{ key: 'notifications', icon: Bell, words: ['notifications', 'email', 'push'] },
+	{ key: 'security', icon: ShieldCheck, words: ['security', 'password', 'sessions', 'devices'] },
 ]
 
 /** Jump to any board or page from the keyboard (Ctrl/⌘+K) or the search button. */
@@ -64,7 +74,17 @@ const QuickSwitcher = ({ open, onClose }) => {
 		const pageResults = PAGES
 			.map((page) => ({ id: page.key, kind: 'page', label: t(`app.nav.${page.key}`), icon: page.icon, to: page.to }))
 			.filter((page) => !needle || page.label.toLocaleLowerCase().includes(needle))
-		return [...boardResults, ...pageResults]
+		const settingsResults = needle ? SETTINGS
+			.map((item) => ({
+				id: item.key,
+				kind: 'setting',
+				label: t(`settings.sections.${item.key}`),
+				icon: item.icon,
+				to: `/settings#${item.key}`,
+				words: [...item.words, ...t(`app.search.settingsWords.${item.key}`).split(',')].map((word) => word.trim().toLocaleLowerCase()),
+			}))
+			.filter((item) => item.label.toLocaleLowerCase().includes(needle) || item.words.some((word) => word && (word.includes(needle) || needle.includes(word)))) : []
+		return [...boardResults, ...pageResults, ...settingsResults]
 	}, [boards, query, recent, t])
 
 	const close = () => {
@@ -94,6 +114,7 @@ const QuickSwitcher = ({ open, onClose }) => {
 	}
 
 	const boardsCount = results.filter((result) => result.kind === 'board').length
+	const pagesCount = results.filter((result) => result.kind === 'page').length
 	const activeId = results[activeIndex] ? `switcher-option-${results[activeIndex].kind}-${results[activeIndex].id}` : undefined
 
 	return (
@@ -119,7 +140,8 @@ const QuickSwitcher = ({ open, onClose }) => {
 				<div className='quick-switcher__list' id='quick-switcher-list' role='listbox' ref={listRef} aria-label={t('app.search.label')}>
 					{[
 						{ key: 'boards', items: results.slice(0, boardsCount), offset: 0 },
-						{ key: 'pages', items: results.slice(boardsCount), offset: boardsCount },
+						{ key: 'pages', items: results.slice(boardsCount, boardsCount + pagesCount), offset: boardsCount },
+						{ key: 'settings', items: results.slice(boardsCount + pagesCount), offset: boardsCount + pagesCount },
 					].filter((group) => group.items.length).map((group) => (
 						<div key={group.key} role='group' aria-labelledby={`quick-switcher-${group.key}`}>
 							<p className='quick-switcher__group' id={`quick-switcher-${group.key}`}>{t(`app.search.${group.key}`)}</p>

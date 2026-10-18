@@ -35,6 +35,20 @@ const boardModel = new mongoose.Schema(
 			type: Number,
 			default: 0,
 		},
+		// A palette key or a photo (see lib/boardBackgrounds.js); null means the plain theme.
+		background: {
+			type: new mongoose.Schema({
+				type: { type: String, enum: ['gradient', 'color', 'photo'], required: true },
+				key: String,
+				id: String,
+				url: String,
+				thumb: String,
+				color: String,
+				author: String,
+				authorUrl: String,
+			}, { _id: false }),
+			default: null,
+		},
 	},
 	{ timestamps: true }
 )

@@ -1,4 +1,4 @@
-import { LoaderCircle, LockKeyhole, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Trash2, UsersRound, Wifi, WifiOff } from 'lucide-react'
+import { LoaderCircle, LockKeyhole, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Trash2, UsersRound, Wifi, WifiOff, Image as ImageIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n'
 import { IconButton } from '../ui'
@@ -24,6 +24,7 @@ const WorkspaceTopbar = ({
 	onVisibilityChange,
 	boardVisibility,
 	onRoomAction,
+	onBackgroundChange,
 	roomActionLabel = 'Room actions',
 	activities,
 	activityLoading,
@@ -33,7 +34,7 @@ const WorkspaceTopbar = ({
 	const [isSearchOpen, setIsSearchOpen] = useState(false)
 	const [isMoreOpen, setIsMoreOpen] = useState(false)
 	const secondaryActionsRef = useRef(null)
-	const hasRoomActions = Boolean(onInvite || onVisibilityChange || onRoomAction)
+	const hasRoomActions = Boolean(onInvite || onVisibilityChange || onRoomAction || onBackgroundChange)
 
 	// Ctrl/⌘+K opens the switcher from anywhere in the app.
 	useEffect(() => {
@@ -103,6 +104,11 @@ const WorkspaceTopbar = ({
 							{onVisibilityChange && (
 								<button type='button' className='workspace-topbar-visibility' onClick={() => { setIsMoreOpen(false); onVisibilityChange() }} aria-label='Change room visibility' title={`Room visibility: ${boardVisibility || 'private'}`}>
 									<LockKeyhole size={17} />
+								</button>
+							)}
+							{onBackgroundChange && (
+								<button type='button' className='workspace-topbar-visibility workspace-topbar-background' onClick={() => { setIsMoreOpen(false); onBackgroundChange() }} aria-label={t('backgrounds.change')} title={t('backgrounds.change')}>
+									<ImageIcon size={17} />
 								</button>
 							)}
 							{onRoomAction && (

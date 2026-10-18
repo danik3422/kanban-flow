@@ -1,0 +1,31 @@
+/* Invite page: the board preview and the one decision the visitor has to make. */
+.inv { display: flex; flex-direction: column; gap: var(--ui-space-5); }
+.inv__lead { margin: 0; color: var(--ui-text-2); line-height: 1.55; }
+.inv__actions { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.inv__note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+
+.inv-board { display: flex; align-items: center; gap: var(--ui-space-3); min-width: 0; }
+.inv-board__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.inv-board__name { overflow: hidden; color: var(--ui-text); font-family: var(--ui-font-display); font-size: var(--ui-text-xl); font-weight: 600; line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; }
+.inv-board__meta { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.inv-board--compact .inv-board__name { font-size: 16px; }
+
+/* Phones and tablets have no scene, so the board is shown inside the card. */
+.inv-summary { padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface); }
+@media (min-width: 1024px) {
+	.inv-summary { display: none; }
+}
+
+.inv-account { display: flex; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-3); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); }
+.inv-account__text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.inv-account__label { color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.inv-account__email { overflow: hidden; color: var(--ui-text); font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.inv-switch { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--ui-link); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.inv-switch:hover { text-decoration: underline; }
+.inv-switch:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--ui-focus-ring); }
+
+.inv-paste { display: flex; flex-direction: column; gap: var(--ui-space-4); }
+.inv-paste input { font-size: 16px; }
+
+.auth-status__icon--warning { background: var(--ui-warning-soft); color: var(--ui-warning-soft-text); }
+.inv-loading { display: flex; flex-direction: column; gap: var(--ui-space-3); }

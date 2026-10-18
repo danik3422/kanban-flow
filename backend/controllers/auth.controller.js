@@ -18,6 +18,7 @@ import {
 } from '../lib/mailer.js'
 import { hashPassword } from '../lib/password.js'
 import { publicUserFields } from '../lib/userProjection.js'
+import { emitUserEvent } from '../lib/realtime.js'
 import { clearAuthCookie, generateToken } from '../lib/utils.js'
 import PasskeyChallenge from '../models/passkeyChallenge.model.js'
 import PasswordResetToken from '../models/passwordResetToken.model.js'
@@ -1197,6 +1198,22 @@ export const changePassword = async (req, res) => {
 	}
 }
 
+// Ends every other session: bumping the version invalidates all issued tokens, this
+// device gets a fresh one, and open tabs elsewhere are told to check their session.
+export const signOutOtherSessions = async (req, res) => {
+	try {
+		const user = await User.findByIdAndUpdate(req.user._id, { $inc: { sessionVersion: 1 } }, { new: true }).select('sessionVersion')
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		generateToken(user._id, res, user.sessionVersion)
+		// Only after this device has its new cookie, so it never checks with the old one.
+		res.on('finish', () => emitUserEvent(user._id.toString(), 'session:changed', {}))
+		return res.status(204).send()
+	} catch (error) {
+		console.error('Signing out other sessions failed:', error)
+		return res.status(500).json({ message: 'Could not sign out other sessions' })
+	}
+}
+
 export const reauthenticate = async (req, res) => {
 	try {
 		const user = await User.findById(req.user._id).select('password')
@@ -1209,6 +1226,16 @@ export const reauthenticate = async (req, res) => {
 	}
 }
 
+// IANA names only ("Europe/Kyiv"); the runtime knows which ones exist.
+const isValidTimezone = (timezone) => {
+	try {
+		new Intl.DateTimeFormat('en-US', { timeZone: timezone })
+		return true
+	} catch {
+		return false
+	}
+}
+
 export const setupProfile = async (req, res) => {
 	try {
 		const { name, jobTitle, timezone, avatar, removeAvatar } = req.body
@@ -1217,10 +1244,17 @@ export const setupProfile = async (req, res) => {
 		const user = await User.findById(userId)
 		if (!user) return res.status(404).json({ message: 'User not found' })
 
+		if (timezone && !isValidTimezone(timezone)) return res.status(400).json({ message: 'Choose a valid timezone.' })
 		if (name) user.name = name.trim()
 		if (jobTitle !== undefined) user.jobTitle = jobTitle.trim()
 		if (timezone) user.timezone = timezone
-		if (removeAvatar && !avatar) user.avatar = ''
+		if (removeAvatar && !avatar && user.avatar) {
+			user.avatar = ''
+			// The stored file goes too; a failed cleanup must not block the profile.
+			Promise.resolve().then(() => cloudinary.uploader.destroy(`avatars/${user._id}-avatar`, { resource_type: 'image' })).catch((error) => {
+				console.error('Avatar cleanup failed:', error?.message || error)
+			})
+		}
 
 		// Accept only browser-compressed raster avatars within the JSON body budget.
 		if (avatar) {

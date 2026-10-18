@@ -7,6 +7,7 @@ import { translateCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { isDevAuthBypass } from '../lib/devMode'
 import { acquireSocket, releaseSocket } from '../lib/socket'
+import { useAuthStore } from '../store/useAuthStore'
 import { Button, EmptyState, IconButton, Modal, SegmentedControl, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
 import { describeNotification } from '../utils/notificationText'
@@ -84,11 +85,20 @@ const NotificationCenter = () => {
 			const text = describeNotification(translateCurrent, notification)
 			toast.info(text.title, { description: [text.message, text.actor].filter(Boolean).join(' · ') })
 		}
+		// Another device ended the other sessions; a stale one finds out on this check.
+		let sessionTimer
+		const handleSessionChanged = () => {
+			window.clearTimeout(sessionTimer)
+			sessionTimer = window.setTimeout(() => useAuthStore.getState().checkAuth(), 1500)
+		}
 		socket.on('connect', handleConnect)
 		socket.on('notification:new', handleNotification)
+		socket.on('session:changed', handleSessionChanged)
 		return () => {
+			window.clearTimeout(sessionTimer)
 			socket.off('connect', handleConnect)
 			socket.off('notification:new', handleNotification)
+			socket.off('session:changed', handleSessionChanged)
 			releaseSocket()
 		}
 	}, [])

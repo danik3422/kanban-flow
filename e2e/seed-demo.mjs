@@ -43,7 +43,12 @@ const boards = [
 ]
 
 for (const board of boards) {
-	const { _id: boardId } = await demo.call('POST', '/board/boards', { name: board.name })
+	// Each demo board wears a different background so the feature is visible at a glance.
+	const backgrounds = {
+		'Маркетинг Q4': { type: 'photo', id: 'curated-1477959858617-67f85cf4f1df' },
+		'Личные задачи': { type: 'gradient', key: 'lavender' },
+	}
+	const { _id: boardId } = await demo.call('POST', '/board/boards', { name: board.name, background: backgrounds[board.name] || { type: 'photo', id: 'curated-1501785888041-af3ef285b470' } })
 	const invite = await demo.call('POST', `/board/boards/${boardId}/invites`, { email: TEAMMATE.email, role: 'member' }).catch((error) => console.warn('invite failed:', error.message))
 	const inviteToken = invite?.inviteUrl && new URL(invite.inviteUrl).pathname.split('/').pop()
 	if (inviteToken) await teammate.call('POST', `/board/invites/${inviteToken}/accept`).catch((error) => console.warn('accept failed:', error.message))
@@ -62,7 +67,7 @@ for (const board of boards) {
 
 // A board the teammate owns and shares with the demo account, so "Shared" has something in it.
 {
-	const { _id: boardId } = await teammate.call('POST', '/board/boards', { name: 'Дизайн-система', visibility: 'workspace' })
+	const { _id: boardId } = await teammate.call('POST', '/board/boards', { name: 'Дизайн-система', visibility: 'workspace', background: { type: 'gradient', key: 'ocean' } })
 	const invite = await teammate.call('POST', `/board/boards/${boardId}/invites`, { email: DEMO.email, role: 'member' })
 	await demo.call('POST', `/board/invites/${new URL(invite.inviteUrl).pathname.split('/').pop()}/accept`)
 	const columns = { 'Бэклог': ['Цвета для графиков', 'Иконки для пустых состояний'], 'В работе': ['Компонент «Таблица»'], Готово: ['Токены отступов'] }

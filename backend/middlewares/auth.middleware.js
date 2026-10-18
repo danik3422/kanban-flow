@@ -52,3 +52,22 @@ export const verifiedAuthMiddleware = (req, res, next) => {
 		next()
 	})
 }
+
+// For public pages that read better when they know the visitor: sets req.user when the
+// session is valid and quietly continues without it otherwise.
+export const optionalAuthMiddleware = async (req, res, next) => {
+	try {
+		const token = req.cookies.jwt
+		if (!token) return next()
+		const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] })
+		const user = await User.findById(decoded?.userId).select(`${publicUserFields} sessionVersion`)
+		if (user && Number(decoded.sessionVersion || 0) === Number(user.sessionVersion || 0)) {
+			const publicUser = user.toObject()
+			delete publicUser.sessionVersion
+			req.user = publicUser
+		}
+	} catch {
+		// An expired or foreign cookie just means a signed-out visitor here.
+	}
+	return next()
+}

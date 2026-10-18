@@ -1994,3 +1994,229 @@ describe('calendar', () => {
 		assert.equal(injected.status, 400)
 	})
 })
+
+describe('invite page details', () => {
+	it('previews the board for anyone holding the link without leaking the invited email', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const column = await Column.create({ board: board._id, title: 'To do', position: 0 })
+		await Task.create({ column: column._id, title: 'First', position: 0, createdBy: owner._id })
+		const { rawToken } = await createInvite({ boardId: board._id, email: 'dana@example.com' })
+
+		const response = await request(app).get(`/api/board/invites/${rawToken}/details`)
+		assert.equal(response.status, 200)
+		assert.equal(response.body.boardName, 'Private board')
+		assert.equal(response.body.memberCount, 1)
+		assert.equal(response.body.taskCount, 1)
+		assert.equal(response.body.emailHint, 'd•••@example.com')
+		assert.equal(response.body.invitedBy.name, 'Owner')
+		assert.equal(response.body.viewer, null)
+		assert.ok(!JSON.stringify(response.body).includes('dana@example.com'))
+		assert.ok(!JSON.stringify(response.body).includes('owner@example.com'))
+	})
+
+	it('tells a signed-in visitor whether they can join, own it, are in it or got someone else’s invite', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('member@example.com', 'Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const guest = await createUser('guest@example.com', 'Guest')
+		const link = await createInvite({ boardId: board._id })
+		const addressed = await createInvite({ boardId: board._id, email: 'someone@example.com' })
+		const statusFor = async (token, user) => (await request(app).get(`/api/board/invites/${token}/details`).set('Cookie', authCookie(user._id))).body.viewer
+
+		assert.equal(await statusFor(link.rawToken, guest), 'can-join')
+		assert.equal(await statusFor(link.rawToken, owner), 'owner')
+		assert.equal(await statusFor(link.rawToken, member), 'member')
+		assert.equal(await statusFor(addressed.rawToken, guest), 'wrong-email')
+	})
+
+	it('explains an invite addressed to another email instead of calling it expired', async () => {
+		const { board } = await createBoardWithOwner()
+		const guest = await createUser('guest@example.com', 'Guest')
+		const { rawToken } = await createInvite({ boardId: board._id, email: 'someone@example.com' })
+
+		const response = await request(app).post(`/api/board/invites/${rawToken}/accept`).set('Cookie', authCookie(guest._id))
+		assert.equal(response.status, 403)
+		assert.equal(response.body.code, 'wrong-email')
+		assert.equal(await BoardMember.exists({ board: board._id, user: guest._id }), null)
+		const invite = await BoardInvite.findOne({ email: 'someone@example.com' })
+		assert.equal(invite.usedAt, null)
+	})
+
+	it('points members and owners back to the board they already have', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const { rawToken } = await createInvite({ boardId: board._id })
+		const response = await request(app).post(`/api/board/invites/${rawToken}/accept`).set('Cookie', authCookie(owner._id))
+		assert.equal(response.status, 400)
+		assert.equal(response.body.boardId, board._id.toString())
+	})
+})
+
+describe('public board view', () => {
+	const publish = async (board, owner) => {
+		await Board.updateOne({ _id: board._id }, { $set: { visibility: 'public' } })
+		const response = await request(app).post(`/api/board/boards/${board._id}/public-link`).set('Cookie', authCookie(owner._id))
+		return response.body.publicUrl.split('/').pop()
+	}
+
+	it('marks the finished column, recognises members and hides tracked time', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const todo = await Column.create({ board: board._id, title: 'To do', position: 0 })
+		const done = await Column.create({ board: board._id, title: 'Done', position: 1 })
+		await Task.create({ column: todo._id, title: 'Open', position: 0, createdBy: owner._id, trackedSeconds: 120 })
+		const token = await publish(board, owner)
+
+		const guest = await request(app).get(`/api/board/public/${token}`)
+		assert.equal(guest.status, 200)
+		assert.equal(guest.body.doneColumnId, done._id.toString())
+		assert.equal(guest.body.viewer.isMember, false)
+		assert.equal(guest.body.columns[0].tasks[0].trackedSeconds, undefined)
+		assert.ok(guest.body.board.updatedAt)
+
+		const member = await request(app).get(`/api/board/public/${token}`).set('Cookie', authCookie(owner._id))
+		assert.equal(member.body.viewer.isMember, true)
+		const outsider = await createUser('outsider@example.com', 'Outsider')
+		assert.equal((await request(app).get(`/api/board/public/${token}`).set('Cookie', authCookie(outsider._id))).body.viewer.isMember, false)
+	})
+})
+
+describe('profile updates', () => {
+	it('rejects a timezone that does not exist and keeps the old one', async () => {
+		const user = await createUser('tz@example.com', 'Tz')
+		await User.updateOne({ _id: user._id }, { $set: { timezone: 'Europe/Kyiv' } })
+		const bad = await request(app).patch('/api/auth/setup-profile').set('Cookie', authCookie(user._id)).send({ name: 'Tz', timezone: 'Mars/Olympus' })
+		assert.equal(bad.status, 400)
+		assert.equal((await User.findById(user._id)).timezone, 'Europe/Kyiv')
+		const good = await request(app).patch('/api/auth/setup-profile').set('Cookie', authCookie(user._id)).send({ name: 'Tz', timezone: 'America/New_York' })
+		assert.equal(good.status, 200)
+		assert.equal((await User.findById(user._id)).timezone, 'America/New_York')
+	})
+
+	it('removes the photo on request and leaves it alone otherwise', async () => {
+		const user = await createUser('photo@example.com', 'Photo')
+		await User.updateOne({ _id: user._id }, { $set: { avatar: 'https://example.com/a.webp' } })
+		await request(app).patch('/api/auth/setup-profile').set('Cookie', authCookie(user._id)).send({ name: 'Photo Renamed' })
+		assert.equal((await User.findById(user._id)).avatar, 'https://example.com/a.webp')
+		const removed = await request(app).patch('/api/auth/setup-profile').set('Cookie', authCookie(user._id)).send({ name: 'Photo Renamed', removeAvatar: true })
+		assert.equal(removed.status, 200)
+		assert.equal((await User.findById(user._id)).avatar, '')
+	})
+})
+
+describe('board backgrounds', () => {
+	it('stores palette and curated photo backgrounds and refuses anything else', async () => {
+		const owner = await createUser('bg@example.com', 'Bg')
+		const cookie = authCookie(owner._id)
+		const created = await request(app).post('/api/board/boards').set('Cookie', cookie).send({ name: 'Painted', background: { type: 'gradient', key: 'ocean' } })
+		assert.equal(created.status, 201)
+		assert.deepEqual(created.body.background, { type: 'gradient', key: 'ocean' })
+
+		const photos = await request(app).get('/api/board/backgrounds/photos').set('Cookie', cookie)
+		assert.equal(photos.status, 200)
+		assert.equal(photos.body.source, 'curated')
+		assert.ok(photos.body.photos.length > 0 && photos.body.hasMore)
+		const searched = await request(app).get('/api/board/backgrounds/photos?query=горы').set('Cookie', cookie)
+		assert.ok(searched.body.photos.length > 0, 'topic words work in Russian too')
+
+		const photo = photos.body.photos[0]
+		const updated = await request(app).patch(`/api/board/boards/${created.body._id}`).set('Cookie', cookie)
+			.send({ background: { type: 'photo', id: photo.id, url: 'https://evil.example.com/x.jpg' } })
+		assert.equal(updated.status, 200)
+		assert.equal(updated.body.background.url, photo.url, 'the stored URL comes from the server, not the client')
+
+		for (const background of [{ type: 'gradient', key: 'neon' }, { type: 'photo', id: 'unsplash-abc', url: 'https://evil.example.com/a.jpg', thumb: 'https://evil.example.com/a.jpg' }]) {
+			const refused = await request(app).patch(`/api/board/boards/${created.body._id}`).set('Cookie', cookie).send({ background })
+			assert.equal(refused.status, 400)
+		}
+		const cleared = await request(app).patch(`/api/board/boards/${created.body._id}`).set('Cookie', cookie).send({ background: null })
+		assert.equal(cleared.body.background, null)
+	})
+
+	it('lets only owners and admins change the background', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const member = await createUser('bg-member@example.com', 'Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const response = await request(app).patch(`/api/board/boards/${board._id}`).set('Cookie', authCookie(member._id)).send({ background: { type: 'color', key: 'blue' } })
+		assert.equal(response.status, 403)
+		const ok = await request(app).patch(`/api/board/boards/${board._id}`).set('Cookie', authCookie(owner._id)).send({ background: { type: 'color', key: 'blue' } })
+		assert.equal(ok.status, 200)
+	})
+})
+
+describe('list actions', () => {
+	const setup = async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const todo = await Column.create({ board: board._id, title: 'To do', position: 0 })
+		const doing = await Column.create({ board: board._id, title: 'Doing', position: 1 })
+		const done = await Column.create({ board: board._id, title: 'Done', position: 2 })
+		await Task.create({ column: todo._id, title: 'One', position: 0, labels: ['A'], checklist: [{ text: 'x', completed: true }] })
+		await Task.create({ column: todo._id, title: 'Two', position: 1 })
+		await Task.create({ column: doing._id, title: 'Three', position: 0 })
+		return { owner, board, todo, doing, done }
+	}
+
+	it('copies a list with its cards right after the original', async () => {
+		const { owner, board, todo, done } = await setup()
+		const response = await request(app).post(`/api/board/columns/${todo._id}/copy`).set('Cookie', authCookie(owner._id)).send({ title: 'To do (copy)' })
+		assert.equal(response.status, 201)
+		assert.equal(response.body.position, 1)
+		const copied = await Task.find({ column: response.body._id }).sort({ position: 1 }).lean()
+		assert.deepEqual(copied.map((task) => task.title), ['One', 'Two'])
+		assert.deepEqual(copied[0].labels, ['A'])
+		assert.equal(await Task.countDocuments({ column: todo._id }), 2, 'the original keeps its cards')
+		assert.equal((await Column.findById(done._id)).position, 3, 'later lists shift right')
+		assert.equal(await Column.countDocuments({ board: board._id }), 4)
+	})
+
+	it('moves every card of a list to the end of another list', async () => {
+		const { owner, todo, doing } = await setup()
+		const response = await request(app).post(`/api/board/columns/${todo._id}/move-tasks`).set('Cookie', authCookie(owner._id)).send({ targetColumnId: doing._id.toString() })
+		assert.equal(response.status, 200)
+		assert.equal(response.body.moved, 2)
+		const target = await Task.find({ column: doing._id }).sort({ position: 1 }).lean()
+		assert.deepEqual(target.map((task) => task.title), ['Three', 'One', 'Two'])
+		assert.equal(await Task.countDocuments({ column: todo._id }), 0)
+	})
+
+	it('refuses list actions from members and moves to another board', async () => {
+		const { board, todo } = await setup()
+		const member = await createUser('list-member@example.com', 'Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		assert.equal((await request(app).post(`/api/board/columns/${todo._id}/copy`).set('Cookie', authCookie(member._id)).send({ title: 'x' })).status, 403)
+		const other = await Board.create({ name: 'Other', createdBy: board.createdBy })
+		const foreign = await Column.create({ board: other._id, title: 'Elsewhere', position: 0 })
+		const owner = await User.findById(board.createdBy)
+		assert.equal((await request(app).post(`/api/board/columns/${todo._id}/move-tasks`).set('Cookie', authCookie(owner._id)).send({ targetColumnId: foreign._id.toString() })).status, 400)
+	})
+
+	it('colours a list and sorts by due date or priority', async () => {
+		const { owner, todo } = await setup()
+		const coloured = await request(app).patch(`/api/board/columns/${todo._id}`).set('Cookie', authCookie(owner._id)).send({ color: 'purple' })
+		assert.equal(coloured.body.color, 'purple')
+		assert.equal((await request(app).patch(`/api/board/columns/${todo._id}`).set('Cookie', authCookie(owner._id)).send({ color: 'neon' })).status, 400)
+		assert.equal((await request(app).patch(`/api/board/columns/${todo._id}`).set('Cookie', authCookie(owner._id)).send({ color: null })).body.color, null)
+		for (const sortBy of ['due-date', 'priority']) {
+			assert.equal((await request(app).patch(`/api/board/columns/${todo._id}/sort`).set('Cookie', authCookie(owner._id)).send({ sortBy })).status, 200)
+		}
+	})
+
+	it('notifies watchers when someone else adds a card to the list', async () => {
+		const { owner, board, todo } = await setup()
+		const member = await createUser('watcher-member@example.com', 'Member')
+		await BoardMember.create({ board: board._id, user: member._id, role: 'member' })
+		const watch = await request(app).post(`/api/board/columns/${todo._id}/watch`).set('Cookie', authCookie(member._id)).send({ watching: true })
+		assert.equal(watch.status, 200)
+		assert.ok(watch.body.watchers.map(String).includes(member._id.toString()))
+
+		await request(app).post(`/api/board/columns/${todo._id}/task`).set('Cookie', authCookie(owner._id)).send({ title: 'Fresh card' })
+		const notes = await Notification.find({ user: member._id, type: 'list_card_added' }).lean()
+		assert.equal(notes.length, 1)
+		assert.equal(notes[0].data.toColumn, 'To do')
+
+		await request(app).post(`/api/board/columns/${todo._id}/task`).set('Cookie', authCookie(member._id)).send({ title: 'My own card' })
+		assert.equal(await Notification.countDocuments({ user: member._id, type: 'list_card_added' }), 1, 'no notice about your own card')
+
+		await request(app).post(`/api/board/columns/${todo._id}/watch`).set('Cookie', authCookie(member._id)).send({ watching: false })
+		await request(app).post(`/api/board/columns/${todo._id}/task`).set('Cookie', authCookie(owner._id)).send({ title: 'After unwatching' })
+		assert.equal(await Notification.countDocuments({ user: member._id, type: 'list_card_added' }), 1)
+	})
+})

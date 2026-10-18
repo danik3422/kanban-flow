@@ -9,7 +9,7 @@ const owner = await createVerifiedUser(OWNER, 'Lead')
 const mate = await createVerifiedUser(MATE, 'Designer')
 await owner.call('PATCH', '/auth/settings', { language: 'en' })
 
-const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+const day = (offset) => new Date(Date.now() + offset * 86400000).toLocaleDateString('sv-SE')
 const alpha = await owner.call('POST', '/board/boards', { name: 'Alpha project' })
 await owner.call('POST', '/board/boards', { name: 'Beta launch' })
 const todo = await owner.call('POST', `/board/boards/${alpha._id}/columns`, { title: 'To do', position: 0 })

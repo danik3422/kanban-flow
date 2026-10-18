@@ -1,6 +1,6 @@
-import { LogOut, MailCheck, MailWarning } from 'lucide-react'
+import { ArrowRight, CheckCircle2, ExternalLink, LogIn, LogOut, MailCheck, MailWarning } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import AuthLayout from '../components/auth/AuthLayout'
 import { AuthStatus } from '../components/auth/AuthParts'
@@ -9,6 +9,7 @@ import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 import { Alert, Button, Spinner } from '../ui'
+import { startPagePath } from '../utils/preferences'
 
 const RESEND_COOLDOWN_KEY = 'kanban-email-resend-cooldown'
 const PENDING_TOKEN_KEY = 'kanban-pending-verification-token'
@@ -37,6 +38,21 @@ const toSeconds = (value) => {
 	return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 0
 }
 
+// A shortcut to the inbox for the common providers; others just get the hint text.
+const MAIL_APPS = [
+	[/^(gmail|googlemail)\.com$/, 'Gmail', 'https://mail.google.com/mail/u/0/#inbox'],
+	[/^(outlook|hotmail|live|msn)\.[a-z.]+$/, 'Outlook', 'https://outlook.live.com/mail/0/inbox'],
+	[/^(yahoo|ymail)\.[a-z.]+$/, 'Yahoo Mail', 'https://mail.yahoo.com'],
+	[/^(icloud|me|mac)\.com$/, 'iCloud Mail', 'https://www.icloud.com/mail'],
+	[/^proton(mail)?\.(me|com)$/, 'Proton Mail', 'https://mail.proton.me'],
+	[/^ukr\.net$/, 'UKR.NET', 'https://mail.ukr.net'],
+]
+const mailAppFor = (email = '') => {
+	const domain = email.split('@')[1]?.toLowerCase() || ''
+	const match = MAIL_APPS.find(([pattern]) => pattern.test(domain))
+	return match ? { name: match[1], url: match[2] } : null
+}
+
 const formatCooldown = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
 const VerifyEmail = () => {
@@ -53,25 +69,53 @@ const VerifyEmail = () => {
 			return urlToken || ''
 		}
 	})
-	const [status, setStatus] = useState(token ? 'checking' : 'waiting')
+	const isVerified = Boolean(authUser?.emailVerified)
+	const [status, setStatus] = useState(token && !isVerified ? 'checking' : 'waiting')
 	const [errorMessage, setErrorMessage] = useState('')
 	const [isResending, setIsResending] = useState(false)
 	const [justSent, setJustSent] = useState(false)
 	const [cooldown, setCooldown] = useState(readStoredResendCooldown)
 
+	// The one-time token is kept in memory and session storage, never left in the address bar.
 	useEffect(() => {
-		if (!authUser) navigate('/login', { replace: true })
-	}, [authUser, navigate])
+		const cleanUrl = new URL(window.location.href)
+		if (!cleanUrl.searchParams.has('token')) return
+		cleanUrl.searchParams.delete('token')
+		window.history.replaceState(window.history.state, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+	}, [])
+
+	// Already confirmed (an old link, or confirmed elsewhere): nothing left to submit.
+	useEffect(() => {
+		if (!isVerified) return
+		try {
+			window.sessionStorage.removeItem(PENDING_TOKEN_KEY)
+		} catch {
+			// Nothing stored in private mode.
+		}
+	}, [isVerified])
+
+	// Confirmed on another device: notice it when the tab regains focus or every 15 s.
+	useEffect(() => {
+		if (!authUser || isVerified || status !== 'waiting') return undefined
+		const check = () => {
+			if (document.visibilityState === 'visible') checkAuth()
+		}
+		const timer = window.setInterval(check, 15000)
+		window.addEventListener('focus', check)
+		document.addEventListener('visibilitychange', check)
+		return () => {
+			window.clearInterval(timer)
+			window.removeEventListener('focus', check)
+			document.removeEventListener('visibilitychange', check)
+		}
+	}, [authUser, isVerified, status, checkAuth])
 
 	// checkAuth() below changes authUser and re-runs this effect, so guard against
 	// submitting the one-time token twice.
 	const verificationStartedRef = useRef(false)
 	useEffect(() => {
-		if (!token || !authUser || verificationStartedRef.current) return
+		if (!token || !authUser || isVerified || verificationStartedRef.current) return
 		verificationStartedRef.current = true
-		const cleanUrl = new URL(window.location.href)
-		cleanUrl.searchParams.delete('token')
-		window.history.replaceState(window.history.state, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
 		try {
 			window.sessionStorage.removeItem(PENDING_TOKEN_KEY)
 		} catch {
@@ -88,7 +132,7 @@ const VerifyEmail = () => {
 				setStatus('expired')
 				setErrorMessage(error.response?.data?.message || '')
 			})
-	}, [token, authUser, checkAuth, navigate, t])
+	}, [token, authUser, isVerified, checkAuth, navigate, t])
 
 	useEffect(() => {
 		if (cooldown <= 0) return undefined
@@ -133,11 +177,45 @@ const VerifyEmail = () => {
 		navigate('/login', { replace: true })
 	}
 
-	if (!authUser) return null
+	if (!authUser) {
+		return (
+			<AuthLayout panel='verify'>
+				<AuthStatus
+					icon={LogIn}
+					title={t('auth.verify.signInTitle')}
+					actions={<Button as={Link} to={`/login?redirect=${encodeURIComponent('/verify-email')}`} block size='lg' icon={LogIn}>{t('auth.verify.signIn')}</Button>}
+				>
+					<p>{token ? t('auth.verify.signInText') : t('auth.verify.signInPlain')}</p>
+				</AuthStatus>
+			</AuthLayout>
+		)
+	}
+
+	if (isVerified) {
+		return (
+			<AuthLayout panel='verify'>
+				<AuthStatus
+					icon={CheckCircle2}
+					tone='success'
+					title={t('auth.verify.verifiedTitle')}
+					actions={<Button as={Link} to={startPagePath()} block size='lg' iconRight={ArrowRight}>{t('auth.verify.continue')}</Button>}
+				>
+					<p>{tNode('auth.verify.verifiedText', { email: <strong>{authUser.email}</strong> })}</p>
+				</AuthStatus>
+			</AuthLayout>
+		)
+	}
+
+	const mailApp = mailAppFor(authUser.email)
 
 	const actions = (
 		<>
-			<Button block size='lg' onClick={handleResend} loading={isResending} disabled={cooldown > 0}>
+			{mailApp && status === 'waiting' && (
+				<Button as='a' href={mailApp.url} target='_blank' rel='noopener noreferrer' block size='lg' iconRight={ExternalLink}>
+					{t('auth.verify.openMail', { provider: mailApp.name })}
+				</Button>
+			)}
+			<Button block size='lg' variant={mailApp && status === 'waiting' ? 'secondary' : 'primary'} onClick={handleResend} loading={isResending} disabled={cooldown > 0}>
 				{isResending
 					? t('auth.verify.sending')
 					: cooldown > 0
@@ -162,6 +240,7 @@ const VerifyEmail = () => {
 				<AuthStatus icon={MailCheck} title={t('auth.verify.title')} actions={actions}>
 					<p>{tNode('auth.verify.subtitle', { email: <strong>{authUser.email}</strong> })}</p>
 					<p>{t('auth.verify.help')}</p>
+					<p>{t('auth.verify.autoContinue')}</p>
 					{justSent && cooldown > 0 && <Alert tone='success'>{t('auth.verify.sent')}</Alert>}
 				</AuthStatus>
 			)}

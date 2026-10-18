@@ -13,6 +13,7 @@ import {
 	createPublicBoardLink,
 	getPublicBoard,
 	getBoardActivities,
+	getBackgroundPhotos,
 	getBoardInviteDetails,
 	getBoardColumns,
 	getBoardContent,
@@ -37,6 +38,9 @@ import {
 	updateColumnSort,
 	reorderTasks,
 	updateTask,
+	copyColumn,
+	moveColumnTasks,
+	watchColumn,
 } from '../controllers/board.controller.js'
 import {
 	addTaskComment,
@@ -44,7 +48,7 @@ import {
 	startTaskTimer,
 	stopTaskTimer,
 } from '../controllers/taskActivity.controller.js'
-import { verifiedAuthMiddleware } from '../middlewares/auth.middleware.js'
+import { verifiedAuthMiddleware, optionalAuthMiddleware } from '../middlewares/auth.middleware.js'
 import {
 	boardMiddleware,
 	columnMiddleware,
@@ -65,6 +69,9 @@ import {
 	updateBoardSchema,
 	updateColumnSchema,
 	updateTaskSchema,
+	copyColumnSchema,
+	moveColumnTasksSchema,
+	watchColumnSchema,
 } from '../lib/validation.js'
 
 const router = express.Router()
@@ -80,7 +87,8 @@ router.get('/boards/overview', verifiedAuthMiddleware, getBoardsOverview)
 router.get('/my-tasks', verifiedAuthMiddleware, getMyTasks)
 router.get('/calendar', verifiedAuthMiddleware, getCalendarTasks)
 router.get('/team', verifiedAuthMiddleware, getTeam)
-router.get('/public/:token', getPublicBoard)
+router.get('/public/:token', optionalAuthMiddleware, getPublicBoard)
+router.get('/backgrounds/photos', verifiedAuthMiddleware, getBackgroundPhotos)
 router.post('/boards', verifiedAuthMiddleware, validateBody(createBoardSchema), createBoard)
 router.get('/boards/:id', verifiedAuthMiddleware, boardMiddleware, getBoardById)
 router.get('/boards/:id/public-link', verifiedAuthMiddleware, boardMiddleware, getPublicBoardLink)
@@ -138,7 +146,7 @@ router.post(
 	boardMiddleware,
 	copyBoardInviteLink,
 )
-router.get('/invites/:token/details', getBoardInviteDetails)
+router.get('/invites/:token/details', optionalAuthMiddleware, getBoardInviteDetails)
 router.post('/invites/:token/accept', authMiddleware, acceptBoardInvite)
 
 // Columns
@@ -161,6 +169,9 @@ router.patch('/columns/:id/position', authMiddleware, columnMiddleware, validate
 router.patch('/columns/:id/sort', authMiddleware, columnMiddleware, validateBody(columnSortSchema), updateColumnSort)
 router.patch('/boards/:id/tasks/reorder', authMiddleware, boardMiddleware, validateBody(reorderTasksSchema), reorderTasks)
 router.delete('/columns/:id', authMiddleware, columnMiddleware, deleteColumn)
+router.post('/columns/:id/copy', authMiddleware, columnMiddleware, validateBody(copyColumnSchema), copyColumn)
+router.post('/columns/:id/move-tasks', authMiddleware, columnMiddleware, validateBody(moveColumnTasksSchema), moveColumnTasks)
+router.post('/columns/:id/watch', authMiddleware, columnMiddleware, validateBody(watchColumnSchema), watchColumn)
 
 // Tasks
 router.get(

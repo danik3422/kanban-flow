@@ -16,18 +16,23 @@ await page.waitForTimeout(1500)
 const boardLoads = requests.filter((r) => r.startsWith('GET') && (r.includes('/content') || r.includes('/columns')))
 check('opening a board from the overview loads it once', boardLoads.length === 1 && boardLoads[0].endsWith('/content'), boardLoads.join(', '))
 
+// The list composer stays open after Enter, so both lists go in one go.
+await page.locator('.bc-add-list').click()
 for (const name of ['Todo', 'Doing']) {
-	await page.getByRole('button', { name: /add column/i }).last().click()
-	await page.fill('input[placeholder="Column name"]', name)
-	await page.locator('input[placeholder="Column name"]').press('Enter')
+	await page.fill('.bc-list-composer input', name)
+	await page.locator('.bc-list-composer input').press('Enter')
 	await page.waitForTimeout(700)
 }
-check('two columns created', (await page.locator('.kanban-column').count()) === 2)
+await page.keyboard.press('Escape')
+check('two columns created', (await page.locator('.bc-column').count()) === 2)
 
-const todo = page.locator('.kanban-column').filter({ hasText: 'Todo' })
-await todo.getByRole('button', { name: /add task/i }).click()
-await page.fill('input[placeholder="What needs doing?"], textarea[placeholder="What needs doing?"]', 'Ship the audit fixes')
-await page.locator('[placeholder="What needs doing?"]').press('Enter')
+const todo = page.locator('.bc-column').filter({ hasText: 'Todo' })
+const addCard = async (title) => {
+	if (!(await todo.locator('.bc-composer__input').count())) await todo.locator('.bc-add-card').click()
+	await todo.locator('.bc-composer__input').fill(title)
+	await todo.locator('.bc-composer__input').press('Enter')
+}
+await addCard('Ship the audit fixes')
 await page.waitForTimeout(900)
 check('task created', (await todo.locator('.task-card').count()) === 1)
 
@@ -48,9 +53,7 @@ check('card marks a task due today as "today"', dueClass?.includes('today'), due
 // realtime: second tab sees a task created in the first one
 const other = await ctx.newPage(); watch(other, 'alice-tab2')
 await other.goto(page.url()); await other.waitForTimeout(2000)
-await todo.getByRole('button', { name: /add task/i }).click()
-await page.fill('[placeholder="What needs doing?"]', 'Realtime check')
-await page.locator('[placeholder="What needs doing?"]').press('Enter')
+await addCard('Realtime check')
 await other.waitForTimeout(1500)
 check('second tab receives the new task live', (await other.locator('.task-card', { hasText: 'Realtime check' }).count()) === 1)
 await other.close()
@@ -73,7 +76,7 @@ await page.evaluate(() => {
 	window.__frames = []
 	const start = performance.now()
 	const tick = () => {
-		window.__frames.push({ title: document.querySelector('.app-topbar__context')?.innerText || '', columns: document.querySelectorAll('.kanban-column').length })
+		window.__frames.push({ title: document.querySelector('.app-topbar__context')?.innerText || '', columns: document.querySelectorAll('.bc-column').length })
 		if (performance.now() - start < 2500) requestAnimationFrame(tick)
 	}
 	requestAnimationFrame(tick)
@@ -90,7 +93,7 @@ const leakedFrames = frames.filter((frame) => frame.title.includes(secondName) &
 check('previous board columns are never shown under the new board', leakedFrames.length === 0 && frames.some((frame) => frame.title.includes(secondName)), `${leakedFrames.length} leaked of ${frames.length} frames`)
 requests.length = 0
 await page.goBack(); await page.waitForTimeout(1500)
-check('back button returns to the first board with its columns', page.url() === boardUrl && (await page.locator('.kanban-column').count()) === 2)
+check('back button returns to the first board with its columns', page.url() === boardUrl && (await page.locator('.bc-column').count()) === 2)
 
 // calendar shows the task on today's cell
 await page.goto(APP + '/calendar'); await page.waitForTimeout(2000)
@@ -101,14 +104,13 @@ await page.goto(APP + '/my-tasks'); await page.waitForTimeout(1500)
 check('my tasks loads without error', !(await page.getByText(/could not be loaded/i).count()))
 
 // change password keeps this session alive
-await page.goto(APP + '/settings#security'); await page.waitForTimeout(1200)
-await page.getByRole('button', { name: /security/i }).first().click().catch(() => {})
-await page.getByRole('button', { name: /change password/i }).click()
-await page.fill('#security-current', process.env.PW_OLD || 'Password123!')
-await page.fill('#security-next', process.env.PW_NEW || 'Password456!')
-await page.fill('#security-confirm', process.env.PW_NEW || 'Password456!')
+await page.goto(APP + '/settings#security'); await page.waitForSelector('[data-action=password]')
+await page.click('[data-action=password]')
+await page.fill('#st-password-current', process.env.PW_OLD || 'Password123!')
+await page.fill('#st-password-next', process.env.PW_NEW || 'Password456!')
+await page.fill('#st-password-repeat', process.env.PW_NEW || 'Password456!')
 const changed = page.waitForResponse((r) => r.url().includes('/auth/change-password'))
-await page.locator('form.security-password-form button[type=submit]').click()
+await page.click('button[form=st-password-form]')
 check('change password succeeds', (await changed).status() === 200)
 await page.goto(APP + '/my-tasks'); await page.waitForTimeout(1500)
 check('session survives the password change', page.url().endsWith('/my-tasks'), page.url())

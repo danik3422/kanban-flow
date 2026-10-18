@@ -27,7 +27,7 @@ fs.rmSync(outDir, { recursive: true, force: true })
 fs.mkdirSync(outDir, { recursive: true })
 
 // Words that are correct in every language: product and provider names.
-const TRANSLATION_ALLOWLIST = /^(KanbanHub|Kanban|Hub|Google|Microsoft|Apple|Passkey|Face ID|Touch ID|OK|ID|URL|UTC|Email|E2E|K|JPG|JPEG|PNG|WebP|GIF|MB|KB)$/i
+const TRANSLATION_ALLOWLIST = /^(KanbanHub|Kanban|Hub|Google|Microsoft|Apple|Passkey|Face|Touch|PIN|OK|ID|URL|UTC|Email|E2E|K|JPG|JPEG|PNG|WebP|GIF|MB|KB)$/i
 
 const createSeededAccount = async (browser) => {
 	const context = await browser.newContext()
@@ -123,7 +123,8 @@ const inspectPage = ({ isMobile, checkTranslation, allowlist }) => {
 		const interactive = [...document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, [role=button]')]
 			.filter(isOnScreen)
 			.filter((element) => {
-				const rect = element.getBoundingClientRect()
+				// A control inside its label is hit through the whole label (a switch row).
+				const rect = (element.matches('input') && element.closest('label')) ? element.closest('label').getBoundingClientRect() : element.getBoundingClientRect()
 				return rect.width < 44 || rect.height < 44
 			})
 		findings.touch = interactive.slice(0, 12).map((element) => {
@@ -208,7 +209,7 @@ const inspectPage = ({ isMobile, checkTranslation, allowlist }) => {
 				// Names in quotes are user content (a board or person), not interface text.
 				const value = element.getAttribute(attribute)?.replace(/[«“"][^»”"]*[»”"]/g, '').trim()
 				const words = value?.match(/[A-Za-z]{2,}/g) || []
-				if (words.length && !/@/.test(value) && !words.every((word) => allow.test(word))) texts.add(`[${attribute}] ${value.slice(0, 60)}`)
+				if (words.length && !/@|https?:\/\//.test(value) && !words.every((word) => allow.test(word))) texts.add(`[${attribute}] ${value.slice(0, 60)}`)
 			}
 		}
 		findings.untranslated = [...texts].slice(0, 25)

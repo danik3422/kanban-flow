@@ -183,11 +183,6 @@
 .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--ui-border); }
 .auth-providers-list { display: flex; flex-direction: column; gap: var(--ui-space-2); }
 
-.password-rules { padding: var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-surface-2); font-size: var(--ui-text-sm); }
-.password-rules__title { display: block; margin-bottom: var(--ui-space-2); font-weight: 600; color: var(--ui-text-2); }
-.password-rules ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px var(--ui-space-3); margin: 0; padding: 0; list-style: none; }
-.password-rules li { display: flex; align-items: center; gap: 6px; color: var(--ui-text-muted); }
-.password-rules li.is-met { color: var(--ui-success-text); }
 
 .auth-status { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ui-space-3); }
 .auth-status__icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: var(--ui-radius-lg); }
@@ -203,7 +198,3 @@
 .setup-avatar { display: flex; align-items: center; gap: var(--ui-space-4); }
 .setup-avatar__actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 .setup-avatar__hint { flex-basis: 100%; }
-
-@media (max-width: 480px) {
-	.password-rules ul { grid-template-columns: minmax(0, 1fr); }
-}

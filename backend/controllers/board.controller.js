@@ -18,6 +18,7 @@ import Notification from '../models/notification.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import BoardActivity from '../models/boardActivity.model.js'
 import { recordBoardActivity } from '../lib/boardActivity.js'
+import { normalizeBackground, reportUnsplashUse, searchBackgroundPhotos } from '../lib/boardBackgrounds.js'
 import { notifyTaskRecipients } from '../lib/notificationDelivery.js'
 
 // Matches the reorder payload limits so every board stays reorderable.
@@ -77,6 +78,22 @@ const notifyTaskAssignees = async ({ userIds, task, board, actorId, type = 'task
 	await notifyTaskRecipients({ userIds, task, board, actorId, type, title, message, details })
 }
 
+// Watchers of a list hear about cards that land in it (not about their own moves).
+const notifyListWatchers = async ({ column, task, board, actorId, fromColumn = '' }) => {
+	const watcherIds = (column.watchers || []).map((watcherId) => watcherId.toString())
+	if (!watcherIds.length) return
+	await notifyTaskRecipients({
+		userIds: watcherIds,
+		task,
+		board,
+		actorId,
+		type: 'list_card_added',
+		title: 'New card in a list you watch',
+		message: `“${task.title}” was added to ${column.title}.`,
+		details: { toColumn: column.title, ...(fromColumn && { fromColumn }) },
+	})
+}
+
 const validateBoardAssignees = async (board, assignees) => {
 	if (!Array.isArray(assignees)) return false
 	if (assignees.some((userId) => !userId || !mongoose.Types.ObjectId.isValid(userId))) {
@@ -97,9 +114,15 @@ const validateBoardAssignees = async (board, assignees) => {
 export const createBoard = async (req, res) => {
 	const session = await mongoose.startSession()
 	try {
-		const { name, visibility = 'private' } = req.body
+		const { name, visibility = 'private', background } = req.body
 		if (!name?.trim()) {
 			return res.status(400).json({ message: 'Board name is required' })
+		}
+		let boardBackground = null
+		try {
+			boardBackground = background === undefined ? null : normalizeBackground(background)
+		} catch (error) {
+			return res.status(error.statusCode || 400).json({ message: error.message })
 		}
 		if (!['private', 'workspace', 'public'].includes(visibility)) {
 			return res.status(400).json({ message: 'Invalid board visibility' })
@@ -112,6 +135,7 @@ export const createBoard = async (req, res) => {
 				name: name.trim(),
 				createdBy: req.user._id,
 				visibility,
+				background: boardBackground,
 			})
 			await newBoard.save({ session })
 			await BoardMember.create([{
@@ -132,6 +156,7 @@ export const createBoard = async (req, res) => {
 			})
 		})
 		emitBoardEvent(newBoard._id.toString(), 'activity:new', activity)
+		if (boardBackground?.type === 'photo') reportUnsplashUse(background)
 
 		res.status(201).json(newBoard)
 	} catch (error) {
@@ -251,20 +276,30 @@ export const revokePublicBoardLink = async (req, res) => {
 export const getPublicBoard = async (req, res) => {
 	try {
 		const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex')
-		const board = await Board.findOne({ visibility: 'public', publicTokenHash: tokenHash }).select('name visibility createdAt').lean()
+		const board = await Board.findOne({ visibility: 'public', publicTokenHash: tokenHash }).select('name visibility background createdAt updatedAt').lean()
 		if (!board) return res.status(404).json({ message: 'Public room link is invalid or expired' })
-		const columns = await Column.find({ board: board._id })
-			.select('title position sortBy pinned createdAt')
-			.sort({ position: 1, createdAt: 1 })
-			.lean()
+		const [columns, isMember] = await Promise.all([
+			Column.find({ board: board._id })
+				.select('board title position sortBy pinned createdAt')
+				.sort({ position: 1, createdAt: 1 })
+				.lean(),
+			req.user ? BoardMember.exists({ board: board._id, user: req.user._id }) : null,
+		])
 		const tasks = await Task.find({ column: { $in: columns.map((column) => column._id) } })
-			.select('title description dueDate column position labels checklist priority trackedSeconds')
+			.select('title description dueDate column position labels checklist priority updatedAt')
 			.sort({ position: 1, createdAt: 1 })
 			.lean()
-		return res.status(200).json({ board, columns: columns.map((column) => ({
-			...column,
-			tasks: tasks.filter((task) => task.column.toString() === column._id.toString()),
-		})) })
+		const [doneColumnId] = [...finishedColumnIdsOf(columns)]
+		const updatedAt = tasks.reduce((latest, task) => (task.updatedAt > latest ? task.updatedAt : latest), board.updatedAt || board.createdAt)
+		return res.status(200).json({
+			board: { _id: board._id, name: board.name, background: board.background || null, createdAt: board.createdAt, updatedAt },
+			doneColumnId: doneColumnId || null,
+			viewer: { isMember: Boolean(isMember) },
+			columns: columns.map(({ board: _board, ...column }) => ({
+				...column,
+				tasks: tasks.filter((task) => task.column.toString() === column._id.toString()),
+			})),
+		})
 	} catch (error) {
 		console.error('Public board fetch failed:', error)
 		return res.status(500).json({ message: 'Could not load public room' })
@@ -723,7 +758,13 @@ export const updateBoard = async (req, res) => {
 	try {
 		const board = req.board
 		const userId = req.user._id
-		const { name, visibility } = req.body
+		const { name, visibility, background } = req.body
+		let nextBackground
+		try {
+			nextBackground = background === undefined ? undefined : normalizeBackground(background)
+		} catch (error) {
+			return res.status(error.statusCode || 400).json({ message: error.message })
+		}
 
 		if (name !== undefined && (!name || !name.trim())) {
 			return res.status(400).json({ message: 'Board name is required' })
@@ -755,6 +796,10 @@ export const updateBoard = async (req, res) => {
 		const previousName = board.name
 		const previousVisibility = board.visibility
 		board.name = trimmedName
+		if (nextBackground !== undefined) {
+			board.background = nextBackground
+			if (nextBackground?.type === 'photo') reportUnsplashUse(background)
+		}
 		if (visibility !== undefined) {
 			board.visibility = visibility
 			if (previousVisibility !== visibility) {
@@ -1379,6 +1424,21 @@ export const createBoardInvite = async (req, res) => {
 	}
 }
 
+// "dana@example.com" -> "d•••@example.com": enough to recognise, not to harvest.
+const maskEmail = (email = '') => {
+	const [name, domain] = String(email).split('@')
+	return domain ? `${name.slice(0, 1)}•••@${domain}` : ''
+}
+
+// Who is looking at an invite decides what the page offers them.
+const inviteViewerStatus = async (invite, board, user) => {
+	if (!user) return null
+	if (board.createdBy?.toString() === user._id.toString()) return 'owner'
+	if (await BoardMember.exists({ board: board._id, user: user._id })) return 'member'
+	if (invite.email && invite.email !== String(user.email || '').toLowerCase()) return 'wrong-email'
+	return 'can-join'
+}
+
 export const getBoardInviteDetails = async (req, res) => {
 	try {
 		const tokenHash = crypto
@@ -1390,7 +1450,7 @@ export const getBoardInviteDetails = async (req, res) => {
 			tokenHash,
 			usedAt: null,
 			expiresAt: { $gt: new Date() },
-		}).populate('board', 'name visibilityVersion').populate('createdBy', 'name email')
+		}).populate('board', 'name visibilityVersion createdBy background').populate('createdBy', 'name email avatar')
 
 		if (!invite || !invite.board) {
 			return res.status(400).json({ message: 'Invite expired or invalid' })
@@ -1399,11 +1459,30 @@ export const getBoardInviteDetails = async (req, res) => {
 			return res.status(400).json({ message: 'Invite expired or invalid' })
 		}
 
+		const board = invite.board
+		const [memberships, memberCount, columns, viewer] = await Promise.all([
+			BoardMember.find({ board: board._id }).sort({ createdAt: 1 }).limit(5).populate('user', 'name email avatar').lean(),
+			BoardMember.countDocuments({ board: board._id }),
+			Column.find({ board: board._id }).select('_id').lean(),
+			inviteViewerStatus(invite, board, req.user),
+		])
+		const taskCount = columns.length ? await Task.countDocuments({ column: { $in: columns.map((column) => column._id) } }) : 0
+		const inviter = invite.createdBy
+
 		return res.status(200).json({
-			boardId: invite.board._id.toString(),
-			boardName: invite.board.name,
-			invitedBy: invite.createdBy,
+			boardId: board._id.toString(),
+			boardName: board.name,
+			background: board.background || null,
+			invitedBy: inviter ? { name: inviter.name || '', email: inviter.name ? '' : inviter.email, avatar: inviter.avatar || '' } : null,
 			role: invite.role,
+			expiresAt: invite.expiresAt,
+			emailHint: invite.email ? maskEmail(invite.email) : '',
+			memberCount,
+			taskCount,
+			members: memberships
+				.filter((membership) => membership.user)
+				.map((membership) => ({ name: membership.user.name || maskEmail(membership.user.email), avatar: membership.user.avatar || '' })),
+			viewer,
 		})
 	} catch (error) {
 		console.error('Board invite details lookup failed:', error)
@@ -1422,11 +1501,13 @@ export const acceptBoardInvite = async (req, res) => {
 			tokenHash,
 			usedAt: null,
 			expiresAt: { $gt: new Date() },
-			$or: [{ email: '' }, { email: userEmail }],
 		})
 
 		if (!invite)
 			return res.status(400).json({ message: 'Invite expired or invalid' })
+		if (invite.email && invite.email !== userEmail) {
+			return res.status(403).json({ message: 'This invite was sent to a different email address.', code: 'wrong-email' })
+		}
 
 		const board = await Board.findById(invite.board).select('createdBy name visibilityVersion')
 		if (!board) {
@@ -1439,6 +1520,7 @@ export const acceptBoardInvite = async (req, res) => {
 		if (board.createdBy.toString() === req.user._id.toString()) {
 			return res.status(400).json({
 				message: 'You cannot invite yourself to this board.',
+				boardId: board._id.toString(),
 			})
 		}
 
@@ -1449,6 +1531,7 @@ export const acceptBoardInvite = async (req, res) => {
 		if (alreadyMember) {
 			return res.status(400).json({
 				message: 'You are already a member of this board.',
+				boardId: board._id.toString(),
 			})
 		}
 
@@ -1548,7 +1631,7 @@ export const updateColumn = async (req, res) => {
 	try {
 		const columnId = req.params.id
 		const userId = req.user._id
-		const { title, pinned } = req.body
+		const { title, pinned, color } = req.body
 
 		if (!mongoose.Types.ObjectId.isValid(columnId)) {
 			return res.status(400).json({ message: 'Invalid column ID' })
@@ -1591,6 +1674,7 @@ export const updateColumn = async (req, res) => {
 			}
 			column.pinned = pinned
 		}
+		if (typeof color !== 'undefined') column.color = color
 
 		const updatedColumn = await column.save()
 		const columnData = updatedColumn.toObject()
@@ -1728,6 +1812,8 @@ export const updateColumnSort = async (req, res) => {
 			'date-newest',
 			'date-oldest',
 			'name-alpha',
+			'due-date',
+			'priority',
 			'custom',
 			null,
 		]
@@ -1921,6 +2007,7 @@ export const createTask = async (req, res) => {
 			board,
 			actorId: req.user._id,
 		})
+		await notifyListWatchers({ column, task: savedTask, board, actorId: req.user._id })
 		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
 		return res.status(201).json(savedTask)
 	} catch (error) {
@@ -2105,6 +2192,7 @@ export const updateTask = async (req, res) => {
 				})
 			}
 		}
+		if (moved) await notifyListWatchers({ column: targetColumn, task: updatedTask, board, actorId: req.user._id, fromColumn: originalColumn?.title })
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
 		return res.status(200).json(updatedTask)
 	} catch (error) {
@@ -2254,5 +2342,139 @@ export const deleteTask = async (req, res) => {
 		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error deleting task:', error)
 		return res.status(500).json({ message: 'Internal server error' })
+	}
+}
+
+export const getBackgroundPhotos = async (req, res) => {
+	try {
+		return res.status(200).json(await searchBackgroundPhotos({ query: req.query.query, page: req.query.page }))
+	} catch (error) {
+		console.error('Background photo search failed:', error)
+		return res.status(500).json({ message: 'Could not load photos' })
+	}
+}
+
+// Columns are loaded with the column middleware; these helpers keep the checks in one place.
+const managedColumnContext = async (req, res) => {
+	const column = await Column.findById(req.params.id)
+	if (!column) {
+		res.status(404).json({ message: 'Column not found' })
+		return null
+	}
+	const board = await Board.findById(column.board)
+	if (!board) {
+		res.status(404).json({ message: 'Board not found' })
+		return null
+	}
+	if (!(await canManageBoard(board, req.user._id))) {
+		res.status(403).json({ message: 'Only board admins can change lists.' })
+		return null
+	}
+	return { column, board }
+}
+
+const COPIED_TASK_FIELDS = 'title description dueDate labels checklist priority assignees position'
+
+/** Copy a list with all its cards, placed right after the original. */
+export const copyColumn = async (req, res) => {
+	let session
+	try {
+		const context = await managedColumnContext(req, res)
+		if (!context) return
+		const { column, board } = context
+		if (await Column.countDocuments({ board: board._id }) >= MAX_COLUMNS_PER_BOARD) {
+			return res.status(400).json({ message: `A board can have up to ${MAX_COLUMNS_PER_BOARD} columns` })
+		}
+		let copy
+		session = await mongoose.startSession()
+		await session.withTransaction(async () => {
+			await Column.updateMany({ board: board._id, position: { $gt: column.position } }, { $inc: { position: 1 } }, { session })
+			const [created] = await Column.create([{
+				title: req.body.title.trim(),
+				board: board._id,
+				position: column.position + 1,
+				color: column.color,
+				sortBy: column.sortBy,
+			}], { session })
+			copy = created
+			const tasks = await Task.find({ column: column._id }).select(COPIED_TASK_FIELDS).sort({ position: 1, createdAt: 1 }).session(session).lean()
+			if (tasks.length) {
+				await Task.insertMany(tasks.map(({ _id, ...task }, index) => ({
+					...task,
+					checklist: (task.checklist || []).map(({ _id: itemId, ...item }) => item),
+					column: copy._id,
+					position: index,
+				})), { session })
+			}
+		})
+		await session.endSession()
+		session = null
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'created',
+			entityType: 'column',
+			entityId: copy._id,
+			entityName: copy.title,
+			details: `copied the ${column.title} column as ${copy.title}`,
+		})
+		emitBoardEvent(board._id.toString(), 'board:content-changed', { reason: 'column-copied' })
+		return res.status(201).json(copy.toObject())
+	} catch (error) {
+		if (session) await session.endSession().catch(() => {})
+		console.error('Error copying column:', error)
+		return res.status(500).json({ message: 'Could not copy the list' })
+	}
+}
+
+/** Move every card of a list to the end of another list on the same board. */
+export const moveColumnTasks = async (req, res) => {
+	try {
+		const context = await managedColumnContext(req, res)
+		if (!context) return
+		const { column, board } = context
+		const target = await Column.findOne({ _id: req.body.targetColumnId, board: board._id })
+		if (!target) return res.status(400).json({ message: 'Choose a list on this board.' })
+		if (target._id.equals(column._id)) return res.status(200).json({ moved: 0 })
+		const tasks = await Task.find({ column: column._id }).select('_id').sort({ position: 1, createdAt: 1 }).lean()
+		if (!tasks.length) return res.status(200).json({ moved: 0 })
+		const offset = await Task.countDocuments({ column: target._id })
+		if (offset + tasks.length > MAX_TASKS_PER_COLUMN) {
+			return res.status(400).json({ message: `A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks` })
+		}
+		await Task.bulkWrite(tasks.map((task, index) => ({
+			updateOne: { filter: { _id: task._id }, update: { $set: { column: target._id, position: offset + index } } },
+		})))
+		await Column.updateOne({ _id: target._id }, { $set: { sortBy: 'custom' } })
+		await recordBoardActivity({
+			boardId: board._id,
+			userId: req.user._id,
+			action: 'moved',
+			entityType: 'column',
+			entityId: column._id,
+			entityName: column.title,
+			details: `moved ${tasks.length} cards from ${column.title} to ${target.title}`,
+		})
+		emitBoardEvent(board._id.toString(), 'board:content-changed', { reason: 'cards-moved' })
+		return res.status(200).json({ moved: tasks.length })
+	} catch (error) {
+		console.error('Error moving column cards:', error)
+		return res.status(500).json({ message: 'Could not move the cards' })
+	}
+}
+
+/** Start or stop watching a list; any member may watch. */
+export const watchColumn = async (req, res) => {
+	try {
+		const column = req.column
+		const { allowed } = await ensureBoardAccess(req.user._id, column.board)
+		if (!allowed) return res.status(403).json({ message: 'Access denied' })
+		const update = req.body.watching ? { $addToSet: { watchers: req.user._id } } : { $pull: { watchers: req.user._id } }
+		const updated = await Column.findByIdAndUpdate(column._id, update, { returnDocument: 'after' }).lean()
+		emitBoardEvent(updated.board.toString(), 'column:updated', updated)
+		return res.status(200).json(updated)
+	} catch (error) {
+		console.error('Error watching column:', error)
+		return res.status(500).json({ message: 'Could not update watching' })
 	}
 }

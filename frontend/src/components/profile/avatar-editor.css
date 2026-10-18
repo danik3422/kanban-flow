@@ -1,0 +1,41 @@
+/* Photo editor: a round frame over the photo, drag and zoom inside it. */
+.av-editor-modal { --modal-width: 560px; }
+.av-editor { display: flex; flex-direction: column; align-items: center; gap: var(--ui-space-4); }
+.av-editor__stage { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--ui-space-6); }
+
+.av-editor__frame { position: relative; flex: 0 0 auto; overflow: hidden; border-radius: var(--ui-radius-lg); background: var(--ui-surface-3); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.av-editor__frame:active { cursor: grabbing; }
+.av-editor__frame:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.av-editor__image { position: absolute; top: 50%; left: 50%; max-width: none; transform-origin: center; pointer-events: none; }
+/* While the photo is being moved nothing on the page gets selected. */
+body.is-cropping, body.is-cropping * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing; }
+/* Everything outside the circle is dimmed, so the crop is obvious. */
+.av-editor__mask { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgb(10 20 18 / 0.55); outline: 2px solid rgb(255 255 255 / 0.9); outline-offset: -2px; pointer-events: none; }
+
+.av-editor__previews { display: flex; flex-direction: column; align-items: center; gap: var(--ui-space-3); }
+.av-editor__preview { position: relative; flex: 0 0 auto; overflow: hidden; border-radius: 50%; background: var(--ui-surface-3); box-shadow: 0 0 0 1px var(--ui-border); }
+.av-editor__preview-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.av-editor__preview-name { max-width: 120px; overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+
+.av-editor__controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--ui-space-2); width: 100%; }
+.av-editor__zoom { flex: 1 1 140px; max-width: 220px; accent-color: var(--ui-accent); }
+.av-editor__divider { width: 1px; height: 24px; background: var(--ui-border); }
+.av-editor__tip { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); text-align: center; }
+.av-editor__error { margin: var(--ui-space-3) 0 0; text-align: center; }
+.av-editor-modal .av-editor__other { margin-right: auto; }
+
+.av-drop { display: flex; flex-direction: column; align-items: center; gap: var(--ui-space-2); width: 100%; padding: var(--ui-space-10) var(--ui-space-4); border: 2px dashed var(--ui-border-strong); border-radius: var(--ui-radius-xl); background: var(--ui-surface-2); color: var(--ui-text); font: inherit; cursor: pointer; transition: border-color var(--ui-duration) var(--ui-ease), background var(--ui-duration) var(--ui-ease); }
+.av-drop:hover, .av-drop.is-over { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.av-drop:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.av-drop__icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--ui-radius-lg); background: var(--ui-surface); color: var(--ui-accent-soft-text); }
+.av-drop__title { font-weight: 600; }
+.av-drop__hint { color: var(--ui-text-muted); font-size: var(--ui-text-sm); text-align: center; }
+
+@media (max-width: 720px) {
+	.av-editor__previews { flex-direction: row; }
+	.av-editor__preview-name { display: none; }
+	.av-editor-modal .av-editor__other { flex: 1 1 100%; order: 3; margin-right: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.av-drop { transition: none; }
+}

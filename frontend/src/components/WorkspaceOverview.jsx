@@ -7,6 +7,7 @@ import { useBoardPrefs } from '../store/useBoardPrefs'
 import { useBoardStats } from '../store/useBoardStats'
 import { AvatarGroup, Badge, Button, EmptyState, IconButton, Input, Menu, PageHeader, SegmentedControl, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
+import { backgroundCss } from '../utils/boardBackground'
 import BoardTile from './app/BoardTile'
 import './app/app-shell.css'
 
@@ -30,8 +31,9 @@ const BoardCard = ({ board, stats, isStarred, onToggleStar, onOpen }) => {
 	const detailsId = `board-card-details-${board._id}`
 	// The whole card opens the board; the star sits beside it as its own button.
 	return (
-		<article className='board-card'>
+		<article className={cx('board-card', board.background && 'has-cover')}>
 			<button type='button' className='board-card__open' onClick={() => onOpen(board)} aria-label={t('boards.open', { name: board.name })} aria-describedby={detailsId} data-i18n-ignore>
+				{board.background && <span className='board-card__cover' style={{ background: backgroundCss(board.background, { thumb: true }) }} aria-hidden='true' />}
 				<span className='board-card__head'>
 					<BoardTile board={board} size={36} />
 					<span className='board-card__name'>{board.name}</span>

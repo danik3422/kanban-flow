@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '../i18n'
@@ -14,14 +14,16 @@ let openModals = 0
  * Dialog with focus trap, Escape to close, background scroll lock and focus
  * restore. On phones it is shown as a bottom sheet (see ui.css).
  */
-export const Modal = ({ open, onClose, title, description, size = 'md', variant = 'dialog', footer, children, initialFocusRef, closeOnBackdrop = true, className }) => {
+export const Modal = ({ open, onClose, onBack, title, description, size = 'md', variant = 'dialog', footer, children, initialFocusRef, closeOnBackdrop = true, className }) => {
 	const { t } = useI18n()
 	const panelRef = useRef(null)
 	const titleId = useId()
 	const descriptionId = useId()
 	const onCloseRef = useRef(onClose)
+	const onBackRef = useRef(onBack)
 	useEffect(() => {
 		onCloseRef.current = onClose
+		onBackRef.current = onBack
 	})
 
 	useEffect(() => {
@@ -37,7 +39,9 @@ export const Modal = ({ open, onClose, title, description, size = 'md', variant 
 		const handleKeyDown = (event) => {
 			if (event.key === 'Escape') {
 				event.stopPropagation()
-				onCloseRef.current?.()
+				// A sub-view steps back first; the dialog closes from its main view.
+				if (onBackRef.current) onBackRef.current()
+				else onCloseRef.current?.()
 				return
 			}
 			if (event.key !== 'Tab' || !panelRef.current) return
@@ -86,6 +90,7 @@ export const Modal = ({ open, onClose, title, description, size = 'md', variant 
 				<span className='ui-modal__grabber' aria-hidden='true' />
 				{(title || onClose) && (
 					<header className='ui-modal__header'>
+						{onBack && <IconButton icon={ArrowLeft} label={t('common.back')} onClick={onBack} className='ui-modal__back' />}
 						<div className='ui-modal__heading'>
 							{title && <h2 className='ui-modal__title' id={titleId}>{title}</h2>}
 							{description && <p className='ui-modal__description' id={descriptionId}>{description}</p>}
