@@ -38,7 +38,11 @@ const STRINGS = {
 		},
 		about: {
 			title: 'About KanbanHub — Open source, private by design',
-			description: 'Why KanbanHub is free and open source, what data it keeps, why it has no analytics, trackers or ads, and the plan for self-hosting with Docker.',
+			description: 'Why KanbanHub is free and open source, what data it keeps, why it has no analytics, trackers or ads, and how to run it yourself with Docker.',
+		},
+		selfHosting: {
+			title: 'Self-host KanbanHub with Docker — KanbanHub',
+			description: 'Run KanbanHub on your own server or computer with Docker, with or without internet: install, your domain with HTTPS, email, backups.',
 		},
 		login: {
 			title: 'Log in — KanbanHub',
@@ -79,7 +83,11 @@ const STRINGS = {
 		},
 		about: {
 			title: 'Про KanbanHub — відкритий код і приватність',
-			description: 'Чому KanbanHub безкоштовний і відкритий, які дані він зберігає, чому тут немає аналітики, трекерів і реклами, і плани на self-hosting у Docker.',
+			description: 'Чому KanbanHub безкоштовний і відкритий, які дані він зберігає, чому тут немає аналітики, трекерів і реклами, і як запустити його в Docker.',
+		},
+		selfHosting: {
+			title: 'KanbanHub на своєму сервері в Docker',
+			description: 'Запустіть KanbanHub на своєму сервері чи комп’ютері в Docker, з інтернетом або без: встановлення, свій домен з HTTPS, пошта, резервні копії.',
 		},
 		login: {
 			title: 'Вхід — KanbanHub',
@@ -120,7 +128,11 @@ const STRINGS = {
 		},
 		about: {
 			title: 'О KanbanHub — открытый код и приватность',
-			description: 'Почему KanbanHub бесплатный и открытый, какие данные он хранит, почему здесь нет аналитики, трекеров и рекламы, и планы на self-hosting в Docker.',
+			description: 'Почему KanbanHub бесплатный и открытый, какие данные он хранит, почему здесь нет аналитики, трекеров и рекламы, и как запустить его в Docker.',
+		},
+		selfHosting: {
+			title: 'KanbanHub на своём сервере в Docker',
+			description: 'Запустите KanbanHub на своём сервере или компьютере в Docker, с интернетом или без: установка, свой домен с HTTPS, почта, резервные копии.',
 		},
 		login: {
 			title: 'Вход — KanbanHub',
@@ -176,6 +188,7 @@ export const pageMetaFor = (pathname, language = 'en') => {
 	let meta
 	if (path === '/') meta = indexable('home')
 	else if (path === '/about') meta = indexable('about')
+	else if (path === '/self-hosting') meta = indexable('selfHosting')
 	else if (path === '/login') meta = indexable('login')
 	else if (path === '/signup') meta = indexable('signup')
 	else if (isUnder(path, '/public')) meta = unlisted('publicBoard')

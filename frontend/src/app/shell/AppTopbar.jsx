@@ -7,6 +7,7 @@ import AccountMenu from './AccountMenu'
 import QuickSwitcher from './QuickSwitcher'
 import './app-shell.css'
 import NotificationCenter from '../../features/notifications/NotificationCenter'
+import OfflineBanner from '../OfflineBanner'
 
 const LIVE_ICONS = { connected: Wifi, connecting: LoaderCircle, reconnecting: LoaderCircle, offline: WifiOff }
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -43,6 +44,7 @@ const AppTopbar = ({
 	const LiveIcon = liveStatus ? LIVE_ICONS[liveStatus] : null
 
 	return (
+		<>
 		<header className={cx('app-topbar', boardActions && 'app-topbar--board')}>
 			<div className='app-topbar__leading'>
 				{onSidebarCollapse && (
@@ -74,6 +76,8 @@ const AppTopbar = ({
 			</div>
 			<QuickSwitcher open={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 		</header>
+		<OfflineBanner inline />
+		</>
 	)
 }
 

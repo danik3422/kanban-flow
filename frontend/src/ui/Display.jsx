@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { cx, initialsOf } from './utils'
+import { assetUrl } from '../lib/runtimeConfig'
 
 export const Badge = ({ tone = 'neutral', pill = false, dot = false, className, children, ...props }) => (
 	<span className={cx('ui-badge', tone !== 'neutral' && `ui-badge--${tone}`, pill && 'ui-badge--pill', className)} {...props}>
@@ -34,7 +35,7 @@ export const Avatar = ({ name = '', src, size = 32, status, className, decorativ
 			aria-label={decorative ? undefined : name}
 			aria-hidden={decorative || undefined}
 		>
-			{showImage ? <img src={src} alt='' onError={() => setFailedSrc(src)} referrerPolicy='no-referrer' /> : initialsOf(name)}
+			{showImage ? <img src={assetUrl(src)} alt='' onError={() => setFailedSrc(src)} referrerPolicy='no-referrer' /> : initialsOf(name)}
 			{status && <span className='ui-avatar__status' style={{ background: PRESENCE_COLOR[status] }} aria-hidden='true' />}
 		</span>
 	)

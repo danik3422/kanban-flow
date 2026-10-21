@@ -1,7 +1,6 @@
 import { v2 as cloudinary } from 'cloudinary'
 
-import { config } from 'dotenv'
-config()
+import '../config/env.js'
 
 cloudinary.config({
 	cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -10,7 +9,11 @@ cloudinary.config({
 	secure: true,
 })
 
-// Card image uploads are offered only when all three credentials are set.
-export const uploadsEnabled = () => Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+// Cloudinary stores uploads when all three credentials are set; otherwise
+// services/fileStorage.service.js keeps them on this server.
+export const cloudinaryEnabled = () => Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+
+// Uploads always work now: in the cloud or on this server's disk.
+export const uploadsEnabled = () => true
 
 export default cloudinary

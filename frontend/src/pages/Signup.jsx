@@ -1,20 +1,22 @@
-import { ArrowRight, Mail, Pencil } from 'lucide-react'
+import { ArrowRight, LockKeyhole, Mail, Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout from '../features/auth/AuthLayout'
-import { AuthHeading, PasswordRules, ProviderButtons } from '../features/auth/AuthParts'
+import { AuthHeading, PasswordRules, ProviderButtons, AuthStatus } from '../features/auth/AuthParts'
 import { useI18n } from '../i18n'
 import { loadFirebase } from '../lib/firebase'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button, Field, IconButton, Input, PasswordInput } from '../ui'
 import { meetsPasswordRules } from '../features/auth/passwordRules'
 import { canAutoFocusTyping } from '../lib/autoFocus'
+import { useServerConfig } from '../lib/serverConfig'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const Signup = () => {
 	const { t, language } = useI18n()
+	const signupOpen = useServerConfig((state) => state.signup !== false)
 	const navigate = useNavigate()
 	const signup = useAuthStore((state) => state.signup)
 	const handleSocialSignup = useAuthStore((state) => state.handleSocialSignup)
@@ -75,6 +77,16 @@ const Signup = () => {
 		} else if (result?.success) {
 			navigate('/setup-profile')
 		}
+	}
+
+	if (!signupOpen) {
+		return (
+			<AuthLayout panel='signup'>
+				<AuthStatus icon={LockKeyhole} title={t('auth.signup.closedTitle')} actions={<Button as={Link} to='/login' size='lg' block>{t('auth.signup.closedAction')}</Button>}>
+					<p>{t('auth.signup.closedText')}</p>
+				</AuthStatus>
+			</AuthLayout>
+		)
 	}
 
 	return (

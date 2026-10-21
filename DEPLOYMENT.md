@@ -48,6 +48,20 @@ Use the exact `authDomain` from the Firebase web app configuration, usually
 `YOUR_PROJECT_ID.firebaseapp.com`. Use `kanbanhub.app` there only if a Firebase
 custom auth domain has been configured explicitly.
 
+## Offline support and caching
+
+The build emits `sw.js`, a service worker that stores the app (page, scripts,
+styles, fonts, board pictures) so it opens without a connection; API answers
+are saved per account in the browser (IndexedDB) and wiped on sign-out.
+
+In the Render static site:
+
+- Add a header rule for `/sw.js`: `Cache-Control: no-cache`, so a new deploy
+  reaches every browser on its next visit.
+- Add a header rule for `/assets/*`: `Cache-Control: public, max-age=31536000, immutable`
+  (file names change with their content).
+- Keep the rewrite of all paths to `/index.html` for client-side routes.
+
 ## Firebase
 
 Enable the required providers in Firebase Authentication and add

@@ -170,11 +170,18 @@ describe('attachments', () => {
 		assert.equal((await Task.findById(card._id)).attachments.length, 0)
 	})
 
-	it('says when image uploads are not set up', async () => {
+	it('keeps images on this server when Cloudinary is not set up, and removes them with the attachment', async () => {
 		const { owner, card } = await setup()
 		const response = await api('post', `/tasks/${card._id}/attachments/image`, owner).send({ image: 'data:image/png;base64,iVBORw0KGgo=' })
-		assert.equal(response.status, 503)
-		assert.equal((await api('get', '/features', owner)).body.uploads, false)
+		assert.equal(response.status, 201)
+		const image = response.body.attachments.find((item) => item.kind === 'image')
+		assert.match(image.url, /^\/uploads\/cards\/[a-f0-9]{24}\/[a-f0-9]{16}\.png$/)
+		const served = await request(app).get(image.url)
+		assert.equal(served.status, 200)
+		assert.equal((await api('get', '/features', owner)).body.uploads, true)
+		assert.equal((await api('post', `/tasks/${card._id}/attachments/image`, owner).send({ image: 'data:text/html;base64,PGgxPg==' })).status, 400, 'only images')
+		await api('delete', `/tasks/${card._id}/attachments/${image._id}`, owner)
+		assert.equal((await request(app).get(image.url)).status, 404, 'the file is gone with the attachment')
 	})
 })
 

@@ -140,3 +140,6 @@ serviceAccountKey.json
 
 # Browser check artifacts
 e2e/.tmp/
+
+# Pictures uploaded to a local server
+backend/uploads/

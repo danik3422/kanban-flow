@@ -10,6 +10,7 @@ import { axiosInstance } from '../lib/axios'
 import { Button, Field, Input, PasswordInput, Spinner } from '../ui'
 import { meetsPasswordRules } from '../features/auth/passwordRules'
 import { canAutoFocusTyping } from '../lib/autoFocus'
+import { useServerConfig } from '../lib/serverConfig'
 
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
@@ -17,6 +18,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const ResetPassword = () => {
 	const { t, language } = useI18n()
+	const serverHasEmail = useServerConfig((state) => state.email)
 	const navigate = useNavigate()
 	const [token] = useState(() => new URLSearchParams(window.location.search).get('token') || '')
 	const isPasswordReset = Boolean(token)
@@ -180,6 +182,14 @@ const ResetPassword = () => {
 					</Button>
 				</form>
 			</>
+		)
+	} else if (!serverHasEmail) {
+		// A server without email can't send the link: the person running it resets the password.
+		content = (
+			<AuthStatus icon={Mail} title={t('auth.reset.noEmailTitle')} actions={backToLogin}>
+				<p>{t('auth.reset.noEmailText')}</p>
+				<pre className='auth-command'><code>docker compose exec app npm run reset-password -- you@example.com</code></pre>
+			</AuthStatus>
 		)
 	} else {
 		content = (

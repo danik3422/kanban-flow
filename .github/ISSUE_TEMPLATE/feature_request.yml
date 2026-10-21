@@ -1,0 +1,21 @@
+name: Idea or feature request
+description: Suggest something new or a better way to do something
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Tell us about the situation, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you imagine it working.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Sketches, examples from other apps, links.

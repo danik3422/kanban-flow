@@ -15,6 +15,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import { Button, Chip, EmptyState, IconButton, Input, Menu, Modal, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
 import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../lib/dueDate'
+import { peekCache } from '../lib/apiCache'
 
 const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
 const DATE_SECTIONS = ['overdue', 'today', 'tomorrow', 'week', 'later', 'noDate']
@@ -71,7 +72,8 @@ const MyTasks = () => {
 	const authUser = useAuthStore((state) => state.authUser)
 	const navigate = useNavigate()
 	const [boards, setBoards] = useState([])
-	const [tasks, setTasks] = useState([])
+	// Saved on this device: the list shows at once and refreshes behind it.
+	const [tasks, setTasks] = useState(() => peekCache('/board/my-tasks', { search: '', priority: 'all', board: 'all' }) || [])
 	const [search, setSearch] = useState('')
 	const [priority, setPriority] = useState('all')
 	const [board, setBoard] = useState('all')
@@ -79,7 +81,7 @@ const MyTasks = () => {
 	const [groupBy, setGroupBy] = useState(() => readSetting(GROUP_KEY, ['date', 'board'], 'date'))
 	const [showDone, setShowDone] = useState(() => readSetting(SHOW_DONE_KEY, ['true', 'false'], 'false') === 'true')
 	const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-	const [isLoading, setIsLoading] = useState(true)
+	const [isLoading, setIsLoading] = useState(() => !peekCache('/board/my-tasks', { search: '', priority: 'all', board: 'all' }))
 	const [loadError, setLoadError] = useState('')
 	const [reloadKey, setReloadKey] = useState(0)
 	const searchRef = useRef(null)

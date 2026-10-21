@@ -14,6 +14,7 @@ import { showDesktopNotification } from './desktopNotifications'
 import { describeNotification } from './notificationText'
 import { relativeTime } from '../../lib/relativeTime'
 import './notifications.css'
+import { peekCache } from '../../lib/apiCache'
 
 const TYPE_LOOK = {
 	task_assigned: { icon: ClipboardList, tone: 'accent' },
@@ -53,9 +54,9 @@ const NotificationCenter = () => {
 	const { t, language } = useI18n()
 	const navigate = useNavigate()
 	const isPhone = useSyncExternalStore(subscribePhone, isPhoneWidth, () => false)
-	const [notifications, setNotifications] = useState([])
+	const [notifications, setNotifications] = useState(() => (isDevAuthBypass ? [] : peekCache('/notifications') || []))
 	const [isOpen, setIsOpen] = useState(false)
-	const [isLoading, setIsLoading] = useState(!isDevAuthBypass)
+	const [isLoading, setIsLoading] = useState(() => !isDevAuthBypass && !peekCache('/notifications'))
 	const [filter, setFilter] = useState('all')
 	const wrapperRef = useRef(null)
 	const triggerRef = useRef(null)

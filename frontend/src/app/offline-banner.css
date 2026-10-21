@@ -1,0 +1,50 @@
+/* A calm notice at the top: the app stays usable underneath it. */
+.offline-banner {
+	position: fixed;
+	top: calc(env(safe-area-inset-top) + 64px);
+	left: 50%;
+	z-index: 1200;
+	display: flex;
+	align-items: center;
+	gap: var(--ui-space-3);
+	max-width: min(560px, calc(100vw - 24px));
+	padding: 10px 16px;
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius-lg);
+	background: color-mix(in srgb, var(--ui-surface) 94%, transparent);
+	color: var(--ui-text);
+	box-shadow: var(--ui-shadow-md);
+	font-size: var(--ui-text-sm);
+	line-height: 1.4;
+	transform: translateX(-50%);
+	backdrop-filter: blur(12px);
+	animation: offline-banner-in var(--ui-duration-slow) var(--ui-ease-out);
+	pointer-events: none;
+}
+.offline-banner > svg { flex: 0 0 auto; color: var(--ui-warning-soft-text); }
+.offline-banner__text { display: flex; flex-wrap: wrap; gap: 2px 6px; }
+.offline-banner__text span { color: var(--ui-text-muted); }
+/* Inside the app: a strip under the top bar that moves the page down instead of covering it. */
+.offline-banner--inline {
+	position: sticky;
+	top: calc(56px + env(safe-area-inset-top));
+	z-index: 29;
+	left: auto;
+	max-width: none;
+	margin: 0;
+	padding: 8px var(--page-gutter);
+	border: 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--ui-warning-soft-text) 25%, transparent);
+	border-radius: 0;
+	background: var(--ui-warning-soft);
+	color: var(--ui-warning-soft-text);
+	box-shadow: none;
+	transform: none;
+	backdrop-filter: none;
+	animation: none;
+}
+.offline-banner--inline .offline-banner__text span { color: inherit; opacity: 0.85; }
+.offline-banner--inline > svg { color: inherit; }
+/* The app's own strip takes over wherever the top bar is shown. */
+body:has(.offline-banner--inline) .offline-banner--floating { display: none; }
+@keyframes offline-banner-in { from { opacity: 0; transform: translate(-50%, -6px); } }

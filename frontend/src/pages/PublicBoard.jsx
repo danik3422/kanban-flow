@@ -16,6 +16,7 @@ import { getDueDateKey, getLocalDateKey } from '../lib/dueDate'
 import { startPagePath } from '../lib/preferences'
 import { relativeTime } from '../lib/relativeTime'
 import { dueLabel, dueToneFor, PRIORITY_TONE } from '../features/board/model/taskDisplay'
+import { useServerConfig } from '../lib/serverConfig'
 
 const hasPriority = (task) => task.priority && task.priority !== 'none'
 
@@ -82,6 +83,7 @@ const TaskPanel = ({ task, column, done, onClose }) => {
 const PublicBoard = () => {
 	const { token } = useParams()
 	const { t, language } = useI18n()
+	const signupOpen = useServerConfig((state) => state.signup !== false)
 	const authUser = useAuthStore((state) => state.authUser)
 	const [data, setData] = useState(null)
 	const [failed, setFailed] = useState(false)
@@ -135,7 +137,7 @@ const PublicBoard = () => {
 	) : (
 		<>
 			<Button as={Link} to='/login' variant='ghost' size='sm'>{t('publicBoard.signIn')}</Button>
-			<Button as={Link} to='/signup' size='sm' className='pb-header__secondary'>{t('publicBoard.createOwn')}</Button>
+			{signupOpen && <Button as={Link} to='/signup' size='sm' className='pb-header__secondary'>{t('publicBoard.createOwn')}</Button>}
 		</>
 	)
 
@@ -272,7 +274,7 @@ const PublicBoard = () => {
 			{body}
 			{data && !data.viewer?.isMember && !authUser && (
 				<footer className='pb-footer'>
-					{t('publicBoard.footer')} <Link to='/signup'>{t('publicBoard.createOwn')}</Link>
+					{t('publicBoard.footer')} {signupOpen && <Link to='/signup'>{t('publicBoard.createOwn')}</Link>}
 				</footer>
 			)}
 			<TaskPanel task={openTask?.task} column={columns.find((column) => column._id === openTask?.columnId)} done={openTask?.columnId === doneId} onClose={() => setOpenTaskId('')} />

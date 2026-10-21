@@ -236,6 +236,8 @@ const searchKeyless = async (query, page) => {
 
 /** Photos for the picker: Unsplash when configured (falling back on errors), else the keyless sources. */
 export const searchBackgroundPhotos = async ({ query = '', page = 1 } = {}) => {
+	// A server without internet offers colours and people's own photos only.
+	if (!env.remotePhotos) return { source: 'none', photos: [], hasMore: false }
 	const cleanQuery = String(query).trim().slice(0, 60)
 	const cleanPage = Math.max(1, Math.min(60, Number(page) || 1))
 	if (env.unsplashAccessKey) {
@@ -266,14 +268,47 @@ const isUnsplashUrl = (value, host = UNSPLASH_IMAGE_HOST) => {
 	}
 }
 
+const clamp = (value, min, max, fallback) => {
+	const number = Number(value)
+	return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback
+}
+
+// The look of a photo: focal point (percent), blur (px), darkening (%), brightness and saturation (%).
+export const normalizeAdjust = (adjust) => {
+	if (!adjust || typeof adjust !== 'object') return undefined
+	const value = {
+		x: clamp(adjust.x, 0, 100, 50),
+		y: clamp(adjust.y, 0, 100, 50),
+		blur: clamp(adjust.blur, 0, 24, 0),
+		dim: clamp(adjust.dim, 0, 80, 0),
+		brightness: clamp(adjust.brightness, 50, 150, 100),
+		saturate: clamp(adjust.saturate, 0, 200, 100),
+	}
+	const isDefault = value.x === 50 && value.y === 50 && !value.blur && !value.dim && value.brightness === 100 && value.saturate === 100
+	return isDefault ? undefined : value
+}
+
 /**
  * Turns what the client sent into what is stored, or throws for anything that is
- * not from our palette, our curated set or (when enabled) Unsplash itself.
+ * not from our palette, our curated set, (when enabled) Unsplash itself, or the
+ * photo already uploaded for this board (`current`).
  */
-export const normalizeBackground = (input) => {
+export const normalizeBackground = (input, { current = null } = {}) => {
+	const background = normalizeBackgroundSource(input, current)
+	if (background && (background.type === 'photo' || background.type === 'upload')) {
+		const adjust = normalizeAdjust(input.adjust)
+		if (adjust) background.adjust = adjust
+	}
+	return background
+}
+
+const normalizeBackgroundSource = (input, current) => {
 	if (input === null) return null
 	if (input.type === 'gradient' && GRADIENT_KEYS.includes(input.key)) return { type: 'gradient', key: input.key }
 	if (input.type === 'color' && COLOR_KEYS.includes(input.key)) return { type: 'color', key: input.key }
+	if (input.type === 'upload' && current?.type === 'upload' && current.url === input.url) {
+		return { type: 'upload', url: current.url, thumb: current.thumb, color: current.color || '#5b6470' }
+	}
 	if (input.type === 'photo') {
 		const curated = CURATED_BY_ID.get(input.id)
 		if (curated) return { type: 'photo', id: curated.id, url: curated.url, thumb: curated.thumb, color: curated.color, author: '', authorUrl: curated.authorUrl, source: 'Unsplash' }
@@ -319,4 +354,14 @@ export const normalizeBackground = (input) => {
 export const reportUnsplashUse = (input) => {
 	if (!env.unsplashAccessKey || !input?.downloadLocation || !isUnsplashUrl(input.downloadLocation, 'api.unsplash.com')) return
 	fetch(input.downloadLocation, { headers: { Authorization: `Client-ID ${env.unsplashAccessKey}` }, signal: AbortSignal.timeout(6000) }).catch(() => {})
+}
+
+/** Deletes the files of an uploaded background once no board shows it (copies share them). */
+export const releaseUploadedBackground = async (background) => {
+	if (background?.type !== 'upload' || !background.url) return
+	const { default: Board } = await import('../models/board.model.js')
+	if (await Board.exists({ 'background.url': background.url })) return
+	const { deleteImage } = await import('./fileStorage.service.js')
+	await deleteImage(background.url)
+	if (background.thumb && background.thumb !== background.url) await deleteImage(background.thumb)
 }

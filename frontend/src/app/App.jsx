@@ -10,11 +10,13 @@ import {
 import Toaster from '../ui/Toaster'
 
 import AppLoader from './AppLoader'
+import OfflineBanner from './OfflineBanner'
 import { axiosInstance } from '../lib/axios'
 // Page chunks, keyed so the one for the opened address can start downloading
 // while the session is still being checked instead of after it.
 const PAGES = {
 	About: () => import('../pages/About'),
+	SelfHosting: () => import('../pages/SelfHosting'),
 	BoardInvite: () => import('../pages/BoardInvite'),
 	Calendar: () => import('../pages/Calendar'),
 	Home: () => import('../pages/Home'),
@@ -32,6 +34,7 @@ const PAGES = {
 	Workspace: () => import('../pages/Workspace'),
 }
 const About = lazy(PAGES.About)
+const SelfHosting = lazy(PAGES.SelfHosting)
 const BoardInvite = lazy(PAGES.BoardInvite)
 const CalendarPage = lazy(PAGES.Calendar)
 const Home = lazy(PAGES.Home)
@@ -51,6 +54,7 @@ const Workspace = lazy(PAGES.Workspace)
 const EXACT_PAGES = {
 	'/': 'Home',
 	'/about': 'About',
+	'/self-hosting': 'SelfHosting',
 	'/login': 'Login',
 	'/signup': 'Signup',
 	'/login/resetpassword': 'ResetPassword',
@@ -79,6 +83,7 @@ import { applyPageMeta, pageMetaFor } from '../lib/seo'
 import { useI18n } from '../i18n'
 import { startPagePath } from '../lib/preferences'
 import { useAuthStore } from '../store/useAuthStore'
+import { useServerConfig } from '../lib/serverConfig'
 
 export const App = () => {
 	const location = useLocation()
@@ -87,6 +92,7 @@ export const App = () => {
 	const handledSocialRedirectRef = useRef(false)
 	const { language } = useI18n()
 	const { authUser, checkAuth, completeSocialRedirect, isCheckingAuth } = useAuthStore()
+	const selfHosted = useServerConfig((state) => state.selfHosted)
 	// Remount pages on navigation, except Workspace: switching boards keeps it mounted
 	// so the board, sidebar and socket are not torn down and loaded twice.
 	const routesKey = location.pathname.startsWith('/workspaces') ? '/workspaces' : location.pathname
@@ -172,6 +178,7 @@ export const App = () => {
 	return (
 		<>
 			<Toaster />
+			<OfflineBanner />
 			<Suspense fallback={<AppLoader page />}>
 			<Routes key={routesKey}>
 				{needsVerification ? (
@@ -181,6 +188,7 @@ export const App = () => {
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
+						<Route path='/self-hosting' element={<SelfHosting />} />
 						<Route
 							path='*'
 							element={
@@ -199,6 +207,7 @@ export const App = () => {
 						<Route path='/login/resetpassword' element={<ResetPassword />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
+						<Route path='/self-hosting' element={<SelfHosting />} />
 						<Route
 							path='*'
 							element={
@@ -212,7 +221,8 @@ export const App = () => {
 					</>
 				) : (
 					<>
-						<Route path='/' element={<Home />} />
+						{/* A self-hosted server is the app itself: no product page in front of it. */}
+						<Route path='/' element={selfHosted ? <Navigate to={authUser ? startPagePath() : '/login'} replace /> : <Home />} />
 						<Route
 							path='/login'
 							element={
@@ -223,6 +233,7 @@ export const App = () => {
 						<Route path='/invite/:token' element={<BoardInvite />} />
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
+						<Route path='/self-hosting' element={<SelfHosting />} />
 						<Route
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}

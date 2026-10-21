@@ -5,6 +5,7 @@ import { useI18n } from '../../i18n'
 import { Button } from '../../ui'
 import { passwordChecksFor } from './passwordRules'
 import './password-rules.css'
+import { firebaseEnabled } from '../../lib/firebase'
 
 export const AuthHeading = ({ title, subtitle }) => (
 	<div className='auth-heading'>
@@ -21,8 +22,10 @@ const PROVIDER_ICONS = {
 
 export const ProviderIcon = ({ provider }) => PROVIDER_ICONS[provider] || null
 
+/** Google, Microsoft and Apple sign-in; only on servers where Firebase is set up. */
 export const ProviderButtons = ({ onSelect, disabled }) => {
 	const { t } = useI18n()
+	if (!firebaseEnabled) return null
 	return (
 		<div className='auth-providers-block'>
 			<div className='auth-divider'><span>{t('auth.providers.divider')}</span></div>

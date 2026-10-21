@@ -106,6 +106,9 @@ export const socialSignup = async (req, res) => {
 		if (!email)
 			return res.status(400).json({ message: 'Invalid token: missing email' })
 		const existingUser = await User.findOne({ email: email.toLowerCase() })
+		if (!existingUser && !env.signupOpen && (await User.estimatedDocumentCount()) > 0) {
+			return res.status(403).json({ message: 'Sign-up is closed on this server. Ask its admin for an account.' })
+		}
 		if (existingUser) {
 			if (existingUser.provider === 'local')
 				return res

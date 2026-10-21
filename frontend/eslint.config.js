@@ -30,4 +30,12 @@ export default [
       ],
     },
   },
+  {
+    files: ['src/sw/**/*.js'],
+    languageOptions: { globals: globals.serviceworker },
+  },
+  {
+    files: ['vite.config.js'],
+    languageOptions: { globals: globals.node },
+  },
 ]

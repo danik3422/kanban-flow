@@ -17,7 +17,7 @@ import '../features/board/columns/board-columns.css'
 import useIsPhone from '../hooks/useIsPhone'
 import useFlipColumns from '../features/board/hooks/useFlipColumns'
 import { Button, ConfirmDialog, EmptyState } from '../ui'
-import { backgroundCss, backgroundPayload } from '../features/boards/backgrounds/boardBackground'
+import { backdropStyle, backgroundPayload } from '../features/boards/backgrounds/boardBackground'
 import { useBoardPrefs } from '../store/useBoardPrefs'
 import { useBoardStats } from '../store/useBoardStats'
 import { toast } from 'sonner'
@@ -36,6 +36,7 @@ import BoardsOverview from '../features/boards/BoardsOverview'
 import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
 import { axiosInstance } from '../lib/axios'
+import { peekCache } from '../lib/apiCache'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../features/board/model/taskSorting'
 import { getColumnDropIndex, reorderColumns } from '../features/board/model/columnOrdering'
@@ -320,7 +321,8 @@ const Workspace = () => {
 		setCardFilter(EMPTY_FILTER)
 		setIsFilterOpen(false)
 		setIsBoardMenuOpen(false)
-		const cachedColumns = selectedBoardId ? columnsCache.get(`${authUser?._id}:${selectedBoardId}`) : null
+		// Opened during this visit, or saved on the device earlier: shown at once, refreshed below.
+		const cachedColumns = selectedBoardId ? columnsCache.get(`${authUser?._id}:${selectedBoardId}`) || peekCache(`/board/boards/${selectedBoardId}/content`) || null : null
 		if (!isDevAuthBypass) setColumns(cachedColumns || [])
 		setColumnSortBy(cachedColumns ? sortByOf(cachedColumns) : {})
 		setLoadedBoardId(cachedColumns ? selectedBoardId : null)
@@ -657,6 +659,17 @@ const Workspace = () => {
 			apply(previous)
 			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'backgrounds.saveError'))
 		}
+	}
+
+	// A photo of the board's own, already resized in the browser; true when it is in place.
+	const uploadBoardBackground = async ({ image, thumb, color }) => {
+		if (!selectedBoard) return false
+		const boardId = selectedBoard._id
+		const { data } = await axiosInstance.post(`/board/boards/${boardId}/background/upload`, { image, thumb, color }, { timeout: 90_000 })
+		const background = data.background || null
+		setSelectedBoard((current) => (current?._id === boardId ? { ...current, background } : current))
+		setBoards((current) => current.map((board) => (board._id === boardId ? { ...board, background } : board)))
+		return true
 	}
 
 	const closeCreateBoard = () => {
@@ -1537,8 +1550,9 @@ const Workspace = () => {
 
 			<main
 				className={`workspace-main${boardId && selectedBoard?.background ? ' has-board-background' : ''}`}
-				style={boardId && selectedBoard?.background ? { '--board-background': backgroundCss(selectedBoard.background) } : undefined}
+				style={boardId && selectedBoard?.background ? backdropStyle(selectedBoard.background) : undefined}
 			>
+				{boardId && selectedBoard?.background && <div className='board-backdrop' aria-hidden='true' />}
 				<AppTopbar
 					isSidebarOpen={isSidebarOpen}
 					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
@@ -1787,6 +1801,8 @@ const Workspace = () => {
 				onClose={() => setIsBackgroundOpen(false)}
 				value={selectedBoard?.background || null}
 				onChange={changeBoardBackground}
+				onUpload={uploadBoardBackground}
+				canUpload={canManageBoard}
 			/>
 			<CreateBoardModal
 				open={isCreatingBoard}

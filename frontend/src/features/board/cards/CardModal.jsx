@@ -14,6 +14,7 @@ import CardPopover from './CardPopover'
 import { AttachmentPicker, CopyCardPicker, CoverPicker, DatesPicker, LabelsPicker, MembersPicker, MoveCardPicker } from './CardPickers'
 import { AttachmentsSection, ChecklistSection, SectionHead, TimeSection } from './CardSections'
 import './card-modal.css'
+import { assetUrl } from '../../../lib/runtimeConfig'
 
 const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent']
 
@@ -148,7 +149,7 @@ const CardModal = ({
 	const memberIds = (task.assignees || []).map((person) => String(person._id || person))
 	const watching = (task.watchers || []).some((id) => String(id) === String(meId))
 	const cover = task.cover
-	const coverStyle = cover ? (cover.type === 'color' ? { background: CARD_COLORS[cover.key] } : { backgroundImage: `url("${cover.url || cover.thumb}")`, backgroundColor: cover.color || '#5b6470' }) : null
+	const coverStyle = cover ? (cover.type === 'color' ? { background: CARD_COLORS[cover.key] } : { backgroundImage: `url("${assetUrl(cover.url || cover.thumb)}")`, backgroundColor: cover.color || '#5b6470' }) : null
 	const images = (task.attachments || []).filter((item) => item.kind === 'image')
 	const locale = intlLocale(language)
 

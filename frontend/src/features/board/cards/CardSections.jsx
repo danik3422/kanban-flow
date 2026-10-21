@@ -9,6 +9,7 @@ import { cx } from '../../../ui/utils'
 import { formatClock, formatDuration, parseDuration } from '../model/cardDisplay'
 import { getLocalDateKey } from '../../../lib/dueDate'
 import { relativeTime } from '../../../lib/relativeTime'
+import { assetUrl } from '../../../lib/runtimeConfig'
 
 export const SectionHead = ({ icon: Icon, title, children }) => (
 	<div className='cm-section__head'>
@@ -117,11 +118,11 @@ export const AttachmentsSection = ({ attachments, meId, canManage, onAdd, onRemo
 					const canRemove = canManage || String(item.addedBy) === String(meId)
 					return (
 						<li key={item._id} className='cm-attachment'>
-							<a className={cx('cm-attachment__thumb', item.kind === 'image' && 'is-image')} href={item.url} target='_blank' rel='noopener noreferrer' style={item.kind === 'image' ? { backgroundImage: `url("${item.url}")` } : undefined} aria-label={item.name || hostOf(item.url)}>
+							<a className={cx('cm-attachment__thumb', item.kind === 'image' && 'is-image')} href={assetUrl(item.url)} target='_blank' rel='noopener noreferrer' style={item.kind === 'image' ? { backgroundImage: `url("${assetUrl(item.url)}")` } : undefined} aria-label={item.name || hostOf(item.url)}>
 								{item.kind !== 'image' && <Link2 size={18} aria-hidden='true' />}
 							</a>
 							<span className='cm-attachment__text'>
-								<a className='cm-attachment__name' href={item.url} target='_blank' rel='noopener noreferrer' data-i18n-ignore>{item.name || hostOf(item.url)} <ExternalLink size={12} aria-hidden='true' /></a>
+								<a className='cm-attachment__name' href={assetUrl(item.url)} target='_blank' rel='noopener noreferrer' data-i18n-ignore>{item.name || hostOf(item.url)} <ExternalLink size={12} aria-hidden='true' /></a>
 								<span className='cm-hint'>{t('card.addedAgo', { time: relativeTime(item.createdAt, language, t('boards.justNow')) })}{item.name ? ` · ${hostOf(item.url)}` : ''}</span>
 								<span className='cm-row'>
 									{item.kind === 'image' && <button type='button' className='cm-link-button' onClick={() => onMakeCover(item)}><ImageIcon size={13} aria-hidden='true' /> {t('card.makeCover')}</button>}

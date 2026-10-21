@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.git
+e2e
+backend/uploads
+backend/test
+frontend/src/**/*.test.js
+.claude
+*.md
+!SELF_HOSTING.md

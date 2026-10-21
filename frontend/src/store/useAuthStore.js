@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance, onSessionExpired } from '../lib/axios'
+import { clearApiCache, peekCache, setCacheOwner } from '../lib/apiCache'
 import { clearBoardsCache } from '../lib/boardsCache'
 import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
@@ -40,11 +41,15 @@ export const useAuthStore = create((set, get) => ({
 			set({ authUser: devUser, isCheckingAuth: false })
 			return
 		}
+		// A saved profile opens the app at once; the check below confirms it in the background.
+		const saved = get().isCheckingAuth ? peekCache('/auth/get-user') : null
+		if (saved?._id) set({ authUser: saved, isCheckingAuth: false })
 		try {
 			const res = await axiosInstance.get('/auth/get-user')
 			set({ authUser: res.data })
-		} catch {
-			set({ authUser: null })
+		} catch (error) {
+			// Offline with nothing saved leaves the user signed out; a real "no" from the server always does.
+			if (!error.isOffline || !saved?._id) set({ authUser: null })
 		} finally {
 			set({ isCheckingAuth: false })
 		}
@@ -312,4 +317,11 @@ onSessionExpired(() => {
 	useBoardStats.getState().reset()
 	useAuthStore.setState({ authUser: null })
 	toast.info(translateCurrent('auth.toast.sessionEnded'))
+})
+
+// Saved answers belong to the signed-in account: kept while it stays, wiped when it leaves.
+useAuthStore.subscribe((state, previous) => {
+	const id = state.authUser?._id
+	if (id && id !== previous.authUser?._id && !isDevAuthBypass) setCacheOwner(id)
+	if (!id && previous.authUser?._id) clearApiCache()
 })

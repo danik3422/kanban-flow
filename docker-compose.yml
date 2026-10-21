@@ -1,0 +1,48 @@
+# KanbanHub on your own server. Quick start:
+#   cp .env.example .env      # optional: change the address, port, email…
+#   docker compose up -d
+# Then open http://localhost:8080 (or PUBLIC_URL). Full guide: SELF_HOSTING.md
+
+services:
+  mongo:
+    image: mongo:8.0
+    # A single-node replica set: KanbanHub uses transactions, which need one.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Also starts the replica set on the very first run.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"]
+      interval: 10s
+      timeout: 10s
+      start_period: 20s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    image: kanbanhub:latest
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:5001"
+    volumes:
+      - app-data:/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MONGO_URI: mongodb://mongo:27017/kanbanhub?replicaSet=rs0
+      HOST_PORT: ${PORT:-8080}
+
+volumes:
+  mongo-data:
+  app-data:

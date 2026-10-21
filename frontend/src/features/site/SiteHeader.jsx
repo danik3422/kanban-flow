@@ -8,10 +8,12 @@ import { GITHUB_URL } from './links'
 import BrandMark from '../../ui/BrandMark'
 import { LanguageMenu, ThemeMenu } from '../settings/PreferenceMenus'
 import './site.css'
+import { useServerConfig } from '../../lib/serverConfig'
 
 /** Header of the public pages: logo, about, source code, language, theme and the way in. */
 const SiteHeader = () => {
 	const { t } = useI18n()
+	const signupOpen = useServerConfig((state) => state.signup !== false)
 	const authUser = useAuthStore((state) => state.authUser)
 	return (
 		<header className='site-header'>
@@ -35,7 +37,7 @@ const SiteHeader = () => {
 					) : (
 						<>
 							<Button as={Link} to='/login' variant='secondary' size='sm'>{t('site.login')}</Button>
-							<Button as={Link} to='/signup' size='sm' className='site-header__signup'>{t('site.signup')}</Button>
+							{signupOpen && <Button as={Link} to='/signup' size='sm' className='site-header__signup'>{t('site.signup')}</Button>}
 						</>
 					)}
 				</nav>

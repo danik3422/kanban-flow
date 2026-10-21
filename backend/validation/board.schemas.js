@@ -6,8 +6,26 @@ const boardName = z.string().trim().min(1, 'Board name is required').max(100, 'B
 const boardVisibility = z.enum(['private', 'workspace', 'public'])
 const columnTitle = z.string().trim().min(1, 'Column title is required').max(60, 'Column title must be 60 characters or fewer')
 
+// How a photo is shown; the server clamps every value again.
+const backgroundAdjust = z.object({
+	x: z.number().min(0).max(100).optional(),
+	y: z.number().min(0).max(100).optional(),
+	blur: z.number().min(0).max(24).optional(),
+	dim: z.number().min(0).max(80).optional(),
+	brightness: z.number().min(50).max(150).optional(),
+	saturate: z.number().min(0).max(200).optional(),
+}).strict()
+
 const boardBackground = z.union([
 	z.object({ type: z.enum(['gradient', 'color']), key: z.string().max(32) }),
+	// An uploaded photo can only be kept or adjusted here; new ones go through the upload route.
+	z.object({
+		type: z.literal('upload'),
+		url: z.string().max(1000),
+		thumb: z.string().max(1000).optional(),
+		color: z.string().max(16).optional(),
+		adjust: backgroundAdjust.optional(),
+	}),
 	z.object({
 		type: z.literal('photo'),
 		id: z.string().max(64),
@@ -19,8 +37,15 @@ const boardBackground = z.union([
 		downloadLocation: z.string().max(600).optional(),
 		source: z.string().max(40).optional(),
 		license: z.string().max(60).optional(),
+		adjust: backgroundAdjust.optional(),
 	}),
 ]).nullable()
+
+export const backgroundUploadSchema = z.object({
+	image: z.string().max(7 * 1024 * 1024),
+	thumb: z.string().max(400 * 1024),
+	color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+}).strict()
 
 export const createBoardSchema = z.object({
 	name: boardName,

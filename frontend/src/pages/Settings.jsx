@@ -85,7 +85,26 @@ const Settings = () => {
 	const { hash } = useLocation()
 	useEffect(() => {
 		const id = hash.replace('#', '')
-		if (SECTIONS.includes(id)) document.getElementById(id)?.scrollIntoView({ block: 'start' })
+		const section = SECTIONS.includes(id) ? document.getElementById(id) : null
+		if (!section) return undefined
+		section.scrollIntoView({ block: 'start' })
+		// Lists below (devices, passkeys) arrive a moment later and move the section;
+		// keep it in place for a second unless the person starts scrolling themselves.
+		const scroller = section.closest('.workspace-main')
+		const content = section.parentElement
+		if (!scroller || !content || typeof ResizeObserver === 'undefined') return undefined
+		const observer = new ResizeObserver(() => section.scrollIntoView({ block: 'start' }))
+		const stop = () => observer.disconnect()
+		observer.observe(content)
+		const timer = window.setTimeout(stop, 1000)
+		scroller.addEventListener('wheel', stop, { once: true, passive: true })
+		scroller.addEventListener('touchstart', stop, { once: true, passive: true })
+		return () => {
+			stop()
+			window.clearTimeout(timer)
+			scroller.removeEventListener('wheel', stop)
+			scroller.removeEventListener('touchstart', stop)
+		}
 	}, [hash])
 
 	const goToSection = (event, id) => {

@@ -55,5 +55,45 @@
 	.bg-spin { animation: none; }
 }
 
-/* An open board stands on its background; the bars above it stay readable. */
-.workspace-shell .workspace-main.has-board-background { background: var(--board-background); }
+/*
+ * An open board stands on its background. The picture sits on its own layer so a blur
+ * or darkening touches only the picture, never the lists and cards on top of it.
+ */
+.workspace-shell .workspace-main.has-board-background { isolation: isolate; background: transparent; }
+.board-backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.board-backdrop::before { content: ''; position: absolute; inset: calc(-2 * var(--board-bg-blur, 0px)); background: var(--board-background); filter: var(--board-bg-filter, none); }
+.board-backdrop::after { content: ''; position: absolute; inset: 0; background: rgb(0 0 0 / var(--board-bg-dim, 0)); }
+
+/* Your own photo: the upload tile, and the editor for how a photo looks. */
+.bg-own { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ui-space-2); }
+.bg-own:has(.bg-own__current) { grid-template-columns: 112px minmax(0, 1fr); }
+.bg-own__current { height: 72px; }
+.bg-upload { position: relative; display: flex; align-items: center; gap: var(--ui-space-3); min-height: 72px; padding: var(--ui-space-3) var(--ui-space-4); border: 1.5px dashed var(--ui-border-strong); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--ui-duration-fast) var(--ui-ease), background var(--ui-duration-fast) var(--ui-ease); }
+.bg-upload:hover:not(:disabled), .bg-upload.is-over { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.bg-upload:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.bg-upload:disabled { cursor: progress; opacity: 0.75; }
+.bg-upload__icon { display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-link); }
+.bg-upload__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bg-upload__title { font-weight: 600; }
+.bg-upload__hint { color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.bg-own__actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
+
+.bg-adjust { display: flex; flex-direction: column; gap: var(--ui-space-4); }
+.bg-adjust__preview { position: relative; isolation: isolate; aspect-ratio: 16 / 10; overflow: hidden; border-radius: var(--ui-radius-lg); background: var(--ui-surface-3); cursor: crosshair; touch-action: none; user-select: none; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06); }
+.bg-adjust__preview:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.bg-adjust__lists { position: absolute; inset: 14% 8% auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6%; align-items: start; pointer-events: none; }
+.bg-adjust__list { display: flex; flex-direction: column; gap: 5px; padding: 6px; border-radius: var(--ui-radius-sm); background: rgb(255 255 255 / 0.82); box-shadow: 0 2px 8px rgb(0 0 0 / 0.18); backdrop-filter: blur(6px); }
+html[data-theme='dark'] .bg-adjust__list { background: rgb(18 26 24 / 0.82); }
+.bg-adjust__card { display: block; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--ui-text) 14%, transparent); }
+.bg-adjust__focus { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35); pointer-events: none; transition: left 60ms linear, top 60ms linear; }
+.bg-adjust__focus::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: #fff; }
+.bg-adjust__hint { margin: calc(-1 * var(--ui-space-2)) 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.bg-adjust__sliders { display: flex; flex-direction: column; gap: var(--ui-space-3); }
+.bg-adjust__slider { display: flex; flex-direction: column; gap: 6px; }
+.bg-adjust__label { display: flex; justify-content: space-between; gap: var(--ui-space-3); font-size: var(--ui-text-sm); font-weight: 600; }
+.bg-adjust__value { color: var(--ui-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.bg-adjust__slider input { width: 100%; min-height: 28px; margin: 0; accent-color: var(--ui-accent); cursor: pointer; }
+.bg-adjust__reset { align-self: flex-start; }
+@media (prefers-reduced-motion: reduce) {
+	.bg-adjust__focus { transition: none; }
+}

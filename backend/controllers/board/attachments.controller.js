@@ -1,7 +1,8 @@
-import cloudinary, { uploadsEnabled } from '../../lib/cloudinary.js'
+import { deleteImage, saveImage } from '../../services/fileStorage.service.js'
 import TaskActivity from '../../models/taskActivity.model.js'
 import { getCardAccess } from '../../services/boardAccess.service.js'
 import { emitTask } from '../../services/taskEvents.service.js'
+import Task from '../../models/task.model.js'
 
 // Card attachments: links and uploaded images.
 
@@ -34,11 +35,10 @@ export const addLinkAttachment = async (req, res) => {
 
 export const addImageAttachment = async (req, res) => {
 	try {
-		if (!uploadsEnabled()) return res.status(503).json({ message: 'File uploads are not set up on this server' })
 		const access = await getCardAccess(req.params.id, req.user._id)
 		if (!access) return res.status(404).json({ message: 'Task not found' })
-		const upload = await cloudinary.uploader.upload(req.body.image, { folder: `cards/${access.task._id}`, resource_type: 'image' })
-		const task = await addAttachmentRecord(access, req.user._id, { kind: 'image', url: upload.secure_url, name: req.body.name || '' })
+		const url = await saveImage({ dataUrl: req.body.image, folder: `cards/${access.task._id}`, maxBytes: 6 * 1024 * 1024 })
+		const task = await addAttachmentRecord(access, req.user._id, { kind: 'image', url, name: req.body.name || '' })
 		return res.status(201).json(task)
 	} catch (error) {
 		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
@@ -55,8 +55,11 @@ export const deleteAttachment = async (req, res) => {
 		if (!attachment) return res.status(404).json({ message: 'Attachment not found' })
 		const own = attachment.addedBy?.toString() === req.user._id.toString()
 		if (!own && !access.isManager) return res.status(403).json({ message: 'You can remove only what you attached' })
+		const removed = attachment.kind === 'image' ? attachment.url : ''
 		attachment.deleteOne()
 		await access.task.save()
+		// The file goes too, unless a copied card still shows it.
+		if (removed && !(await Task.exists({ 'attachments.url': removed }))) deleteImage(removed)
 		const task = await emitTask(access.board._id, access.task._id)
 		return res.status(200).json(task)
 	} catch (error) {

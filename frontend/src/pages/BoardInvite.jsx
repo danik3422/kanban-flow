@@ -16,6 +16,7 @@ import { useBoardStats } from '../store/useBoardStats'
 import { Alert, Avatar, Button, Field, Input, Skeleton } from '../ui'
 import { startPagePath } from '../lib/preferences'
 import { canAutoFocusTyping } from '../lib/autoFocus'
+import { useServerConfig } from '../lib/serverConfig'
 
 
 const PENDING_INVITE_KEY = 'kanban-pending-invite'
@@ -76,6 +77,7 @@ const PasteInvite = () => {
 const BoardInvite = () => {
 	const { token } = useParams()
 	const { t, language } = useI18n()
+	const signupOpen = useServerConfig((state) => state.signup !== false)
 	const navigate = useNavigate()
 	const authUser = useAuthStore((state) => state.authUser)
 	const logout = useAuthStore((state) => state.logout)
@@ -233,7 +235,7 @@ const BoardInvite = () => {
 				) : (
 					<div className='inv__actions'>
 						<Button as={Link} to={loginUrl} size='lg' block icon={LogIn}>{t('invite.signIn')}</Button>
-						<Button as={Link} to='/signup' variant='secondary' size='lg' block>{t('invite.signUp')}</Button>
+						{signupOpen && <Button as={Link} to='/signup' variant='secondary' size='lg' block>{t('invite.signUp')}</Button>}
 					</div>
 				)}
 				{expires && <p className='inv__note'>{t('invite.expires', { date: expires })}</p>}

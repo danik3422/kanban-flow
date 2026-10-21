@@ -7,6 +7,7 @@ import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../../../lib/dueDa
 import { CARD_COLORS, CARD_COLOR_KEYS } from '../model/cardDisplay'
 import { BackgroundSwatch } from '../../boards/backgrounds/BackgroundPicker'
 import { usePhotoSearch } from '../../boards/backgrounds/usePhotoSearch'
+import { assetUrl } from '../../../lib/runtimeConfig'
 
 const ColorSwatches = ({ value, onChange, label }) => {
 	const { t } = useI18n()
@@ -231,7 +232,7 @@ export const CoverPicker = ({ cover, images, onChange }) => {
 					<h4 className='cp-section'>{t('card.fromAttachments')}</h4>
 					<div className='cp-photos'>
 						{images.map((image) => (
-							<button key={image._id} type='button' className={cx('cp-photo', cover?.url === image.url && 'is-selected')} style={{ backgroundImage: `url("${image.url}")` }} aria-label={image.name || t('card.makeCover')} onClick={() => choose({ type: 'photo', id: `attachment-${image._id}`, url: image.url, thumb: image.url })} />
+							<button key={image._id} type='button' className={cx('cp-photo', cover?.url === image.url && 'is-selected')} style={{ backgroundImage: `url("${assetUrl(image.url)}")` }} aria-label={image.name || t('card.makeCover')} onClick={() => choose({ type: 'photo', id: `attachment-${image._id}`, url: image.url, thumb: image.url })} />
 						))}
 					</div>
 				</>

@@ -8,6 +8,7 @@ import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Session from '../models/session.model.js'
 import User from '../models/user.model.js'
+import { isAllowedOrigin } from '../middlewares/csrf.middleware.js'
 
 // Live updates over Socket.IO: who may connect, the rooms each socket joins
 // (user, session and the open board), and who is looking at which board.
@@ -25,7 +26,7 @@ export const createSocketServer = (httpServer) => {
 		// CORS does not cover WebSocket upgrades: refuse pages from other sites outright.
 		allowRequest: (req, callback) => {
 			const origin = req.headers.origin
-			callback(null, !origin || env.corsOrigin.includes(origin))
+			callback(null, !origin || isAllowedOrigin(origin, req.headers.host))
 		},
 	})
 

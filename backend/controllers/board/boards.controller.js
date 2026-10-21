@@ -13,7 +13,7 @@ import TimeEntry from '../../models/timeEntry.model.js'
 import User from '../../models/user.model.js'
 import { ensureBoardAccess } from '../../services/boardAccess.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
-import { normalizeBackground, reportUnsplashUse } from '../../services/boardBackgrounds.service.js'
+import { normalizeBackground, releaseUploadedBackground, reportUnsplashUse } from '../../services/boardBackgrounds.service.js'
 import { finishedColumnIdsOf } from '../../services/finishedColumns.service.js'
 import { boardLimitMessage, reachedBoardLimit } from '../../services/limits.service.js'
 
@@ -176,7 +176,7 @@ export const updateBoard = async (req, res) => {
 		const { name, visibility, background, description } = req.body
 		let nextBackground
 		try {
-			nextBackground = background === undefined ? undefined : normalizeBackground(background)
+			nextBackground = background === undefined ? undefined : normalizeBackground(background, { current: board.background })
 		} catch (error) {
 			return res.status(error.statusCode || 400).json({ message: error.message })
 		}
@@ -210,6 +210,7 @@ export const updateBoard = async (req, res) => {
 
 		const previousName = board.name
 		const previousVisibility = board.visibility
+		const previousBackground = board.background ? board.background.toObject?.() || board.background : null
 		board.name = trimmedName
 		const descriptionChanged = description !== undefined && description.trim() !== (board.description || '')
 		if (description !== undefined) board.description = description.trim()
@@ -266,6 +267,7 @@ export const updateBoard = async (req, res) => {
 			})
 		}
 		emitBoardEvent(board._id.toString(), 'board:updated', board.toObject())
+		if (previousBackground?.url && previousBackground.url !== board.background?.url) releaseUploadedBackground(previousBackground)
 
 		return res.status(200).json(board)
 	} catch (error) {
@@ -321,6 +323,7 @@ export const removeBoard = async (req, res) => {
 			if (memberId.toString() === userId.toString()) continue
 			revokeUserBoardAccess(memberId, boardId, { reason: 'board-deleted', boardName: board.name })
 		}
+		releaseUploadedBackground(board.background)
 
 		return res
 			.status(200)

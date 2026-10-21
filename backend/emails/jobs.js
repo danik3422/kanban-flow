@@ -6,6 +6,7 @@ import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
 import { sendDigestEmail } from './mailer.js'
 import { emailFrequencyOf, notifyTaskRecipients, wantsEmailFor } from '../services/notificationDelivery.service.js'
+import { env } from '../config/env.js'
 
 const MINUTE = 60 * 1000
 const DIGEST_INTERVAL = (Number(process.env.EMAIL_DIGEST_MINUTES) || 60) * MINUTE
@@ -101,7 +102,7 @@ let timer = null
 
 /** Every few minutes: due reminders, then digests. Not started in tests. */
 export const startEmailJobs = () => {
-	if (timer) return
+	if (timer || !env.mailEnabled) return
 	const tick = async () => {
 		try {
 			await runDueReminders()

@@ -11,12 +11,14 @@ import { loadFirebase } from '../lib/firebase'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button, Field, IconButton, Input, PasswordInput } from '../ui'
 import { canAutoFocusTyping } from '../lib/autoFocus'
+import { passkeysAvailable, useServerConfig } from '../lib/serverConfig'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const Login = () => {
 	const { t, language } = useI18n()
+	const signupOpen = useServerConfig((state) => state.signup !== false)
 	const { login, passkeyLogin, handleSocialSignin, isLoggingIn } = useAuthStore()
 	const [email, setEmail] = useState(() => sessionStorage.getItem(AUTH_EMAIL_KEY) || '')
 	const [password, setPassword] = useState('')
@@ -132,16 +134,16 @@ const Login = () => {
 				<Button type='submit' size='lg' block loading={isLoggingIn} iconRight={ArrowRight}>
 					{isLoggingIn ? t('auth.login.submitting') : emailLocked ? t('auth.login.submit') : t('auth.login.continue')}
 				</Button>
-				{emailLocked && (
+				{emailLocked && passkeysAvailable() && (
 					<Button variant='ghost' block icon={Fingerprint} onClick={handlePasskey} disabled={isLoggingIn} loading={isPasskeyPending}>
 						{t('auth.login.passkey')}
 					</Button>
 				)}
 			</form>
 			<ProviderButtons onSelect={handleSocialSignin} disabled={isLoggingIn} />
-			<p className='auth-footer'>
+			{signupOpen && <p className='auth-footer'>
 				{t('auth.login.newHere')} <Link className='auth-link' to='/signup'>{t('auth.login.createAccount')}</Link>
-			</p>
+			</p>}
 		</AuthLayout>
 	)
 }

@@ -6,9 +6,9 @@
 :root {
 	color-scheme: light;
 
-	/* One family for text and headings; it covers Latin and Cyrillic alike. */
-	--ui-font-body: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--ui-font-display: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	/* One family for text and headings; it covers Latin and Cyrillic alike and ships with the app (works offline). */
+	--ui-font-body: 'Onest Variable', 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--ui-font-display: 'Onest Variable', 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--ui-tracking-display: -0.025em;
 	--ui-tracking-caps: 0.06em;
 	--ui-leading-tight: 1.2;

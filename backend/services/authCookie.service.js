@@ -5,8 +5,8 @@ import { env } from '../config/env.js'
 const authCookieOptions = () => ({
 	httpOnly: true,
 	sameSite: 'strict',
-	// Browsers accept Secure cookies on http://localhost, so only local work goes without it.
-	secure: !env.isLocalEnvironment,
+	// HTTPS deployments mark it Secure; local work and plain-http self-hosting (COOKIE_SECURE=false) don't.
+	secure: env.cookieSecure,
 })
 
 export const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000

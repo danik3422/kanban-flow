@@ -16,7 +16,7 @@ Express + MongoDB API with Socket.IO live updates. `npm start` runs `index.js`; 
 - `emails/` builds and sends email (templates, translations, digests and reminders).
 - `realtime/` has the Socket.IO server: socket sign-in, board rooms and presence.
 - `lib/` has the infrastructure clients: database, Cloudinary, Firebase Admin and the realtime emitter.
-- `scripts/` has one-off migrations and demo data seeds (`npm run migrate:*`, `npm run seed:demo`).
+- `scripts/` has one-off migrations, demo data seeds and admin commands (`npm run migrate:*`, `npm run seed:demo`, `npm run create-user`, `npm run reset-password`).
 - `test/` has the API tests (`node --test`).
 
 ## Migrations
@@ -26,3 +26,11 @@ Run these once per environment after deploying the code that needs them:
 - `npm run migrate:provider-uids`
 - `npm run migrate:password-flags`
 - `npm run migrate:email-frequency` keeps email off for people who had turned it off before the email frequency setting existed. The server used to do this on every start.
+
+## Self-hosting
+
+The root `Dockerfile` and `docker-compose.yml` run this server together with the
+built web app and MongoDB; see [SELF_HOSTING.md](../SELF_HOSTING.md). Without
+Cloudinary, uploaded pictures are stored in `UPLOADS_DIR` and served at `/uploads`
+(`services/fileStorage.service.js`); without email, sign-up needs no confirmation
+(`EMAIL_VERIFICATION`). `GET /api/config` tells the web app what the server offers.

@@ -15,6 +15,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import { Avatar, Badge, Button, EmptyState, IconButton, Input, Menu, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
 import { boardToneFor } from '../features/boards/boardTone'
+import { peekCache } from '../lib/apiCache'
 
 const SORTS = ['name', 'open', 'overdue']
 const MANAGES = ['owner', 'admin']
@@ -53,8 +54,9 @@ const Team = () => {
 	const authUser = useAuthStore((state) => state.authUser)
 	const myId = String(authUser?._id || '')
 	const [searchParams, setSearchParams] = useSearchParams()
-	const [results, setResults] = useState([])
-	const [isLoading, setIsLoading] = useState(true)
+	// Saved on this device: people show at once and refresh behind them.
+	const [results, setResults] = useState(() => peekCache('/board/team') || [])
+	const [isLoading, setIsLoading] = useState(() => !peekCache('/board/team'))
 	const [loadError, setLoadError] = useState('')
 	const [reloadKey, setReloadKey] = useState(0)
 	const [query, setQuery] = useState('')

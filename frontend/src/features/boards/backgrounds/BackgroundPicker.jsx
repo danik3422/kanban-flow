@@ -8,10 +8,10 @@ import { usePhotoSearch } from './usePhotoSearch'
 import './board-background.css'
 
 /** One choosable background: a photo or colour tile with a check when selected. */
-export const BackgroundSwatch = ({ background, selected, label, onSelect, size = 'md' }) => (
+export const BackgroundSwatch = ({ background, selected, label, onSelect, size = 'md', className }) => (
 	<button
 		type='button'
-		className={cx('bg-swatch', `bg-swatch--${size}`, selected && 'is-selected')}
+		className={cx('bg-swatch', `bg-swatch--${size}`, selected && 'is-selected', className)}
 		style={{ background: backgroundCss(background, { thumb: true }) }}
 		aria-pressed={selected}
 		aria-label={label}
@@ -49,11 +49,11 @@ export const CompactPicker = ({ value, onChange, photos, onMore }) => {
 }
 
 /** "Board background": a taste of photos and colours, each with "View more". */
-export const BackgroundOverview = ({ value, onChange, photos, onOpenPhotos, onOpenColors, onClear }) => {
+export const BackgroundOverview = ({ value, onChange, photos, showPhotos = true, onOpenPhotos, onOpenColors, onClear }) => {
 	const { t } = useI18n()
 	return (
 		<div className='bg-browser'>
-			<section className='bg-browser__section'>
+			{showPhotos && <section className='bg-browser__section'>
 				<div className='bg-browser__head'>
 					<h3 className='bg-browser__title'>{t('backgrounds.photos')}</h3>
 					<Button variant='secondary' size='sm' onClick={onOpenPhotos}>{t('backgrounds.viewMore')}</Button>
@@ -65,7 +65,7 @@ export const BackgroundOverview = ({ value, onChange, photos, onOpenPhotos, onOp
 						))
 						: [0, 1, 2, 3, 4, 5].map((index) => <Skeleton key={index} height={72} radius={10} />)}
 				</div>
-			</section>
+			</section>}
 			<section className='bg-browser__section'>
 				<div className='bg-browser__head'>
 					<h3 className='bg-browser__title'>{t('backgrounds.colors')}</h3>

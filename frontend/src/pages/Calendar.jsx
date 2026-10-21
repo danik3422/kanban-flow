@@ -21,6 +21,7 @@ import { cx } from '../ui/utils'
 import { dayTitle, monthGrid, monthTitle, shiftMonth, weekdayNames, dateFromKey } from '../lib/calendarDates'
 import { resolveWeekStart } from '../lib/preferences'
 import { getDueDateKey, getLocalDateKey } from '../lib/dueDate'
+import { peekCache } from '../lib/apiCache'
 
 const SCOPE_KEY = 'kh:calendar-scope'
 const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
@@ -97,7 +98,8 @@ const Calendar = () => {
 				return list
 			})
 		let ignore = false
-		const cached = cacheRef.current.get(`${rangeFrom}|${rangeTo}`)
+		// This visit's months, then what the device saved earlier; either way a fresh copy follows.
+		const cached = cacheRef.current.get(`${rangeFrom}|${rangeTo}`) || peekCache('/board/calendar', params(rangeFrom, rangeTo))
 		queueMicrotask(() => {
 			if (ignore) return
 			if (cached) {

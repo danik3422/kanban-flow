@@ -45,7 +45,7 @@ const boardModel = new mongoose.Schema(
 		// A palette key or a photo (see services/boardBackgrounds.service.js); null means the plain theme.
 		background: {
 			type: new mongoose.Schema({
-				type: { type: String, enum: ['gradient', 'color', 'photo'], required: true },
+				type: { type: String, enum: ['gradient', 'color', 'photo', 'upload'], required: true },
 				key: String,
 				id: String,
 				url: String,
@@ -56,6 +56,18 @@ const boardModel = new mongoose.Schema(
 				// Where the photo is from (Unsplash, Wikimedia Commons) and its licence, for the credit.
 				source: String,
 				license: String,
+				// How a photo is shown: which point stays in view and the look on top of it.
+				adjust: {
+					type: new mongoose.Schema({
+						x: { type: Number, default: 50 },
+						y: { type: Number, default: 50 },
+						blur: { type: Number, default: 0 },
+						dim: { type: Number, default: 0 },
+						brightness: { type: Number, default: 100 },
+						saturate: { type: Number, default: 100 },
+					}, { _id: false }),
+					default: undefined,
+				},
 			}, { _id: false }),
 			default: null,
 		},

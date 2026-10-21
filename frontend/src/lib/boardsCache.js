@@ -1,3 +1,4 @@
+import { peekCache } from './apiCache'
 import { axiosInstance } from './axios'
 
 const BOARDS_CACHE_KEY = 'kanban-boards-cache'
@@ -51,8 +52,9 @@ export const getCachedBoards = (userId) => {
 	if (inMemoryUserId === userId && inMemoryBoards && Date.now() - inMemoryCachedAt <= BOARDS_CACHE_TTL) {
 		return inMemoryBoards
 	}
-	const cached = readSessionCache(userId)
-	if (cached) {
+	// Older than this visit: the copy saved on the device; callers refresh it once.
+	const cached = readSessionCache(userId) || (userId ? peekCache('/board/boards') : null)
+	if (Array.isArray(cached)) {
 		inMemoryBoards = cached
 		inMemoryCachedAt = Date.now()
 		inMemoryUserId = userId

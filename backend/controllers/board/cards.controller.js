@@ -1,6 +1,5 @@
 import mongoose from 'mongoose'
 
-import { uploadsEnabled } from '../../lib/cloudinary.js'
 import { emitBoardEvent } from '../../lib/realtime.js'
 import Column from '../../models/column.model.js'
 import Notification from '../../models/notification.model.js'
@@ -626,4 +625,4 @@ export const toggleWatchTask = async (req, res) => {
 	}
 }
 
-export const getFeatures = (req, res) => res.status(200).json({ uploads: uploadsEnabled() })
+export const getFeatures = (req, res) => res.status(200).json({ uploads: true })

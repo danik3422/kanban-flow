@@ -7,6 +7,7 @@ import { cx } from '../../../ui/utils'
 import { CARD_COLORS, dueTone, formatClock, formatDuration, labelColorKey } from '../model/cardDisplay'
 import { formatDueDate } from '../../../lib/dueDate'
 import './card.css'
+import { assetUrl } from '../../../lib/runtimeConfig'
 
 /** A live clock for a running timer, ticking only while it is shown. */
 const LiveClock = ({ since, base = 0 }) => {
@@ -37,7 +38,7 @@ const CardTile = ({ task, boardLabels, done, meId, canEdit, isDragSource, isFilt
 	const people = (task.assignees || []).filter((person) => person && typeof person === 'object').map((person) => ({ id: person._id, name: person.name || person.email, avatar: person.avatar }))
 	const cover = task.cover
 	const fullCover = cover?.size === 'full'
-	const coverStyle = cover ? (cover.type === 'color' ? { background: CARD_COLORS[cover.key] } : { backgroundImage: `url("${cover.thumb || cover.url}")`, backgroundColor: cover.color || '#5b6470' }) : null
+	const coverStyle = cover ? (cover.type === 'color' ? { background: CARD_COLORS[cover.key] } : { backgroundImage: `url("${assetUrl(cover.thumb || cover.url)}")`, backgroundColor: cover.color || '#5b6470' }) : null
 	const dateText = [task.startDate && formatDueDate(task.startDate, undefined, intlLocale(language)), task.dueDate && formatDueDate(task.dueDate, undefined, intlLocale(language))].filter(Boolean).join(' – ')
 
 	const badges = (

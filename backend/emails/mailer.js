@@ -1,3 +1,5 @@
+import nodemailer from 'nodemailer'
+
 import * as templates from './templates.js'
 import { env } from '../config/env.js'
 
@@ -10,9 +12,30 @@ const parseAddress = (value) => {
 		: { email: String(value || '').trim() }
 }
 
+let smtp = null
+const smtpTransport = () => {
+	smtp ??= nodemailer.createTransport({
+		host: env.smtpHost,
+		port: env.smtpPort,
+		secure: env.smtpSecure,
+		...(env.smtpUser ? { auth: { user: env.smtpUser, pass: env.smtpPass } } : {}),
+	})
+	return smtp
+}
+
+// Brevo's HTTP API on the hosted version; any SMTP server when SMTP_HOST is set.
 const sendEmail = async ({ email, subject, text, html }) => {
-	if (!env.brevoApiKey || !env.mailFrom) {
-		throw new Error('Brevo email API is not configured')
+	if (!env.mailEnabled) throw new Error('Email is not configured on this server')
+	if (env.smtpHost) {
+		await smtpTransport().sendMail({
+			from: env.mailFrom,
+			to: getRecipient(email),
+			subject,
+			text,
+			html,
+			...(env.mailReplyTo ? { replyTo: env.mailReplyTo } : {}),
+		})
+		return
 	}
 
 	const sender = parseAddress(env.mailFrom)

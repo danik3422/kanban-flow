@@ -208,3 +208,4 @@
 }
 /* Fields match the 48px buttons of the auth forms. */
 .auth-form .ui-control.ui-control { min-height: var(--ui-control-h-lg); }
+.auth-command { margin: var(--ui-space-3) 0 0; padding: var(--ui-space-3); overflow-x: auto; border-radius: var(--ui-radius-md); background: var(--ui-surface-2); color: var(--ui-text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ui-text-sm); white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }

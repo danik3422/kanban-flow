@@ -1,5 +1,8 @@
+import { assetUrl } from '../../../lib/runtimeConfig'
+
 // Board backgrounds drawn from the keys the server accepts
-// (backend/services/boardBackgrounds.service.js). Photos come from the server with their URLs.
+// (backend/services/boardBackgrounds.service.js). Photos come from the server with their
+// URLs; "upload" is a photo of the board's own, with `adjust` for how any photo is shown.
 
 export const GRADIENTS = {
 	midnight: { css: 'linear-gradient(135deg, #1e2a4a 0%, #1b2f5e 100%)', color: '#1d2d54' },
@@ -37,23 +40,44 @@ export const backgroundColorOf = (background) => {
 	return background.color || '#5b6470'
 }
 
+export const isPhotoBackground = (background) => background?.type === 'photo' || background?.type === 'upload'
+
+// How a photo is shown: focal point (%), blur (px), darkening (%), brightness and saturation (%).
+export const DEFAULT_ADJUST = { x: 50, y: 50, blur: 0, dim: 0, brightness: 100, saturate: 100 }
+export const adjustOf = (background) => ({ ...DEFAULT_ADJUST, ...(background?.adjust || {}) })
+
 /** CSS `background` for a board background; `thumb` uses the small photo. */
 export const backgroundCss = (background, { thumb = false } = {}) => {
 	if (!background) return ''
 	if (background.type === 'gradient') return GRADIENTS[background.key]?.css || ''
 	if (background.type === 'color') return COLORS[background.key] || ''
-	const url = thumb ? background.thumb || background.url : background.url
-	return url ? `${backgroundColorOf(background)} url("${encodeURI(decodeURI(url))}") center / cover no-repeat` : backgroundColorOf(background)
+	const url = assetUrl(thumb ? background.thumb || background.url : background.url)
+	const { x, y } = adjustOf(background)
+	return url ? `${backgroundColorOf(background)} url("${encodeURI(decodeURI(url))}") ${x}% ${y}% / cover no-repeat` : backgroundColorOf(background)
 }
 
-export const sameBackground = (a, b) => (a?.type === b?.type) && (a?.type === 'photo' ? a?.id === b?.id : a?.key === b?.key)
+/** CSS variables for the board's backdrop layer (see .board-backdrop): picture and its look. */
+export const backdropStyle = (background) => {
+	if (!background) return undefined
+	const { blur, dim, brightness, saturate } = adjustOf(background)
+	const photo = isPhotoBackground(background)
+	return {
+		'--board-background': backgroundCss(background),
+		'--board-bg-blur': `${photo ? blur : 0}px`,
+		'--board-bg-filter': photo ? `blur(${blur}px) brightness(${brightness}%) saturate(${saturate}%)` : 'none',
+		'--board-bg-dim': photo ? dim / 100 : 0,
+	}
+}
+
+export const sameBackground = (a, b) => (a?.type === b?.type) && (a?.type === 'photo' ? a?.id === b?.id : a?.type === 'upload' ? a?.url === b?.url : a?.key === b?.key)
 
 export const paletteBackground = (type, key) => ({ type, key })
 
 /** What the server needs to store a background (it fills photo URLs itself for curated photos). */
 export const backgroundPayload = (background) => {
 	if (!background) return null
+	if (background.type === 'upload') return { type: 'upload', url: background.url, ...(background.adjust ? { adjust: background.adjust } : {}) }
 	if (background.type !== 'photo') return { type: background.type, key: background.key }
-	const { id, url, thumb, color, author, authorUrl, downloadLocation, source, license } = background
-	return Object.fromEntries(Object.entries({ type: 'photo', id, url, thumb, color, author, authorUrl, downloadLocation, source, license }).filter(([, value]) => value))
+	const { id, url, thumb, color, author, authorUrl, downloadLocation, source, license, adjust } = background
+	return Object.fromEntries(Object.entries({ type: 'photo', id, url, thumb, color, author, authorUrl, downloadLocation, source, license, adjust }).filter(([, value]) => value))
 }

@@ -8,9 +8,10 @@ import PasswordDialog from './PasswordDialog'
 import { useI18n } from '../../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../../i18n/translate'
 import { axiosInstance } from '../../lib/axios'
-import { loadFirebase } from '../../lib/firebase'
+import { firebaseEnabled, loadFirebase } from '../../lib/firebase'
 import { useAuthStore } from '../../store/useAuthStore'
 import { Badge, Button, ConfirmDialog, Field, IconButton, Input, PasswordInput } from '../../ui'
+import { passkeysAvailable } from '../../lib/serverConfig'
 
 const PROVIDERS = ['google', 'microsoft', 'apple']
 const PROVIDER_LABELS = { google: 'Google', microsoft: 'Microsoft', apple: 'Apple', local: 'Email' }
@@ -49,7 +50,9 @@ const SecuritySection = () => {
 	const linked = authUser?.linkedProviders || []
 	const passkeys = authUser?.passkeys || []
 	const hasPasskey = Boolean(authUser?.passkeyEnabled) || passkeys.length > 0
-	const supportsPasskeys = typeof window !== 'undefined' && Boolean(window.PublicKeyCredential)
+	const supportsPasskeys = passkeysAvailable()
+	// Google, Microsoft and Apple need Firebase; a server without it shows only what is already linked.
+	const shownProviders = PROVIDERS.filter((provider) => firebaseEnabled || primary === provider || linked.some((link) => link.provider === provider))
 	const formatDate = (value) => new Intl.DateTimeFormat(intlLocale(language), { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
 
 	const open = (next) => {
@@ -176,9 +179,9 @@ const SecuritySection = () => {
 				</Row>
 			</ul>
 
-			<h3 className='st-subtitle'>{t('settings.methods.title')}</h3>
-			<ul className='st-card'>
-				{PROVIDERS.map((provider) => {
+			{shownProviders.length > 0 && <h3 className='st-subtitle'>{t('settings.methods.title')}</h3>}
+			{shownProviders.length > 0 && <ul className='st-card'>
+				{shownProviders.map((provider) => {
 					const isPrimary = primary === provider
 					const isConnected = isPrimary || linked.some((link) => link.provider === provider)
 					const canDisconnect = !isPrimary || hasPassword || hasPasskey || linked.length > 0
@@ -206,7 +209,7 @@ const SecuritySection = () => {
 						</Row>
 					)
 				})}
-			</ul>
+			</ul>}
 
 			<h3 className='st-subtitle'>{t('settings.passkeys.title')}</h3>
 			<ul className='st-card'>

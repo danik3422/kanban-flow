@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { pageMetaFor, SEO_LANGUAGES, SITE_URL } from './seo.js'
 
-const PUBLIC_ROUTES = ['/', '/about', '/login', '/signup']
+const PUBLIC_ROUTES = ['/', '/about', '/self-hosting', '/login', '/signup']
 const ALL_ROUTES = [...PUBLIC_ROUTES, '/public/abc123', '/invite/abc123', '/no-such-page', '/workspaces', '/workspaces/b1', '/my-tasks', '/calendar', '/team', '/profile', '/settings', '/setup-profile', '/login/resetpassword', '/verify-email']
 
 test('titles fit in 60 characters and descriptions in 155, in every language', () => {

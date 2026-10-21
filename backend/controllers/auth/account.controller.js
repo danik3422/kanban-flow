@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 
 import { env } from '../../config/env.js'
 import { sendAccountExistsEmail, sendAccountVerificationEmail } from '../../emails/mailer.js'
-import cloudinary from '../../lib/cloudinary.js'
+import { deleteImage, saveImage } from '../../services/fileStorage.service.js'
 import User from '../../models/user.model.js'
 import { publicUserFields } from '../../models/userFields.js'
 import { getDuplicateAuthErrorMessage } from '../../services/authChecks.service.js'
@@ -36,8 +36,18 @@ export const signup = async (req, res) => {
 			}
 		}
 
+		// Closed sign-up still lets the very first person in, so a new server gets its admin.
+		if (!env.signupOpen && (await User.estimatedDocumentCount()) > 0) {
+			return res.status(403).json({ message: 'Sign-up is closed on this server. Ask its admin for an account.' })
+		}
+
 		const normalizedEmail = email.trim().toLowerCase()
 		const existingUser = await User.findOne({ email: normalizedEmail })
+		// Without email (a self-hosted server with no mail) there is no way to tell the
+		// owner privately, and nothing to confirm: say plainly that the address is taken.
+		if (existingUser && !env.emailVerificationRequired) {
+			return res.status(409).json({ message: 'An account with this email already exists. Sign in instead.' })
+		}
 		if (existingUser) {
 			// Answer exactly like a new sign-up and tell the owner by email instead,
 			// so the form cannot be used to find out who has an account.
@@ -71,7 +81,7 @@ export const signup = async (req, res) => {
 			password: hashedPassword,
 			hasPassword: Boolean(hashedPassword),
 			provider,
-			emailVerified: provider !== 'local',
+			emailVerified: provider !== 'local' || !env.emailVerificationRequired,
 			emailVerificationTokenHash:
 				provider === 'local' ? verificationTokenHash : '',
 			emailVerificationTokenExpiresAt:
@@ -83,7 +93,7 @@ export const signup = async (req, res) => {
 
 		await newUser.save()
 
-		if (provider === 'local') {
+		if (provider === 'local' && env.emailVerificationRequired) {
 			const verificationUrl = `${env.frontendUrl}/verify-email?token=${rawVerificationToken}`
 			try {
 				await sendAccountVerificationEmail({
@@ -110,6 +120,7 @@ export const signup = async (req, res) => {
 			_id: newUser._id,
 			email: newUser.email,
 			provider: newUser.provider,
+			emailVerified: newUser.emailVerified,
 			profileSetup: newUser.profileSetup,
 		})
 	} catch (error) {
@@ -272,12 +283,11 @@ export const setupProfile = async (req, res) => {
 		if (name) user.name = name.trim()
 		if (jobTitle !== undefined) user.jobTitle = jobTitle.trim()
 		if (timezone) user.timezone = timezone
+		const previousAvatar = user.avatar
 		if (removeAvatar && !avatar && user.avatar) {
 			user.avatar = ''
 			// The stored file goes too; a failed cleanup must not block the profile.
-			Promise.resolve().then(() => cloudinary.uploader.destroy(`avatars/${user._id}-avatar`, { resource_type: 'image' })).catch((error) => {
-				console.error('Avatar cleanup failed:', error?.message || error)
-			})
+			deleteImage(previousAvatar)
 		}
 
 		// Accept only browser-compressed raster avatars within the JSON body budget.
@@ -287,14 +297,14 @@ export const setupProfile = async (req, res) => {
 			const avatarBytes = Buffer.from(avatarMatch[2], 'base64').byteLength
 			if (avatarBytes > 70 * 1024) return res.status(413).json({ message: 'Avatar must be 70 KB or smaller after compression.' })
 
-			const uploadRes = await cloudinary.uploader.upload(avatar, {
+			user.avatar = await saveImage({
+				dataUrl: avatar,
 				folder: 'avatars',
-				public_id: `${user._id}-avatar`,
-				overwrite: true,
-				resource_type: 'image',
-				transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
+				name: `${user._id}-avatar`,
+				cloudinaryOptions: { transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }] },
 			})
-			user.avatar = uploadRes.secure_url
+			// A file on this server gets a new name each time: drop the one it replaces.
+			if (previousAvatar && previousAvatar !== user.avatar && previousAvatar.startsWith('/uploads/')) deleteImage(previousAvatar)
 		}
 
 		user.profileSetup = true
