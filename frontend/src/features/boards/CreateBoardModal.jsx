@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { Button, ConfirmDialog, Field, Input, Modal, RadioCards } from '../../ui'
 import { cx } from '../../ui/utils'
-import { backgroundCss } from './backgrounds/boardBackground'
+import { useServerConfig } from '../../lib/serverConfig'
+import BackgroundAdjust from './backgrounds/BackgroundAdjust'
+import { backgroundCss, isPhotoBackground } from './backgrounds/boardBackground'
 import { BackgroundOverview, ColorsPanel, CompactPicker, PhotosPanel } from './backgrounds/BackgroundPicker'
+import { OwnPhoto, UploadSwatch } from './backgrounds/OwnPhoto'
 import { usePhotoSearch } from './backgrounds/usePhotoSearch'
 
 const VISIBILITY_ICONS = { private: Lock, workspace: Users, public: Globe }
@@ -31,7 +34,8 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 	const nameRef = useRef(null)
 	const [isConfirmingPublic, setIsConfirmingPublic] = useState(false)
 	const [view, setView] = useState('form')
-	const featured = usePhotoSearch('', open)
+	const photosOnline = useServerConfig((state) => state.photos)
+	const featured = usePhotoSearch('', open && photosOnline)
 
 	// Start on the main view each time, like a fresh form.
 	const [wasOpen, setWasOpen] = useState(open)
@@ -46,6 +50,12 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 		if (open && background === undefined && firstPhoto) queueMicrotask(() => onBackgroundChange({ type: 'photo', ...firstPhoto }))
 	}, [open, background, firstPhoto, onBackgroundChange])
 
+	// Your own photo waits in the browser until the board exists, then goes up with it.
+	const pickOwnPhoto = async ({ image, thumb, color }) => {
+		onBackgroundChange({ type: 'upload', url: image, thumb, color, pending: true })
+		return true
+	}
+
 	const chooseVisibility = (value) => {
 		if (value === 'public') setIsConfirmingPublic(true)
 		else onVisibilityChange(value)
@@ -56,6 +66,7 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 		overview: { title: t('backgrounds.title'), back: 'form' },
 		colors: { title: t('backgrounds.colors'), back: 'overview' },
 		photos: { title: t('backgrounds.photos'), back: 'overview' },
+		adjust: { title: t('backgrounds.adjust.title'), back: 'overview' },
 	}
 	const current = views[view]
 
@@ -93,7 +104,7 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 						<BoardPreview background={background} name={name.trim()} />
 						<div className='ui-field'>
 							<span className='ui-field__label'>{t('backgrounds.label')}</span>
-							<CompactPicker value={background} onChange={onBackgroundChange} photos={featured.photos} onMore={() => setView('overview')} />
+							<CompactPicker value={background} onChange={onBackgroundChange} photos={featured.photos} showPhotos={photosOnline} onMore={() => setView('overview')} upload={<UploadSwatch onPick={pickOwnPhoto} />} />
 						</div>
 						<Field label={t('boards.create.name')} error={error}>
 							<Input
@@ -121,8 +132,12 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 					</form>
 				)}
 				{view === 'overview' && (
-					<BackgroundOverview value={background} onChange={onBackgroundChange} photos={featured.photos} onOpenPhotos={() => setView('photos')} onOpenColors={() => setView('colors')} />
+					<div className='bg-browser'>
+						<OwnPhoto value={background} onPick={pickOwnPhoto} onAdjust={() => setView('adjust')} />
+						<BackgroundOverview value={background} onChange={onBackgroundChange} photos={featured.photos} showPhotos={photosOnline} onOpenPhotos={() => setView('photos')} onOpenColors={() => setView('colors')} />
+					</div>
 				)}
+				{view === 'adjust' && isPhotoBackground(background) && <BackgroundAdjust key={background.url || background.id} value={background} onChange={onBackgroundChange} />}
 				{view === 'colors' && <ColorsPanel value={background} onChange={onBackgroundChange} />}
 				{view === 'photos' && <PhotosPanel value={background} onChange={onBackgroundChange} />}
 			</Modal>

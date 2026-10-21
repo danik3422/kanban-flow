@@ -619,12 +619,23 @@ const Workspace = () => {
 		}
 		setIsSubmittingBoard(true)
 		setCreateBoardError('')
+		// A photo from the device can only be stored once the board exists.
+		const ownPhoto = newBoardBackground?.pending ? newBoardBackground : null
 		try {
-			const { data } = await axiosInstance.post('/board/boards', {
+			let { data } = await axiosInstance.post('/board/boards', {
 				name: newBoardName.trim(),
 				visibility: newBoardVisibility,
-				background: backgroundPayload(newBoardBackground),
+				background: ownPhoto ? null : backgroundPayload(newBoardBackground),
 			})
+			if (ownPhoto) {
+				try {
+					const { url: image, thumb, color, adjust } = ownPhoto
+					const uploaded = await axiosInstance.post(`/board/boards/${data._id}/background/upload`, { image, thumb, color, ...(adjust ? { adjust } : {}) }, { timeout: 90_000 })
+					data = { ...data, background: uploaded.data.background || null }
+				} catch (error) {
+					toast.error(translateServerMessageCurrent(error.response?.data?.message, 'backgrounds.own.errors.upload'))
+				}
+			}
 			setBoards((current) => [data, ...current])
 			setSelectedBoard(data)
 			setIsActivityLoading(true)

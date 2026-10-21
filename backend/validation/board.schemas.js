@@ -45,6 +45,7 @@ export const backgroundUploadSchema = z.object({
 	image: z.string().max(7 * 1024 * 1024),
 	thumb: z.string().max(400 * 1024),
 	color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+	adjust: backgroundAdjust.optional(),
 }).strict()
 
 export const createBoardSchema = z.object({

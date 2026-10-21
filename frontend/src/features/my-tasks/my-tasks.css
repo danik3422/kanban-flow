@@ -1,9 +1,5 @@
 /* My tasks: a to-do list grouped by when things are due. */
 
-/* Readable width: the list keeps to 960px, left-aligned, however wide the window is. */
-.mt-page > * { max-width: 960px; }
-.mt-page > .mt-toolbar { max-width: calc(960px + 2 * var(--ui-space-2)); }
-
 /* Search, filters and grouping share one 40px row that stays reachable while the list scrolls. */
 .mt-toolbar { position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 5; display: flex; align-items: center; gap: var(--ui-space-2); margin: 0 calc(-1 * var(--ui-space-2)); padding: var(--ui-space-2); background: var(--ui-bg); }
 .mt-toolbar__search { flex: 1 1 240px; min-width: 0; max-width: 360px; }
@@ -76,8 +72,9 @@
 .mt-row__actions { position: relative; display: none; flex: 0 0 auto; align-self: center; align-items: center; gap: 2px; padding-right: var(--ui-space-2); }
 .mt-row__date-input { position: absolute; bottom: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 @media (hover: hover) and (min-width: 721px) {
-	.mt-row__actions { display: flex; opacity: 0; transition: opacity var(--ui-duration) var(--ui-ease); }
-	.mt-row:hover .mt-row__actions, .mt-row:focus-within .mt-row__actions { opacity: 1; }
+	/* Laid over the right edge so, hidden, they leave no gap after the avatars. */
+	.mt-row__actions { display: flex; position: absolute; top: 0; right: 0; bottom: 0; padding-left: var(--ui-space-8); background: linear-gradient(to right, transparent, var(--ui-surface-2) var(--ui-space-8)); opacity: 0; pointer-events: none; transition: opacity var(--ui-duration) var(--ui-ease); }
+	.mt-row:hover .mt-row__actions, .mt-row:focus-within .mt-row__actions { opacity: 1; pointer-events: auto; }
 	.mt-row:hover .mt-row__people, .mt-row:focus-within .mt-row__people { display: none; }
 }
 @media (max-width: 720px) {

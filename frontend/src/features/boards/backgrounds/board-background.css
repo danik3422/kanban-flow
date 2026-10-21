@@ -10,6 +10,9 @@
 .bg-swatch__check { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgb(15 23 42 / 0.72); }
 .bg-swatch--more { background: var(--ui-surface-2); color: var(--ui-text-2); box-shadow: inset 0 0 0 1px var(--ui-border); }
 .bg-swatch--more:hover { background: var(--ui-surface-3); color: var(--ui-text); }
+.bg-swatch--upload { background: var(--ui-surface-2); color: var(--ui-link); box-shadow: none; outline: 1.5px dashed var(--ui-border-strong); outline-offset: -1.5px; }
+.bg-swatch--upload:hover, .bg-swatch--upload.is-over { background: var(--ui-accent-soft); outline-color: var(--ui-accent); }
+.bg-swatch--upload:disabled { cursor: progress; }
 
 .bg-compact { display: flex; flex-direction: column; gap: var(--ui-space-2); }
 .bg-compact__photos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ui-space-2); }
@@ -65,16 +68,19 @@
 .board-backdrop::after { content: ''; position: absolute; inset: 0; background: rgb(0 0 0 / var(--board-bg-dim, 0)); }
 
 /* Your own photo: the upload tile, and the editor for how a photo looks. */
-.bg-own { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ui-space-2); }
-.bg-own:has(.bg-own__current) { grid-template-columns: 112px minmax(0, 1fr); }
-.bg-own__current { height: 72px; }
+/* With a photo in place: a wide preview (two of three columns) and a tile for another. */
+.bg-own { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ui-space-2); }
+.bg-own__current { grid-column: span 2; }
+.bg-own__hint { margin: calc(-1 * var(--ui-space-1)) 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .bg-upload { position: relative; display: flex; align-items: center; gap: var(--ui-space-3); min-height: 72px; padding: var(--ui-space-3) var(--ui-space-4); border: 1.5px dashed var(--ui-border-strong); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--ui-duration-fast) var(--ui-ease), background var(--ui-duration-fast) var(--ui-ease); }
 .bg-upload:hover:not(:disabled), .bg-upload.is-over { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
 .bg-upload:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
 .bg-upload:disabled { cursor: progress; opacity: 0.75; }
 .bg-upload__icon { display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-link); }
 .bg-upload__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bg-upload__title { font-weight: 600; }
+.bg-upload__title { font-weight: 600; line-height: 1.3; }
+.bg-upload--tile { flex-direction: column; justify-content: center; gap: var(--ui-space-2); min-height: 96px; padding: var(--ui-space-2); font-size: var(--ui-text-sm); text-align: center; }
+.bg-upload--tile .bg-upload__icon { width: 36px; height: 36px; }
 .bg-upload__hint { color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .bg-own__actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 

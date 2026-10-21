@@ -1359,7 +1359,7 @@ const ru = {
 			title: 'Ваше фото',
 			current: 'Ваше фото, настроить',
 			upload: 'Загрузить фото',
-			replace: 'Загрузить другое фото',
+			replace: 'Другое фото',
 			uploading: 'Загрузка…',
 			hint: 'JPG, PNG, WebP или GIF до 25 МБ. Большие фото уменьшаются.',
 			errors: {

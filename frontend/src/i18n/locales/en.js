@@ -1352,7 +1352,7 @@ const en = {
 			title: 'Your photo',
 			current: 'Your photo, adjust it',
 			upload: 'Upload a photo',
-			replace: 'Upload another photo',
+			replace: 'Another photo',
 			uploading: 'Uploading…',
 			hint: 'JPG, PNG, WebP or GIF up to 25 MB. Large photos are resized.',
 			errors: {

@@ -1,4 +1,4 @@
-import { Check, Loader2, MoreHorizontal, Search, SearchX } from 'lucide-react'
+import { Check, ImageOff, Loader2, MoreHorizontal, Search, SearchX } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../../i18n'
 import { Button, EmptyState, Input, Skeleton } from '../../../ui'
@@ -24,22 +24,29 @@ export const BackgroundSwatch = ({ background, selected, label, onSelect, size =
 
 const photoLabel = (t, photo) => (photo.author ? t('backgrounds.photoBy', { name: photo.author }) : t('backgrounds.photo'))
 
-/** Create-board row: four photos, five gradients and "more". */
-export const CompactPicker = ({ value, onChange, photos, onMore }) => {
+/**
+ * Create-board rows: four photos (your own first once picked), then gradients, the
+ * `upload` tile when given, and "more".
+ */
+export const CompactPicker = ({ value, onChange, photos, showPhotos = true, onMore, upload }) => {
 	const { t } = useI18n()
+	const own = value?.type === 'upload' ? value : null
+	const photoCount = own ? 3 : 4
 	return (
 		<div className='bg-compact' role='group' aria-label={t('backgrounds.title')}>
-			<div className='bg-compact__photos'>
+			{(showPhotos || own) && <div className='bg-compact__photos'>
+				{own && <BackgroundSwatch background={own} selected label={t('backgrounds.own.title')} onSelect={onChange} />}
 				{photos.length
-					? photos.slice(0, 4).map((photo) => (
+					? photos.slice(0, photoCount).map((photo) => (
 						<BackgroundSwatch key={photo.id} background={{ type: 'photo', ...photo }} selected={sameBackground(value, { type: 'photo', id: photo.id })} label={photoLabel(t, photo)} onSelect={onChange} />
 					))
-					: [0, 1, 2, 3].map((index) => <Skeleton key={index} height={44} radius={8} />)}
-			</div>
+					: showPhotos && Array.from({ length: photoCount }, (_, index) => <Skeleton key={index} height={44} radius={8} />)}
+			</div>}
 			<div className='bg-compact__colors'>
-				{GRADIENT_KEYS.slice(0, 5).map((key) => (
+				{GRADIENT_KEYS.slice(0, upload ? 4 : 5).map((key) => (
 					<BackgroundSwatch key={key} size='sm' background={paletteBackground('gradient', key)} selected={sameBackground(value, paletteBackground('gradient', key))} label={t(`backgrounds.gradients.${key}`)} onSelect={onChange} />
 				))}
+				{upload}
 				<button type='button' className='bg-swatch bg-swatch--sm bg-swatch--more' onClick={onMore} aria-label={t('backgrounds.more')} title={t('backgrounds.more')}>
 					<MoreHorizontal size={18} aria-hidden='true' />
 				</button>
@@ -78,7 +85,7 @@ export const BackgroundOverview = ({ value, onChange, photos, showPhotos = true,
 				</div>
 			</section>
 			{onClear && value && (
-				<Button variant='ghost' onClick={onClear} className='bg-browser__clear'>{t('backgrounds.clear')}</Button>
+				<Button variant='secondary' icon={ImageOff} onClick={onClear} className='bg-browser__clear'>{t('backgrounds.clear')}</Button>
 			)}
 		</div>
 	)
