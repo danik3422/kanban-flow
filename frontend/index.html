@@ -12,10 +12,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Fonts load without blocking the first paint; system fonts show until they arrive. -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" /></noscript>
-    <meta name="theme-color" content="#f4f7f5" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" /></noscript>
+    <meta name="theme-color" content="#f6f7f6" />
     <!-- Apply the saved theme and language before the first paint, so a dark page never flashes white. -->
     <script>
       (function () {
@@ -25,15 +25,15 @@
           var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           root.setAttribute('data-theme', dark ? 'dark' : 'light')
           root.style.colorScheme = dark ? 'dark' : 'light'
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0e1513' : '#f4f7f5')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0b1110' : '#f6f7f6')
           var language = (localStorage.getItem('kanban-language') || '').slice(0, 2)
           if (/^(en|uk|ru)$/.test(language)) root.setAttribute('lang', language)
         } catch (error) {}
       })()
     </script>
     <style>
-      html { background: #f4f7f5; }
-      html[data-theme='dark'] { background: #0e1513; }
+      html { background: #f6f7f6; }
+      html[data-theme='dark'] { background: #0b1110; }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Defaults for the home page; src/lib/seo.js rewrites these per route and language. -->

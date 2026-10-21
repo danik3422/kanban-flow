@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 
-export const COLUMN_COLORS = ['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']
+const COLUMN_COLORS = ['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']
 
 const columnSchema = new mongoose.Schema(
 	{

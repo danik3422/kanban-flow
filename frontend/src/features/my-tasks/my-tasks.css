@@ -1,0 +1,98 @@
+/* My tasks: a to-do list grouped by when things are due. */
+
+/* Readable width: the list keeps to 960px, left-aligned, however wide the window is. */
+.mt-page > * { max-width: 960px; }
+.mt-page > .mt-toolbar { max-width: calc(960px + 2 * var(--ui-space-2)); }
+
+/* Search, filters and grouping share one 40px row that stays reachable while the list scrolls. */
+.mt-toolbar { position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 5; display: flex; align-items: center; gap: var(--ui-space-2); margin: 0 calc(-1 * var(--ui-space-2)); padding: var(--ui-space-2); background: var(--ui-bg); }
+.mt-toolbar__search { flex: 1 1 240px; min-width: 0; max-width: 360px; }
+.mt-toolbar__selects { display: flex; align-items: center; gap: var(--ui-space-1); }
+.mt-toolbar__filter.is-active { border-color: var(--ui-accent); }
+.mt-toolbar__filter-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--ui-radius-full); background: var(--ui-accent); color: var(--ui-accent-text); font-size: var(--ui-text-xs); font-weight: 700; }
+.mt-toolbar__group { flex: 0 0 auto; margin-left: auto; }
+.mt-toolbar__sheet-trigger { position: relative; display: none; }
+.mt-toolbar__dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-bg); pointer-events: none; }
+@media (max-width: 720px) {
+	/* Phones: search and the filter sheet on one line, grouping below; nothing sticks but the headings. */
+	.mt-toolbar { position: static; flex-wrap: wrap; margin: 0; padding: 0; background: transparent; }
+	.mt-toolbar__search { flex: 1 1 0; max-width: none; }
+	.mt-toolbar__search input { font-size: var(--ui-text-lg); }
+	.mt-toolbar__selects { display: none; }
+	.mt-toolbar__sheet-trigger { display: inline-flex; }
+	.mt-toolbar__sheet-trigger .ui-icon-btn { --btn-size: 44px; }
+	.mt-toolbar__group { display: flex; flex: 1 1 100%; margin-left: 0; }
+	.mt-toolbar__group .ui-segmented__option { flex: 1 1 0; }
+}
+.mt-sheet { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.mt-sheet .ui-field__label:not(:first-child) { margin-top: var(--ui-space-3); }
+
+/* Status chips: counts that also filter. One line, scrolls sideways on phones. */
+.mt-chips { display: flex; gap: var(--ui-space-2); margin: 0 calc(-1 * var(--ui-space-4)); padding: 0 var(--ui-space-4) 2px; overflow-x: auto; scrollbar-width: none; }
+.mt-chips::-webkit-scrollbar { display: none; }
+.mt-chips .ui-chip { flex: 0 0 auto; }
+.mt-chip--danger:not([aria-pressed='true']) .ui-segmented__count { color: var(--ui-danger-soft-text); font-weight: 700; }
+@media (min-width: 721px) {
+	.mt-chips { margin: 0; padding: 0; overflow: visible; flex-wrap: wrap; }
+}
+
+.mt-section { display: flex; flex-direction: column; gap: var(--ui-space-2); margin-top: var(--ui-space-2); }
+/* Each heading sticks under the toolbar until its group scrolls away. */
+.mt-section__title { position: sticky; top: calc(112px + env(safe-area-inset-top)); z-index: 4; display: flex; align-items: center; gap: var(--ui-space-2); min-height: 32px; margin: 0; background: var(--ui-bg); color: var(--ui-text-2); font-family: var(--ui-font-display); font-size: var(--ui-text-sm); font-weight: 600; }
+.mt-section__count { color: var(--ui-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.mt-section--danger .mt-section__title > span:first-child, .mt-section--danger .mt-section__count { color: var(--ui-danger-soft-text); }
+.mt-section__link { margin-left: auto; }
+@media (max-width: 720px) {
+	.mt-section__title { top: calc(56px + env(safe-area-inset-top)); }
+}
+
+.mt-card { margin: 0; padding: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface); box-shadow: var(--ui-shadow-xs); overflow: hidden; }
+.mt-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.mt-row { position: relative; display: flex; align-items: flex-start; min-height: 56px; border-top: 1px solid var(--ui-border); transition: background var(--ui-duration) var(--ui-ease); }
+.mt-row:first-child { border-top: 0; }
+.mt-row:not(.is-loading):hover { background: var(--ui-surface-2); }
+.mt-row.is-loading .mt-row__main { gap: var(--ui-space-2); }
+
+.mt-row__check { display: grid; place-items: start center; width: 48px; align-self: stretch; flex: 0 0 auto; padding: var(--ui-space-3) 0 0; border: 0; background: transparent; cursor: pointer; }
+.mt-row__check:disabled { cursor: not-allowed; }
+.mt-row__check:focus-visible { outline: none; box-shadow: inset var(--ui-focus-ring); }
+.mt-row__box { display: grid; place-items: center; width: 20px; height: 20px; border: 2px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); color: var(--ui-accent-text); transition: background var(--ui-duration) var(--ui-ease), border-color var(--ui-duration) var(--ui-ease); }
+.mt-row__check:not(:disabled):hover .mt-row__box { border-color: var(--ui-accent); }
+.mt-row__check:disabled .mt-row__box { border-style: solid; opacity: 0.4; }
+.mt-row.is-done .mt-row__box { border-color: var(--ui-accent); background: var(--ui-accent); }
+
+.mt-row__main { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; padding: var(--ui-space-3) var(--ui-space-3) var(--ui-space-3) 0; border: 0; background: transparent; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; }
+.mt-row__main:focus-visible { outline: none; box-shadow: inset var(--ui-focus-ring); border-radius: var(--ui-radius-md); }
+.mt-row__title { overflow: hidden; font-size: var(--ui-text-md); font-weight: 500; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
+.mt-row.is-done .mt-row__title { color: var(--ui-text-muted); text-decoration: line-through; }
+.mt-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--ui-space-2); color: var(--ui-text-2); font-size: var(--ui-text-sm); }
+.mt-row__where { overflow: hidden; max-width: 100%; color: var(--ui-text-muted); white-space: nowrap; text-overflow: ellipsis; }
+.mt-row__checklist { display: inline-flex; align-items: center; gap: 4px; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
+.mt-row__label { padding: 1px 8px; border-radius: var(--ui-radius-full); background: var(--ui-surface-3); color: var(--ui-text-2); font-size: var(--ui-text-xs); }
+.mt-row__people { flex: 0 0 auto; align-self: center; padding-right: var(--ui-space-3); }
+.mt-row.is-done .mt-row__meta, .mt-row.is-done .mt-row__people { opacity: 0.7; }
+
+/* Quick edits appear on hover or keyboard focus with a mouse; phones open the task instead. */
+.mt-row__actions { position: relative; display: none; flex: 0 0 auto; align-self: center; align-items: center; gap: 2px; padding-right: var(--ui-space-2); }
+.mt-row__date-input { position: absolute; bottom: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+@media (hover: hover) and (min-width: 721px) {
+	.mt-row__actions { display: flex; opacity: 0; transition: opacity var(--ui-duration) var(--ui-ease); }
+	.mt-row:hover .mt-row__actions, .mt-row:focus-within .mt-row__actions { opacity: 1; }
+	.mt-row:hover .mt-row__people, .mt-row:focus-within .mt-row__people { display: none; }
+}
+@media (max-width: 720px) {
+	.mt-row { min-height: 64px; }
+	.mt-row__check { width: 52px; }
+	.mt-row__title { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+	.mt-row__people { display: none; }
+}
+
+.mt-done-toggle { display: inline-flex; align-items: center; gap: var(--ui-space-2); align-self: flex-start; min-height: 44px; padding: 0 var(--ui-space-2); border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-2); font: inherit; font-family: var(--ui-font-display); font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.mt-done-toggle:hover { background: var(--ui-surface-2); }
+.mt-done-toggle:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.mt-done-toggle__icon { transition: transform var(--ui-duration) var(--ui-ease); transform: rotate(-90deg); }
+.mt-done-toggle__icon.is-open { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+	.mt-row, .mt-row__box, .mt-row__actions, .mt-done-toggle__icon { transition: none; }
+}

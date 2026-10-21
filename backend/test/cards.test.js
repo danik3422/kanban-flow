@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
-import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
+import { sessionCookie } from './helpers.js'
 import { after, before, beforeEach, describe, it } from 'node:test'
 
-import { env } from '../config/env.js'
 import { app } from '../index.js'
 import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
@@ -17,7 +16,7 @@ import TimeEntry from '../models/timeEntry.model.js'
 import User from '../models/user.model.js'
 
 let mongoServer
-const cookie = (user) => [`jwt=${jwt.sign({ userId: user._id.toString() }, env.jwtSecret)}`]
+const cookie = (user) => sessionCookie(user._id)
 const api = (method, path, user) => request(app)[method](`/api/board${path}`).set('Cookie', cookie(user))
 
 before(async () => {
@@ -78,16 +77,18 @@ describe('card fields', () => {
 
 describe('board labels', () => {
 	it('creates, renames everywhere and deletes everywhere', async () => {
-		const { member, board, card } = await setup()
+		const { owner, member, board, card } = await setup()
 		const created = await api('post', `/boards/${board._id}/labels`, member).send({ name: 'Design', color: 'purple' })
 		assert.equal(created.status, 201)
 		assert.equal((await api('post', `/boards/${board._id}/labels`, member).send({ name: 'design', color: 'red' })).status, 400, 'names are unique, ignoring case')
 		assert.equal((await api('post', `/boards/${board._id}/labels`, member).send({ name: 'X', color: 'neon' })).status, 400)
 		const labelId = created.body[0]._id
-		const renamed = await api('patch', `/boards/${board._id}/labels/${labelId}`, member).send({ name: 'UI', color: 'blue' })
+		assert.equal((await api('patch', `/boards/${board._id}/labels/${labelId}`, member).send({ name: 'UI' })).status, 403, 'renaming rewrites every card, so members cannot')
+		assert.equal((await api('delete', `/boards/${board._id}/labels/${labelId}`, member)).status, 403)
+		const renamed = await api('patch', `/boards/${board._id}/labels/${labelId}`, owner).send({ name: 'UI', color: 'blue' })
 		assert.equal(renamed.body[0].name, 'UI')
 		assert.deepEqual([...(await Task.findById(card._id)).labels], ['UI'], 'cards follow the new name')
-		await api('delete', `/boards/${board._id}/labels/${labelId}`, member)
+		await api('delete', `/boards/${board._id}/labels/${labelId}`, owner)
 		assert.deepEqual([...(await Task.findById(card._id)).labels], [], 'cards lose a deleted label')
 		assert.equal((await Board.findById(board._id)).labels.length, 0)
 	})

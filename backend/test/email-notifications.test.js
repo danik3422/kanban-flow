@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
-import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
+import { sessionCookie } from './helpers.js'
 import { after, before, beforeEach, describe, it } from 'node:test'
 
 import { env } from '../config/env.js'
 import { app } from '../index.js'
-import { runDueReminders, runEmailDigests } from '../lib/emailJobs.js'
-import { PREVIEW_NAMES, renderPreview } from '../lib/emails/preview.js'
+import { runDueReminders, runEmailDigests } from '../emails/jobs.js'
+import { PREVIEW_NAMES, renderPreview } from '../emails/preview.js'
 import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
@@ -20,7 +20,7 @@ let mongoServer
 const sent = []
 const originalFetch = globalThis.fetch
 const settled = () => new Promise((resolve) => setTimeout(resolve, 150))
-const cookie = (user) => [`jwt=${jwt.sign({ userId: user._id.toString() }, env.jwtSecret)}`]
+const cookie = (user) => sessionCookie(user._id)
 
 before(async () => {
 	mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })

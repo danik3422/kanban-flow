@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
-import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
+import { sessionCookie } from './helpers.js'
 import { after, before, beforeEach, describe, it } from 'node:test'
 
-import { env } from '../config/env.js'
 import { app } from '../index.js'
 import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
@@ -14,7 +13,7 @@ import Task from '../models/task.model.js'
 import User from '../models/user.model.js'
 
 let mongoServer
-const cookie = (user) => [`jwt=${jwt.sign({ userId: user._id.toString() }, env.jwtSecret)}`]
+const cookie = (user) => sessionCookie(user._id)
 
 before(async () => {
 	mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })

@@ -1,0 +1,69 @@
+/* The card description editor: a toolbar over a content-editable area. */
+.rich-text-editor {
+	display: grid;
+	min-height: 188px;
+	overflow: hidden;
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius-md);
+	background: var(--ui-surface);
+	transition:
+		border-color var(--ui-duration) var(--ui-ease),
+		box-shadow var(--ui-duration) var(--ui-ease);
+}
+.rich-text-editor:hover { border-color: var(--ui-border-strong); }
+.rich-text-editor:focus-within {
+	border-color: var(--ui-accent);
+	box-shadow: var(--ui-focus-ring);
+}
+.rich-text-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-height: 42px;
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--ui-border);
+	background: var(--ui-surface-2);
+}
+.rich-text-tool {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	border: 0;
+	border-radius: var(--ui-radius-sm);
+	color: var(--ui-text-muted);
+	background: transparent;
+	transition: background var(--ui-duration-fast) var(--ui-ease), color var(--ui-duration-fast) var(--ui-ease);
+}
+.rich-text-tool:hover,
+.rich-text-tool:focus-visible {
+	color: var(--ui-link);
+	background: var(--ui-accent-soft);
+	outline: none;
+}
+.rich-text-input {
+	min-height: 142px;
+	padding: 14px 15px;
+	overflow-y: auto;
+	outline: 0;
+	color: var(--ui-text);
+	font-size: var(--ui-text-md);
+	line-height: var(--ui-leading);
+}
+.rich-text-input:empty::before {
+	content: attr(data-placeholder);
+	color: var(--ui-text-muted);
+	pointer-events: none;
+}
+.rich-text-input p { margin: 0 0 8px; }
+.rich-text-input ul,
+.rich-text-input ol { margin: 0 0 8px 20px; }
+.rich-text-input ul { list-style: disc; }
+.rich-text-input ol { list-style: decimal; }
+.rich-text-input pre {
+	padding: 8px 10px;
+	border-radius: var(--ui-radius-sm);
+	background: var(--ui-surface-2);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--ui-text-sm);
+}

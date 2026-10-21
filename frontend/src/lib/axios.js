@@ -11,6 +11,8 @@ export const axiosInstance = axios.create({
 	baseURL: apiBaseUrl,
 	withCredentials: true,
 	timeout: 8000,
+	// The API's CSRF check accepts requests without an Origin only when they carry this.
+	headers: { 'X-Requested-With': 'XMLHttpRequest' },
 })
 
 // A static host or dev server answers unknown /api paths with index.html.

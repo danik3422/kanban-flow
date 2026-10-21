@@ -2,15 +2,15 @@ import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, RotateCcw, X 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import MyTaskRow from '../components/app/MyTaskRow'
-import '../components/app/my-tasks.css'
-import '../components/calendar/calendar.css'
-import MonthGrid from '../components/calendar/MonthGrid'
-import QuickCreateTask from '../components/calendar/QuickCreateTask'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import useTaskActions from '../hooks/useTaskActions'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import MyTaskRow from '../features/my-tasks/MyTaskRow'
+import '../features/my-tasks/my-tasks.css'
+import '../features/calendar/calendar.css'
+import MonthGrid from '../features/calendar/MonthGrid'
+import QuickCreateTask from '../features/calendar/QuickCreateTask'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
+import useTaskActions from '../features/my-tasks/useTaskActions'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
@@ -18,9 +18,9 @@ import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
 import { Alert, Badge, Button, EmptyState, IconButton, SegmentedControl, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
-import { dayTitle, monthGrid, monthTitle, shiftMonth, weekdayNames, dateFromKey } from '../utils/calendar'
-import { resolveWeekStart } from '../utils/preferences'
-import { getDueDateKey, getLocalDateKey } from '../utils/dueDate'
+import { dayTitle, monthGrid, monthTitle, shiftMonth, weekdayNames, dateFromKey } from '../lib/calendarDates'
+import { resolveWeekStart } from '../lib/preferences'
+import { getDueDateKey, getLocalDateKey } from '../lib/dueDate'
 
 const SCOPE_KEY = 'kh:calendar-scope'
 const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
@@ -264,8 +264,8 @@ const Calendar = () => {
 	)
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
@@ -273,10 +273,10 @@ const Calendar = () => {
 				isCollapsed={isSidebarCollapsed}
 				primaryAction={noBoards ? undefined : { label: t('calendar.addTaskOn', { day: dayTitle(selectedKey, language) }), onClick: () => openCreate(selectedKey) }}
 			/>
-			<main className='workspace-main flex-1 overflow-auto'>
-				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+			<main className='workspace-main'>
+				<AppTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('calendar.title')}</span>
-				</WorkspaceTopbar>
+				</AppTopbar>
 				<div className='app-page cal-page'>
 					{header}
 					{loadError && (

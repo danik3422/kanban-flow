@@ -39,14 +39,3 @@ export const connectDB = async () => {
 		await connectToMemoryDatabase()
 	}
 }
-
-export const closeDB = async () => {
-	try {
-		await mongoose.disconnect()
-		if (memoryServer) {
-			await memoryServer.stop()
-		}
-	} catch (error) {
-		console.error('Database shutdown failed:', error)
-	}
-}

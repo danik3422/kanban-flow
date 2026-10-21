@@ -1,19 +1,19 @@
 import { Monitor, Moon, Pencil, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import '../components/settings/settings.css'
-import NotificationSettings from '../components/settings/NotificationSettings'
-import SecuritySection from '../components/settings/SecuritySection'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import '../features/settings/settings.css'
+import NotificationSettings from '../features/settings/NotificationSettings'
+import SecuritySection from '../features/settings/SecuritySection'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../i18n'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { Avatar, Button, PageHeader, SegmentedControl, Select, Switch } from '../ui'
-import { weekdayNames, weekStartFor } from '../utils/calendar'
-import { getStartPage, getWeekStart, setStartPage, setWeekStart, START_PAGES } from '../utils/preferences'
-import { applyTheme, useThemeStore } from '../utils/theme'
+import { Avatar, Button, PageHeader, SegmentedControl, Select } from '../ui'
+import { weekdayNames, weekStartFor } from '../lib/calendarDates'
+import { getStartPage, getWeekStart, setStartPage, setWeekStart, START_PAGES } from '../lib/preferences'
+import { applyTheme, useThemeStore } from '../lib/theme'
 
 const SECTIONS = ['account', 'preferences', 'notifications', 'security']
 const THEME_ICONS = { light: Sun, dark: Moon, system: Monitor }
@@ -110,18 +110,18 @@ const Settings = () => {
 	const name = authUser?.name || authUser?.email || ''
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
 				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main flex-1 overflow-auto'>
-				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+			<main className='workspace-main'>
+				<AppTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('settings.title')}</span>
-				</WorkspaceTopbar>
+				</AppTopbar>
 				<div className='app-page st-page'>
 					<PageHeader title={t('settings.title')} description={t('settings.description')} />
 					<div className='st-layout'>

@@ -6,8 +6,13 @@
 :root {
 	color-scheme: light;
 
-	--ui-font-body: 'DM Sans', system-ui, sans-serif;
-	--ui-font-display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+	/* One family for text and headings; it covers Latin and Cyrillic alike. */
+	--ui-font-body: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--ui-font-display: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--ui-tracking-display: -0.025em;
+	--ui-tracking-caps: 0.06em;
+	--ui-leading-tight: 1.2;
+	--ui-leading: 1.5;
 
 	--ui-text-xs: 0.75rem;
 	--ui-text-sm: 0.8125rem;
@@ -15,8 +20,8 @@
 	--ui-text-lg: 1rem;
 	--ui-text-xl: 1.25rem;
 	--ui-text-2xl: 1.5rem;
-	--ui-text-3xl: 2rem;
-	--ui-text-4xl: 2.75rem;
+	--ui-text-3xl: 1.875rem;
+	--ui-text-4xl: 3rem;
 
 	--ui-space-1: 4px;
 	--ui-space-2: 8px;
@@ -29,7 +34,7 @@
 	--ui-space-12: 48px;
 
 	--ui-radius-sm: 6px;
-	--ui-radius-md: 10px;
+	--ui-radius-md: 8px;
 	--ui-radius-lg: 12px;
 	--ui-radius-xl: 16px;
 	--ui-radius-2xl: 20px;
@@ -40,21 +45,21 @@
 	--ui-control-h-sm: 32px;
 	--ui-control-h-lg: 48px;
 
-	--ui-bg: #f4f7f5;
+	--ui-bg: #f6f7f6;
 	--ui-surface: #ffffff;
-	--ui-surface-2: #f0f4f2;
-	--ui-surface-3: #eaf0ec;
-	--ui-border: #dce6e0;
-	--ui-border-strong: #b9cbc2;
-	--ui-text: #17211d;
-	--ui-text-2: #3e4c47;
-	--ui-text-muted: #5b6b65;
+	--ui-surface-2: #f2f4f3;
+	--ui-surface-3: #e9edeb;
+	--ui-border: #e3e8e5;
+	--ui-border-strong: #c8d2cd;
+	--ui-text: #111917;
+	--ui-text-2: #3a4541;
+	--ui-text-muted: #5f6b67;
 	--ui-text-inverse: #ffffff;
 
 	--ui-accent: #0f766e;
-	--ui-accent-hover: #115e59;
+	--ui-accent-hover: #0d665f;
 	--ui-accent-text: #ffffff;
-	--ui-accent-soft: #e3f1ee;
+	--ui-accent-soft: #e5f2ef;
 	--ui-accent-soft-text: #0b5d57;
 	/* Accent used as text on the page background: links, eyebrows. */
 	--ui-link: #0b5d57;
@@ -68,6 +73,7 @@
 	--ui-logo-moving: #99f6e4;
 	--ui-logo-moving-on-brand: #2dd4bf;
 	--ui-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+	--ui-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6b67' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
 	--ui-danger: #b42318;
 	--ui-danger-hover: #912018;
@@ -89,35 +95,42 @@
 	--ui-orange-soft-text: #a4400b;
 
 	--ui-focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.35);
-	--ui-shadow-sm: 0 1px 2px rgba(23, 33, 29, 0.06);
-	--ui-shadow-md: 0 4px 12px rgba(23, 33, 29, 0.08), 0 1px 3px rgba(23, 33, 29, 0.06);
-	--ui-shadow-lg: 0 20px 48px rgba(23, 33, 29, 0.18), 0 4px 12px rgba(23, 33, 29, 0.08);
+	/* Layered, soft shadows: cards and tiles xs, hover md, menus md + border, modals lg. */
+	--ui-shadow-xs: 0 1px 2px rgba(16, 24, 22, 0.05);
+	--ui-shadow-sm: 0 1px 2px rgba(16, 24, 22, 0.05), 0 1px 3px rgba(16, 24, 22, 0.05);
+	--ui-shadow-md: 0 2px 4px -1px rgba(16, 24, 22, 0.06), 0 8px 16px -4px rgba(16, 24, 22, 0.08);
+	--ui-shadow-lg: 0 12px 24px -6px rgba(16, 24, 22, 0.12), 0 32px 64px -12px rgba(16, 24, 22, 0.18);
+	--ui-shadow-drag: 0 18px 36px -8px rgba(16, 24, 22, 0.28);
 	--ui-overlay: rgba(10, 20, 17, 0.45);
 
-	--ui-duration: 160ms;
+	--ui-duration-fast: 120ms;
+	--ui-duration: 180ms;
+	--ui-duration-slow: 260ms;
 	--ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html[data-theme='dark'] {
 	color-scheme: dark;
 
-	--ui-bg: #0e1513;
-	--ui-surface: #16201d;
-	--ui-surface-2: #1c2925;
-	--ui-surface-3: #121b18;
-	--ui-border: #2a3833;
-	--ui-border-strong: #3a4a44;
+	--ui-bg: #0b1110;
+	--ui-surface: #121a18;
+	--ui-surface-2: #18221f;
+	--ui-surface-3: #0f1614;
+	--ui-border: #232f2b;
+	--ui-border-strong: #34433e;
 	--ui-text: #e8efec;
 	--ui-text-2: #c7d3ce;
-	--ui-text-muted: #9aaba4;
-	--ui-text-inverse: #0e1513;
+	--ui-text-muted: #93a39d;
+	--ui-text-inverse: #0b1110;
 
-	--ui-accent: #2dd4bf;
-	--ui-accent-hover: #5eead4;
-	--ui-accent-text: #04201c;
-	--ui-accent-soft: #134e48;
-	--ui-accent-soft-text: #99f6e4;
-	--ui-link: #2dd4bf;
+	/* Deep teal fills with white text; bright mint only for text and icons (--ui-link). */
+	--ui-accent: #0e7c73;
+	--ui-accent-hover: #10877d;
+	--ui-accent-text: #ffffff;
+	--ui-accent-soft: #12322e;
+	--ui-accent-soft-text: #8fe3d6;
+	--ui-link: #6fd8c8;
 	--ui-brand-panel: #0f2724;
 	--ui-brand-panel-glow: rgba(45, 212, 191, 0.16);
 	--ui-brand-panel-text: #e8efec;
@@ -125,7 +138,8 @@ html[data-theme='dark'] {
 	--ui-brand-panel-chip: rgba(255, 255, 255, 0.1);
 	--ui-logo-moving: #0f766e;
 	--ui-logo-moving-on-brand: #2dd4bf;
-	--ui-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2304201c' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+	--ui-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+	--ui-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a39d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
 	--ui-danger: #f97066;
 	--ui-danger-hover: #fda29b;
@@ -146,10 +160,12 @@ html[data-theme='dark'] {
 	--ui-orange-soft: #4d2509;
 	--ui-orange-soft-text: #fedab4;
 
-	--ui-focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.4);
-	--ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-	--ui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-	--ui-shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+	--ui-focus-ring: 0 0 0 3px rgba(111, 216, 200, 0.45);
+	--ui-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
+	--ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.2);
+	--ui-shadow-md: 0 2px 4px -1px rgba(0, 0, 0, 0.3), 0 8px 16px -4px rgba(0, 0, 0, 0.35);
+	--ui-shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.4), 0 32px 64px -12px rgba(0, 0, 0, 0.55);
+	--ui-shadow-drag: 0 18px 36px -8px rgba(0, 0, 0, 0.6);
 	--ui-overlay: rgba(0, 0, 0, 0.6);
 }
 
@@ -162,6 +178,8 @@ html[data-theme='dark'] {
 
 @media (prefers-reduced-motion: reduce) {
 	:root {
+		--ui-duration-fast: 0ms;
 		--ui-duration: 0ms;
+		--ui-duration-slow: 0ms;
 	}
 }

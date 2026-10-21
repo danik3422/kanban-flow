@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
 import { env } from '../config/env.js'
-import { normalizeBackground, searchBackgroundPhotos } from '../lib/boardBackgrounds.js'
+import { normalizeBackground, searchBackgroundPhotos } from '../services/boardBackgrounds.service.js'
 
 const originalFetch = globalThis.fetch
 const originalKey = env.unsplashAccessKey

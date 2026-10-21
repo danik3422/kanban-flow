@@ -12,7 +12,6 @@ import User from '../models/user.model.js'
 
 const ownerEmail = 'mr.siloacd@gmail.com'
 const boardName = 'Test Room'
-const demoPrefix = 'Demo ·'
 const columnNames = ['Backlog', 'To do', 'In Progress', 'Review', 'Done']
 
 const daysFromNow = (days) => new Date(Date.now() + days * 24 * 60 * 60 * 1000)

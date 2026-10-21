@@ -1,0 +1,84 @@
+/* The floating board dock and the board switcher. */
+.bd {
+	position: absolute;
+	bottom: 18px;
+	left: 50%;
+	z-index: 25;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 5px;
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius-lg);
+	background: color-mix(in srgb, var(--ui-surface) 92%, transparent);
+	box-shadow: var(--ui-shadow-md);
+	transform: translateX(-50%);
+	backdrop-filter: blur(12px);
+}
+.bd-item { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border: 0; border-radius: var(--ui-radius-md); background: none; color: var(--ui-text-2); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.bd-item:hover { background: var(--ui-surface-2); color: var(--ui-text); }
+.bd-item:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.bd-item.is-active { background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); cursor: default; }
+.bd-item.is-active::after { content: ''; position: absolute; bottom: 4px; left: 50%; width: 16px; height: 2px; border-radius: 2px; background: currentColor; transform: translateX(-50%); }
+.bd-divider { width: 1px; height: 22px; margin: 0 4px; background: var(--ui-border); }
+.bd-tip { position: absolute; bottom: calc(100% + 10px); left: 50%; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-radius: var(--ui-radius-md); background: var(--ui-text); color: var(--ui-surface); font-size: var(--ui-text-xs); font-weight: 600; white-space: nowrap; opacity: 0; transform: translate(-50%, 4px); transition: opacity 120ms ease, transform 120ms ease; pointer-events: none; }
+.bd-tip kbd { padding: 1px 6px; border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--ui-surface) 22%, transparent); color: inherit; font: inherit; font-family: var(--ui-font-mono, ui-monospace, monospace); }
+.bd-item:hover .bd-tip, .bd-item:focus-visible .bd-tip { opacity: 1; transform: translate(-50%, 0); transition-delay: 300ms; }
+@media (max-width: 720px) {
+	.bd { display: none; }
+}
+/* Lists end above the dock so their last card stays reachable. */
+@media (min-width: 721px) {
+	.bc-content.has-dock .bc-board { padding-bottom: 84px; }
+}
+
+/* Board switcher */
+.bs-modal { --modal-width: 760px; }
+.bs { display: flex; flex-direction: column; gap: var(--ui-space-4); }
+.bs-toolbar { display: flex; align-items: center; gap: var(--ui-space-2); }
+.bs-search { flex: 1; }
+.bs-search input { font-size: 16px; }
+.bs-section { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.bs-section__title { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.bs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.bs-grid--list { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+
+.bs-tile { position: relative; min-width: 0; }
+.bs-tile__open { display: flex; flex-direction: column; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--ui-duration) var(--ui-ease), box-shadow var(--ui-duration) var(--ui-ease), transform var(--ui-duration) var(--ui-ease); }
+.bs-tile__open:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-md); transform: translateY(-1px); }
+.bs-tile__open:focus-visible { outline: none; border-color: var(--ui-accent); box-shadow: var(--ui-focus-ring); }
+.bs-tile.is-current .bs-tile__open { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
+.bs-tile__cover { display: grid; place-items: center; height: 72px; background-color: var(--ui-surface-3); }
+.bs-tile__cover--create { background: var(--ui-surface-2); color: var(--ui-text-2); }
+.bs-tile__name { display: block; min-height: 44px; padding: 10px 12px; font-weight: 600; line-height: 1.3; }
+.bs-tile__name > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.bs-tile--create .bs-tile__name { color: var(--ui-text-2); }
+.bs-tile__current { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: var(--ui-radius-full); background: rgb(15 23 42 / 0.7); color: #fff; font-size: 11px; font-weight: 600; }
+.bs-tile__star { position: absolute; top: 6px; right: 6px; background: rgb(15 23 42 / 0.45); color: #fff; opacity: 0; transition: opacity var(--ui-duration) var(--ui-ease); }
+.bs-tile__star:hover:not(:disabled) { background: rgb(15 23 42 / 0.6); color: #fff; }
+.bs-tile:hover .bs-tile__star, .bs-tile:focus-within .bs-tile__star, .bs-tile__star.is-starred { opacity: 1; }
+.bs-tile__star.is-starred { color: #fcd34d; }
+.bs-tile__star.is-starred svg { fill: currentColor; }
+@media (hover: none) {
+	.bs-tile__star { opacity: 1; }
+}
+
+/* List view: small cover on the left, name beside it. */
+.bs-tile--row .bs-tile__open { flex-direction: row; align-items: center; gap: 12px; border-color: transparent; padding: 6px; }
+.bs-tile--row .bs-tile__open:hover { background: var(--ui-surface-2); box-shadow: none; transform: none; }
+.bs-tile--row .bs-tile__cover { flex: 0 0 auto; width: 48px; height: 32px; border-radius: var(--ui-radius-sm); }
+.bs-tile--row .bs-tile__name { min-height: 0; padding: 0; }
+.bs-tile--row .bs-tile__name > span { -webkit-line-clamp: 1; line-clamp: 1; }
+.bs-tile--row .bs-tile__current { position: static; margin-left: auto; margin-right: 44px; background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
+.bs-tile--row .bs-tile__star { top: 50%; background: none; color: var(--ui-text-muted); transform: translateY(-50%); }
+.bs-tile--row .bs-tile__star.is-starred { color: var(--ui-warning-soft-text); }
+
+@media (max-width: 720px) {
+	.bs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.bs-grid--list { grid-template-columns: minmax(0, 1fr); }
+	.bs-tile__cover { height: 64px; }
+	.bs-tile__star { --btn-size: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.bd-tip, .bs-tile__open, .bs-tile__star { transition: none; }
+}

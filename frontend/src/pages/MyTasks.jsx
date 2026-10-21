@@ -1,20 +1,20 @@
-import { ChevronDown, ClipboardList, PartyPopper, RotateCcw, Search, SearchX, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ClipboardList, Flag, KanbanSquare, PartyPopper, RotateCcw, Search, SearchX, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import MyTaskRow from '../components/app/MyTaskRow'
-import '../components/app/my-tasks.css'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import useTaskActions from '../hooks/useTaskActions'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import MyTaskRow from '../features/my-tasks/MyTaskRow'
+import '../features/my-tasks/my-tasks.css'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
+import useTaskActions from '../features/my-tasks/useTaskActions'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { Button, Chip, EmptyState, IconButton, Input, Modal, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
+import { Button, Chip, EmptyState, IconButton, Input, Menu, Modal, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
-import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../utils/dueDate'
+import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../lib/dueDate'
 
 const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
 const DATE_SECTIONS = ['overdue', 'today', 'tomorrow', 'week', 'later', 'noDate']
@@ -259,8 +259,8 @@ const MyTasks = () => {
 	const description = isLoading ? t('myTasks.loading') : [t('myTasks.open', { count: counts.open }), counts.overdue > 0 && t('boards.summaryOverdue', { count: counts.overdue })].filter(Boolean).join(' · ')
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
 				boards={boards}
@@ -269,26 +269,12 @@ const MyTasks = () => {
 				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main flex-1 overflow-auto'>
-				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+			<main className='workspace-main'>
+				<AppTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('myTasks.title')}</span>
-				</WorkspaceTopbar>
+				</AppTopbar>
 				<div className='app-page mt-page'>
-					<PageHeader
-						title={t('myTasks.title')}
-						description={description}
-						actions={
-							<SegmentedControl
-								label={t('myTasks.groupBy')}
-								value={groupBy}
-								onChange={(value) => {
-									setGroupBy(value)
-									saveSetting(GROUP_KEY, value)
-								}}
-								options={[{ value: 'date', label: t('myTasks.byDate') }, { value: 'board', label: t('myTasks.byBoard') }]}
-							/>
-						}
-					/>
+					<PageHeader title={t('myTasks.title')} description={description} />
 					<div className='mt-toolbar'>
 						<div className='mt-toolbar__search'>
 							<Input
@@ -302,20 +288,61 @@ const MyTasks = () => {
 								aria-keyshortcuts='/'
 							/>
 						</div>
+						{/* Desktop: priority and board live in one Filters menu. */}
 						<div className='mt-toolbar__selects'>
-							<Select aria-label={t('myTasks.priorityLabel')} value={priority} onChange={(event) => changeFilter(setPriority)(event.target.value)} options={priorityOptions} />
-							<Select aria-label={t('myTasks.boardLabel')} value={board} onChange={(event) => changeFilter(setBoard)(event.target.value)} options={boardOptions} />
-							{hasFilters && <Button variant='ghost' icon={RotateCcw} onClick={clearFilters}>{t('myTasks.reset')}</Button>}
+							<Menu
+								align='start'
+								label={t('myTasks.filters')}
+								trigger={(props) => (
+									<Button {...props} variant='secondary' icon={SlidersHorizontal} className={cx('mt-toolbar__filter', sheetFiltersActive && 'is-active')}>
+										{t('myTasks.filters')}
+										{sheetFiltersActive && <span className='mt-toolbar__filter-count'>{Number(priority !== 'all') + Number(board !== 'all')}</span>}
+									</Button>
+								)}
+								items={[
+									{
+										group: {
+											id: 'priority',
+											label: t('myTasks.priorityLabel'),
+											icon: Flag,
+											value: priorityOptions.find((option) => option.value === priority)?.label,
+											items: priorityOptions.map((option) => ({ label: option.label, checked: option.value === priority, mark: 'end', onSelect: () => changeFilter(setPriority)(option.value) })),
+										},
+									},
+									{
+										group: {
+											id: 'board',
+											label: t('myTasks.boardLabel'),
+											icon: KanbanSquare,
+											value: boardOptions.find((option) => option.value === board)?.label,
+											items: boardOptions.map((option) => ({ label: option.label, checked: option.value === board, mark: 'end', onSelect: () => changeFilter(setBoard)(option.value) })),
+										},
+									},
+									sheetFiltersActive && { separator: true },
+									sheetFiltersActive && { label: t('myTasks.reset'), icon: RotateCcw, onSelect: () => { changeFilter(setPriority)('all'); changeFilter(setBoard)('all') } },
+								]}
+							/>
+							{hasFilters && <IconButton icon={RotateCcw} label={t('myTasks.reset')} onClick={clearFilters} />}
 						</div>
 						<span className='mt-toolbar__sheet-trigger'>
 							<IconButton
 								icon={SlidersHorizontal}
-								variant='secondary'
+								variant='outline'
 								label={sheetFiltersActive ? t('myTasks.filtersActive') : t('myTasks.filters')}
 								onClick={() => setIsFilterSheetOpen(true)}
 							/>
 							{sheetFiltersActive && <span className='mt-toolbar__dot' aria-hidden='true' />}
 						</span>
+						<SegmentedControl
+							className='mt-toolbar__group'
+							label={t('myTasks.groupBy')}
+							value={groupBy}
+							onChange={(value) => {
+								setGroupBy(value)
+								saveSetting(GROUP_KEY, value)
+							}}
+							options={[{ value: 'date', label: t('myTasks.byDate') }, { value: 'board', label: t('myTasks.byBoard') }]}
+						/>
 					</div>
 					<div className='mt-chips' role='group' aria-label={t('myTasks.show')}>
 						{['open', 'overdue', 'week', 'done'].map((key) => (

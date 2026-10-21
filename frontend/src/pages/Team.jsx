@@ -2,19 +2,19 @@ import { ArrowUpDown, Check, Copy, Mail, MoreHorizontal, Plus, Search, SearchX, 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import '../components/team/team.css'
-import InviteDialog from '../components/team/InviteDialog'
-import PersonPanel from '../components/team/PersonPanel'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import '../features/team/team.css'
+import InviteDialog from '../features/team/InviteDialog'
+import PersonPanel from '../features/team/PersonPanel'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 import { Avatar, Badge, Button, EmptyState, IconButton, Input, Menu, PageHeader, SegmentedControl, Select, Skeleton } from '../ui'
 import { cx } from '../ui/utils'
-import { boardToneFor } from '../utils/boardTone'
+import { boardToneFor } from '../features/boards/boardTone'
 
 const SORTS = ['name', 'open', 'overdue']
 const MANAGES = ['owner', 'admin']
@@ -221,18 +221,18 @@ const Team = () => {
 	}
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
 				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main flex-1 overflow-auto'>
-				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+			<main className='workspace-main'>
+				<AppTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('team.title')}</span>
-				</WorkspaceTopbar>
+				</AppTopbar>
 				<div className='app-page tm-page'>
 					<PageHeader title={t('team.title')} description={boards.length ? t('team.description', { count: boards.length }) : undefined} />
 					{!isLoading && boards.length > 0 && others.length > 0 && (
@@ -255,21 +255,9 @@ const Team = () => {
 								<div className='tm-toolbar__search'>
 									<Input icon={Search} type='search' value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('team.searchPlaceholder')} aria-label={t('team.searchLabel')} />
 								</div>
-								<Select className='tm-toolbar__board' aria-label={t('team.boardFilter')} value={boardFilter} onChange={(event) => setBoardFilter(event.target.value)} options={[{ value: 'all', label: t('team.allBoards') }, ...boards.map((board) => ({ value: board._id, label: board.name }))]} />
-								<SegmentedControl
-									className='tm-toolbar__mode'
-									label={t('team.show')}
-									value={mode}
-									onChange={setMode}
-									options={[
-										{ value: 'all', label: t('team.filterAll') },
-										...(managedBoards.length ? [{ value: 'managed', label: t('team.filterManaged') }] : []),
-										{ value: 'overdue', label: t('team.filterOverdue') },
-									]}
-								/>
 								<Menu
 									label={t('team.sortLabel')}
-									trigger={(props) => <IconButton icon={ArrowUpDown} variant='secondary' label={`${t('team.sortLabel')}: ${t(`team.sort${sort[0].toUpperCase()}${sort.slice(1)}`)}`} {...props} />}
+									trigger={(props) => <IconButton icon={ArrowUpDown} variant='outline' className='tm-toolbar__sort' label={`${t('team.sortLabel')}: ${t(`team.sort${sort[0].toUpperCase()}${sort.slice(1)}`)}`} {...props} />}
 									items={SORTS.map((value) => ({
 										label: t(`team.sort${value[0].toUpperCase()}${value.slice(1)}`),
 										icon: value === sort ? Check : undefined,
@@ -277,6 +265,21 @@ const Team = () => {
 										onSelect: () => setSort(value),
 									}))}
 								/>
+								{/* Desktop: board filter beside search, the mode switch on the right. Phone: both share one scrolling row. */}
+								<div className='tm-toolbar__filters'>
+									<Select className='tm-toolbar__board' aria-label={t('team.boardFilter')} value={boardFilter} onChange={(event) => setBoardFilter(event.target.value)} options={[{ value: 'all', label: t('team.allBoards') }, ...boards.map((board) => ({ value: board._id, label: board.name }))]} />
+									<SegmentedControl
+										className='tm-toolbar__mode'
+										label={t('team.show')}
+										value={mode}
+										onChange={setMode}
+										options={[
+											{ value: 'all', label: t('team.filterAll') },
+											...(managedBoards.length ? [{ value: 'managed', label: t('team.filterManaged') }] : []),
+											{ value: 'overdue', label: t('team.filterOverdue') },
+										]}
+									/>
+								</div>
 							</div>
 						</>
 					)}

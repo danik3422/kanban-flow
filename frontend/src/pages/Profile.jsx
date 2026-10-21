@@ -1,21 +1,21 @@
-import { AlertTriangle, BriefcaseBusiness, Camera, Check, CheckCircle2, Circle, Clock3, LayoutGrid, ListTodo, Settings2, Trash2, Upload } from 'lucide-react'
+import { BriefcaseBusiness, Camera, Check, CheckCircle2, Circle, Clock3, Settings2, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import AvatarEditor from '../components/profile/AvatarEditor'
-import '../components/profile/profile.css'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
-import TimezonePicker from '../components/timezone/TimezonePicker'
-import { normalizeTimezone } from '../data/timezones'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
+import AvatarEditor from '../features/profile/AvatarEditor'
+import '../features/profile/profile.css'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
+import TimezonePicker from '../features/profile/timezone/TimezonePicker'
+import { normalizeTimezone } from '../features/profile/timezone/timezones'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { useI18n } from '../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
 import { useAuthStore } from '../store/useAuthStore'
-import { Avatar, Badge, Button, ConfirmDialog, Field, Input, Menu, PageHeader, Skeleton } from '../ui'
-import { getDueDateKey, getLocalDateKey } from '../utils/dueDate'
+import { Avatar, Badge, Button, ConfirmDialog, Field, IconButton, Input, Menu, PageHeader, Skeleton } from '../ui'
+import { getDueDateKey, getLocalDateKey } from '../lib/dueDate'
 
 const timeIn = (timezone, language) => {
 	try {
@@ -152,35 +152,36 @@ const Profile = () => {
 		/>
 	)
 
-	const stat = (key, icon, value, to, tone) => {
-		const Icon = icon
-		return (
-			<Link key={key} to={to} className={`pf-stat${tone ? ` pf-stat--${tone}` : ''}`}>
-				<Icon size={16} aria-hidden='true' />
-				<span className='pf-stat__value'>{value}</span>
-				<span className='pf-stat__label'>{t(`profile.stats.${key}`)}</span>
-			</Link>
-		)
-	}
+	const stat = (key, value, to, tone) => (
+		<Link key={key} to={to} className={`pf-stat${tone ? ` pf-stat--${tone}` : ''}`}>
+			<span className='pf-stat__value'>{value}</span>
+			<span className='pf-stat__label'>{t(`profile.stats.${key}`)}</span>
+		</Link>
+	)
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				boards={boards}
 				selectedBoardId={null}
 				onBoardSelect={(board) => navigate(`/workspaces/${board._id}`)}
 				onCreateBoard={() => navigate('/workspaces', { state: { createBoard: true } })}
 				isCollapsed={isSidebarCollapsed}
 			/>
-			<main className='workspace-main flex-1 overflow-auto'>
-				<WorkspaceTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
+			<main className='workspace-main'>
+				<AppTopbar isSidebarCollapsed={isSidebarCollapsed} onSidebarCollapse={() => setIsSidebarCollapsed((value) => !value)}>
 					<span className='app-topbar__title'>{t('profile.title')}</span>
-				</WorkspaceTopbar>
+				</AppTopbar>
 				<div className='app-page pf-page'>
 					<PageHeader
 						title={t('profile.title')}
 						description={t('profile.description')}
-						actions={<Button as={Link} to='/settings' variant='secondary' size='sm' icon={Settings2}>{t('profile.accountSettings')}</Button>}
+						actions={
+							<>
+								<Button as={Link} to='/settings' variant='secondary' icon={Settings2} className='pf-settings-link'>{t('profile.accountSettings')}</Button>
+								<IconButton as={Link} to='/settings' variant='outline' icon={Settings2} label={t('profile.accountSettings')} className='pf-settings-icon' />
+							</>
+						}
 					/>
 					<div className='pf-layout'>
 						<div className='pf-main'>
@@ -219,13 +220,13 @@ const Profile = () => {
 								<h2 className='pf-section-title'>{t('profile.activity')}</h2>
 								{stats ? (
 									<div className='pf-stats'>
-										{stat('boards', LayoutGrid, stats.boards, '/workspaces')}
-										{stat('open', ListTodo, stats.open, '/my-tasks')}
-										{stat('overdue', AlertTriangle, stats.overdue, '/my-tasks', stats.overdue ? 'danger' : '')}
-										{stat('done', CheckCircle2, stats.done, '/my-tasks')}
+										{stat('boards', stats.boards, '/workspaces')}
+										{stat('open', stats.open, '/my-tasks')}
+										{stat('overdue', stats.overdue, '/my-tasks', stats.overdue ? 'danger' : '')}
+										{stat('done', stats.done, '/my-tasks')}
 									</div>
 								) : (
-									<div className='pf-stats' aria-hidden='true'>{[0, 1, 2, 3].map((index) => <Skeleton key={index} height={84} radius={14} />)}</div>
+									<div className='pf-stats' aria-hidden='true'>{[0, 1, 2, 3].map((index) => <Skeleton key={index} height={76} radius={12} />)}</div>
 								)}
 							</section>
 						</div>

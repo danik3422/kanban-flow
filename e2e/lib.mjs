@@ -13,7 +13,22 @@ export const ALICE_STATE = `${TMP}alice.json`
 export const ALICE_LOGIN = `${TMP}alice-login.json`
 export const CHROME_PATH = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 // BROWSER=webkit runs a flow in Safari's engine (after `npx playwright-core install webkit`).
-export const launch = () => (process.env.BROWSER === 'webkit' ? webkit.launch({ headless: true }) : chromium.launch({ executablePath: CHROME_PATH, headless: true }))
+// API calls made through Playwright (page.request, context.request) say they come
+// from the app, as the browser's own requests do, so the API's CSRF check lets them in.
+let requestsTagged = false
+const tagApiRequests = async (browser) => {
+	if (requestsTagged) return browser
+	const context = await browser.newContext()
+	const proto = Object.getPrototypeOf(context.request)
+	const fetchRequest = proto.fetch
+	proto.fetch = function (urlOrRequest, options = {}) {
+		return fetchRequest.call(this, urlOrRequest, { ...options, headers: { origin: APP, ...options.headers } })
+	}
+	requestsTagged = true
+	await context.close()
+	return browser
+}
+export const launch = async () => tagApiRequests(await (process.env.BROWSER === 'webkit' ? webkit.launch({ headless: true }) : chromium.launch({ executablePath: CHROME_PATH, headless: true })))
 export const lastMailTo = (email) => {
 	const lines = fs.readFileSync(MAIL, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === email)
 	return lines.at(-1)

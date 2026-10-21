@@ -5,12 +5,18 @@ import { getAuth } from 'firebase-admin/auth'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-import { env } from '../config/env.js'
+import { sessionCookie } from './helpers.js'
 
 import admin from '../lib/firebaseAdmin.js'
 import { app } from '../index.js'
-import { assertCurrentPassword, assertProviderEmailVerified, assertProviderIdentityAvailable, connectSocialAccount, getDuplicateAuthErrorMessage, verifySocialProviderToken } from '../controllers/auth.controller.js'
+import {
+	assertCurrentPassword,
+	assertProviderEmailVerified,
+	assertProviderIdentityAvailable,
+	getDuplicateAuthErrorMessage,
+	verifySocialProviderToken,
+} from '../services/authChecks.service.js'
+import { connectSocialAccount } from '../controllers/auth/social.controller.js'
 import User from '../models/user.model.js'
 
 let mongoServer
@@ -263,7 +269,7 @@ describe('social auth security helpers', () => {
 	})
 })
 describe('signing out other sessions', () => {
-	const cookieFor = (user, sessionVersion = 0) => [`jwt=${jwt.sign({ userId: user._id.toString(), sessionVersion }, env.jwtSecret)}`]
+	const cookieFor = (user, sessionVersion = 0) => sessionCookie(user._id, sessionVersion)
 
 	it('ends every other session and keeps this device signed in', async () => {
 		const user = await User.create({ email: 'sessions@example.com', name: 'Sessions', emailVerified: true, profileSetup: true })

@@ -1,14 +1,14 @@
 import { ArrowRight, Mail, Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import AuthLayout from '../components/auth/AuthLayout'
-import { AuthHeading, PasswordRules, ProviderButtons } from '../components/auth/AuthParts'
+import AuthLayout from '../features/auth/AuthLayout'
+import { AuthHeading, PasswordRules, ProviderButtons } from '../features/auth/AuthParts'
 import { useI18n } from '../i18n'
 import { loadFirebase } from '../lib/firebase'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button, Field, IconButton, Input, PasswordInput } from '../ui'
-import { meetsPasswordRules } from '../utils/password'
-import { canAutoFocusTyping } from '../utils/autoFocus'
+import { meetsPasswordRules } from '../features/auth/passwordRules'
+import { canAutoFocusTyping } from '../lib/autoFocus'
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

@@ -1,25 +1,30 @@
 import { ArrowRight, CalendarDays, CheckCircle2, Circle, Eye, Flag, LayoutGrid, Link2Off, ListChecks, Pin, Search, SearchX } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import '../components/app/app-shell.css'
-import BoardTile from '../components/app/BoardTile'
-import BrandMark from '../components/BrandMark'
-import { LanguageMenu, ThemeMenu } from '../components/preferences/PreferenceMenus'
-import '../components/public/public-board.css'
+import '../app/shell/app-shell.css'
+import BoardTile from '../features/boards/BoardTile'
+import BrandMark from '../ui/BrandMark'
+import { LanguageMenu, ThemeMenu } from '../features/settings/PreferenceMenus'
+import '../features/public-board/public-board.css'
 import { useI18n } from '../i18n'
 import { axiosInstance } from '../lib/axios'
 import { sanitizeDescription, toPlainText } from '../lib/richText'
 import { useAuthStore } from '../store/useAuthStore'
-import { Badge, Button, Chip, EmptyState, Input, Modal, Skeleton } from '../ui'
-import { getDueDateKey, getLocalDateKey } from '../utils/dueDate'
-import { startPagePath } from '../utils/preferences'
-import { relativeTime } from '../utils/relativeTime'
-import { dueLabel, dueToneFor, PRIORITY_TONE } from '../utils/taskDisplay'
+import { Badge, Button, Chip, EmptyState, Input, LabelBadge, Modal, Skeleton } from '../ui'
+import { CARD_COLORS, labelColorKey } from '../features/board/model/cardDisplay'
+import { getDueDateKey, getLocalDateKey } from '../lib/dueDate'
+import { startPagePath } from '../lib/preferences'
+import { relativeTime } from '../lib/relativeTime'
+import { dueLabel, dueToneFor, PRIORITY_TONE } from '../features/board/model/taskDisplay'
 
 const hasPriority = (task) => task.priority && task.priority !== 'none'
 
+// The board's saved labels, so each label keeps the colour it has on the board.
+const BoardLabelsContext = createContext([])
+
 const TaskMeta = ({ task, done }) => {
 	const { t, language } = useI18n()
+	const boardLabels = useContext(BoardLabelsContext)
 	const dueKey = getDueDateKey(task.dueDate)
 	const checked = task.checklist?.filter((item) => item.completed).length || 0
 	return (
@@ -27,7 +32,7 @@ const TaskMeta = ({ task, done }) => {
 			{dueKey && <Badge tone={dueToneFor(task.dueDate, done)}><CalendarDays size={12} aria-hidden='true' />{dueLabel(dueKey, t, language)}</Badge>}
 			{hasPriority(task) && <Badge tone={PRIORITY_TONE[task.priority]}><Flag size={12} aria-hidden='true' />{t(`myTasks.priority.${task.priority}`)}</Badge>}
 			{task.checklist?.length > 0 && <Badge><ListChecks size={12} aria-hidden='true' />{checked}/{task.checklist.length}</Badge>}
-			{task.labels?.map((label) => <Badge key={label} tone='accent'><span data-i18n-ignore>{label}</span></Badge>)}
+			{task.labels?.map((label) => <LabelBadge key={label} name={label} color={CARD_COLORS[labelColorKey(label, boardLabels)]} />)}
 		</>
 	)
 }
@@ -254,6 +259,7 @@ const PublicBoard = () => {
 	}
 
 	return (
+		<BoardLabelsContext.Provider value={data?.board?.labels || []}>
 		<div className='pb'>
 			<header className='pb-header'>
 				<Link to='/' className='pb-header__brand' aria-label={t('common.homeLink')}><BrandMark /></Link>
@@ -271,6 +277,7 @@ const PublicBoard = () => {
 			)}
 			<TaskPanel task={openTask?.task} column={columns.find((column) => column._id === openTask?.columnId)} done={openTask?.columnId === doneId} onClose={() => setOpenTaskId('')} />
 		</div>
+		</BoardLabelsContext.Provider>
 	)
 }
 

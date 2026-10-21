@@ -2,14 +2,14 @@ import { ArrowLeft, CheckCircle2, LinkIcon, Mail, MailCheck } from 'lucide-react
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import AuthLayout from '../components/auth/AuthLayout'
-import { AuthHeading, AuthStatus, PasswordRules } from '../components/auth/AuthParts'
+import AuthLayout from '../features/auth/AuthLayout'
+import { AuthHeading, AuthStatus, PasswordRules } from '../features/auth/AuthParts'
 import { useI18n } from '../i18n'
 import { translateServerMessage } from '../i18n/translate'
 import { axiosInstance } from '../lib/axios'
 import { Button, Field, Input, PasswordInput, Spinner } from '../ui'
-import { meetsPasswordRules } from '../utils/password'
-import { canAutoFocusTyping } from '../utils/autoFocus'
+import { meetsPasswordRules } from '../features/auth/passwordRules'
+import { canAutoFocusTyping } from '../lib/autoFocus'
 
 
 const AUTH_EMAIL_KEY = 'kanban-auth-email'

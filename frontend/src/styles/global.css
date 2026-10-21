@@ -1,0 +1,89 @@
+/*
+ * App-wide base: page background, type and the page frame every signed-in screen
+ * uses. Everything else lives next to its component; colours and sizes come from
+ * the design tokens in ui/tokens.css.
+ */
+:root {
+	--content-width: 1240px;
+	--page-gutter: clamp(16px, 2.5vw, 32px);
+	font-family: var(--ui-font-body);
+	color: var(--ui-text);
+	background: var(--ui-bg);
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+html {
+	height: 100%;
+	background: var(--ui-bg);
+}
+
+body {
+	min-width: 320px;
+	height: 100%;
+	overflow-x: hidden;
+	background: var(--ui-bg);
+	text-size-adjust: 100%;
+}
+
+#root {
+	height: 100%;
+}
+
+button {
+	cursor: pointer;
+}
+
+/* Form controls that are not built from the ui kit still follow the theme. */
+input:not([class*='ui-']),
+textarea:not([class*='ui-']),
+select:not([class*='ui-']) {
+	color: var(--ui-text);
+}
+
+/* Page frame: sidebar + scrolling main column (details in app/shell/app-shell.css). */
+.workspace-shell {
+	display: flex;
+	height: 100dvh;
+	min-height: 100dvh;
+}
+
+.workspace-main {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	overflow: auto;
+	overflow-x: hidden;
+}
+
+.workspace-content {
+	width: 100%;
+	margin: 0;
+	padding: clamp(8px, 1vw, 16px) clamp(16px, 2.7vw, 30px) 16px;
+}
+
+@media (max-width: 720px) {
+	:root {
+		--page-gutter: 16px;
+	}
+
+	.workspace-content {
+		padding: 24px var(--page-gutter) max(40px, env(safe-area-inset-bottom));
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

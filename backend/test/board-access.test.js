@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
+import { sessionCookie } from './helpers.js'
 import { after, before, beforeEach, describe, it } from 'node:test'
 
 import { env } from '../config/env.js'
@@ -32,10 +33,7 @@ const createUser = (email, name = email.split('@')[0]) =>
 		profileSetup: true,
 	})
 
-const authCookie = (userId) => {
-	const token = jwt.sign({ userId: userId.toString() }, env.jwtSecret)
-	return [`jwt=${token}`]
-}
+const authCookie = (userId) => sessionCookie(userId)
 
 const createInvite = async ({ boardId, email = '', role = 'member' }) => {
 	const rawToken = `invite-${crypto.randomBytes(16).toString('hex')}`

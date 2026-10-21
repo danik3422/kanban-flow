@@ -1,6 +1,4 @@
 import bcrypt from 'bcrypt'
-import mongoose from 'mongoose'
-import { env } from '../config/env.js'
 import { connectDB } from '../lib/db.js'
 import User from '../models/user.model.js'
 

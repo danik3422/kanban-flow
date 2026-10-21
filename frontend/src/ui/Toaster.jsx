@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from 'lucide-reac
 import { useSyncExternalStore } from 'react'
 import { Toaster as Sonner } from 'sonner'
 import useIsPhone from '../hooks/useIsPhone'
+import { useI18n } from '../i18n'
 import './toast.css'
 
 // The app's resolved theme (light or dark), whatever the user picked.
@@ -27,6 +28,7 @@ const ICONS = {
  */
 const Toaster = () => {
 	const isPhone = useIsPhone()
+	const { t } = useI18n()
 	const theme = useSyncExternalStore(subscribeTheme, readTheme, () => 'light')
 	return (
 		<Sonner
@@ -40,7 +42,8 @@ const Toaster = () => {
 			swipeDirections={isPhone ? ['top', 'left', 'right'] : ['right', 'bottom']}
 			closeButton={!isPhone}
 			icons={ICONS}
-			toastOptions={{ className: 'ui-toast' }}
+			toastOptions={{ className: 'ui-toast', closeButtonAriaLabel: t('common.close') }}
+			containerAriaLabel={t('app.notifications.label')}
 		/>
 	)
 }

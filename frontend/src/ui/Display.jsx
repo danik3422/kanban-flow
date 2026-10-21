@@ -79,7 +79,7 @@ export const Skeleton = ({ width = '100%', height = 14, radius, className }) => 
 )
 
 export const Spinner = ({ size = 18, label }) => (
-	<span role={label ? 'status' : undefined} aria-label={label} style={{ display: 'inline-grid', fontSize: size, color: 'var(--ui-accent)' }}>
+	<span role={label ? 'status' : undefined} aria-label={label} style={{ display: 'inline-grid', fontSize: size, color: 'var(--ui-link)' }}>
 		<span className='ui-spinner' aria-hidden='true' />
 	</span>
 )
@@ -103,4 +103,9 @@ export const Alert = ({ tone = 'info', title, icon: Icon, children, className, .
 			{children}
 		</div>
 	</div>
+)
+
+/** A card label: a colour dot and its name on a light tint of the same colour. */
+export const LabelBadge = ({ name, color, className }) => (
+	<span className={cx('ui-label', className)} style={{ '--label': color }} data-i18n-ignore>{name}</span>
 )

@@ -1,0 +1,8 @@
+.error-boundary {
+	display: grid;
+	place-items: center;
+	min-height: 100dvh;
+	padding: var(--ui-space-6, 24px) 16px;
+	background: var(--ui-bg);
+	color: var(--ui-text);
+}

@@ -5,11 +5,18 @@ import { useI18n } from '../i18n'
 import { Button, IconButton } from './Button'
 import { cx } from './utils'
 import { Field, Input } from './Form'
-import { isTextEntry, isTouchScreen } from '../utils/autoFocus'
+import { isTextEntry, isTouchScreen } from '../lib/autoFocus'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 let openModals = 0
+// Whether the last input was the keyboard: a dialog opened with a click focuses
+// itself instead of its first button, so no focus ring appears out of nowhere.
+let usingKeyboard = false
+if (typeof document !== 'undefined') {
+	document.addEventListener('keydown', (event) => { if (event.key === 'Tab' || event.key === 'Enter' || event.key === ' ') usingKeyboard = true }, true)
+	document.addEventListener('pointerdown', () => { usingKeyboard = false }, true)
+}
 // Open dialogs, newest last: only the top one answers Escape and Tab.
 const modalStack = []
 
@@ -40,7 +47,9 @@ export const Modal = ({ open, onClose, onBack, title, description, size = 'md', 
 		document.body.classList.add('has-modal')
 		const firstTarget = initialFocusRef?.current || panelRef.current?.querySelector(FOCUSABLE) || panelRef.current
 		// On touch screens a text field waits for a tap: focusing it would pop the keyboard over the sheet.
-		const focusTarget = isTouchScreen() && isTextEntry(firstTarget) ? panelRef.current : firstTarget
+		const focusTarget = isTextEntry(firstTarget)
+			? (isTouchScreen() ? panelRef.current : firstTarget)
+			: (initialFocusRef?.current || usingKeyboard ? firstTarget : panelRef.current)
 		focusTarget?.focus({ preventScroll: true })
 
 		const handleKeyDown = (event) => {

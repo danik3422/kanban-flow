@@ -216,13 +216,13 @@ export const useAuthStore = create((set, get) => ({
 			toast.success(translateCurrent('auth.toast.providerConnected', { provider: providerName(provider) }))
 			return { success: true, user: response.data }
 		} catch (error) {
-			const firebaseMessage = {
-				'auth/unauthorized-domain': 'This production domain is not authorized in Firebase Authentication.',
-				'auth/popup-blocked': 'The sign-in popup was blocked. Allow popups and try again.',
-				'auth/popup-closed-by-user': 'Provider sign-in was cancelled.',
-				'auth/operation-not-allowed': `${provider} sign-in is not enabled in Firebase Authentication.`,
+			const firebaseKey = {
+				'auth/unauthorized-domain': 'auth.toast.socialUnavailable',
+				'auth/operation-not-allowed': 'auth.toast.socialUnavailable',
+				'auth/popup-blocked': 'auth.toast.popupBlocked',
+				'auth/popup-closed-by-user': 'auth.toast.socialCancelled',
 			}[error.code]
-			toast.error(error.response?.data?.message || firebaseMessage || error.message || `Could not connect ${provider}`)
+			toast.error(error.response?.data?.message ? translateServerMessageCurrent(error.response.data.message, 'auth.errors.generic') : translateCurrent(firebaseKey || 'auth.errors.generic'))
 			return { success: false, error }
 		}
 	},
@@ -248,8 +248,31 @@ export const useAuthStore = create((set, get) => ({
 			return { success: true, user: response.data }
 		} catch (error) {
 			sessionStorage.removeItem('pending-social-provider')
-			toast.error(error.response?.data?.message || error.message || `Could not connect ${provider}`)
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.errors.generic'))
 			return { success: false, error }
+		}
+	},
+
+	// Accounts without a password confirm sensitive changes by signing in with their provider again.
+	reauthenticateWithProvider: async () => {
+		const { provider, linkedProviders = [] } = get().authUser || {}
+		const providerKey = provider && provider !== 'local' ? provider : linkedProviders[0]?.provider
+		const firebase = firebaseEnabled ? await loadFirebase().catch(() => null) : null
+		const firebaseProvider = firebase?.providers[providerKey]
+		if (!firebaseProvider) {
+			toast.error(translateCurrent('auth.toast.socialUnavailable'))
+			return false
+		}
+		try {
+			const result = await firebase.signInWithPopup(firebase.auth, firebaseProvider)
+			const idToken = await result.user.getIdToken(true)
+			await axiosInstance.post('/auth/reauthenticate', { idToken, provider: providerKey })
+			return true
+		} catch (error) {
+			if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+				toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.errors.generic'))
+			}
+			return false
 		}
 	},
 

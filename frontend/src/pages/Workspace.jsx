@@ -6,41 +6,41 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
-import CreateBoardModal from '../components/app/CreateBoardModal'
-import BoardBackgroundDialog from '../components/boards/BoardBackgroundDialog'
-import BoardColumn, { ListComposer } from '../components/board/BoardColumn'
-import ColumnActions from '../components/board/ColumnActions'
-import BoardDock from '../components/board/BoardDock'
-import BoardSkeleton from '../components/board/BoardSkeleton'
-import BoardSwitcher from '../components/board/BoardSwitcher'
-import '../components/board/board-columns.css'
+import CreateBoardModal from '../features/boards/CreateBoardModal'
+import BoardBackgroundDialog from '../features/boards/backgrounds/BoardBackgroundDialog'
+import BoardColumn, { ListComposer } from '../features/board/columns/BoardColumn'
+import ColumnActions from '../features/board/columns/ColumnActions'
+import BoardDock from '../features/board/dock/BoardDock'
+import BoardSkeleton from '../features/board/BoardSkeleton'
+import BoardSwitcher from '../features/board/dock/BoardSwitcher'
+import '../features/board/columns/board-columns.css'
 import useIsPhone from '../hooks/useIsPhone'
-import useFlipColumns from '../hooks/useFlipColumns'
-import { ConfirmDialog } from '../ui'
-import { backgroundCss, backgroundPayload } from '../utils/boardBackground'
+import useFlipColumns from '../features/board/hooks/useFlipColumns'
+import { Button, ConfirmDialog, EmptyState } from '../ui'
+import { backgroundCss, backgroundPayload } from '../features/boards/backgrounds/boardBackground'
 import { useBoardPrefs } from '../store/useBoardPrefs'
 import { useBoardStats } from '../store/useBoardStats'
 import { toast } from 'sonner'
-import { BoardActions, BoardTitle } from '../components/board/header/BoardHeader'
-import BoardFilter from '../components/board/header/BoardFilter'
-import BoardMenu from '../components/board/header/BoardMenu'
-import ShareDialog from '../components/board/header/ShareDialog'
-import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../utils/cardFilter'
-import CardModal from '../components/card/CardModal'
-import CardTile from '../components/card/CardTile'
-import useCardDrag from '../hooks/useCardDrag'
-import useFlipCards from '../hooks/useFlipCards'
-import { allLabels } from '../utils/cardDisplay'
-import { isSamePlace, moveCardInColumns } from '../utils/cardOrdering'
-import WorkspaceOverview from '../components/WorkspaceOverview'
-import WorkspaceSidebar from '../components/WorkspaceSidebar'
-import WorkspaceTopbar from '../components/WorkspaceTopbar'
+import { BoardActions, BoardTitle } from '../features/board/header/BoardHeader'
+import BoardFilter from '../features/board/header/BoardFilter'
+import BoardMenu from '../features/board/header/BoardMenu'
+import ShareDialog from '../features/board/header/ShareDialog'
+import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../features/board/model/cardFilter'
+import CardModal from '../features/board/cards/CardModal'
+import CardTile from '../features/board/cards/CardTile'
+import useCardDrag from '../features/board/hooks/useCardDrag'
+import useFlipCards from '../features/board/hooks/useFlipCards'
+import { allLabels } from '../features/board/model/cardDisplay'
+import { isSamePlace, moveCardInColumns } from '../features/board/model/cardOrdering'
+import BoardsOverview from '../features/boards/BoardsOverview'
+import AppSidebar from '../app/shell/AppSidebar'
+import AppTopbar from '../app/shell/AppTopbar'
 import { axiosInstance } from '../lib/axios'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
-import { sortTasks } from '../utils/taskSorting'
-import { getColumnDropIndex, reorderColumns } from '../utils/columnOrdering'
-import useWorkspaceNavigation from '../hooks/useWorkspaceNavigation'
-import useBoardRealtime from '../hooks/useBoardRealtime'
+import { sortTasks } from '../features/board/model/taskSorting'
+import { getColumnDropIndex, reorderColumns } from '../features/board/model/columnOrdering'
+import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
+import useBoardRealtime from '../features/board/hooks/useBoardRealtime'
 import {
 	addColumn,
 	addTask,
@@ -52,7 +52,7 @@ import {
 	replaceTask,
 	setTaskCommentCount,
 	setColumnTasks,
-} from '../utils/boardColumns'
+} from '../features/board/model/boardColumns'
 import {
 	devBoard,
 	devBoardInvites,
@@ -61,15 +61,6 @@ import {
 	isDevAuthBypass,
 } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
-
-const PRIORITY_LABELS = {
-	none: 'No priority',
-	low: 'Low',
-	medium: 'Medium',
-	high: 'High',
-	urgent: 'Urgent',
-}
-
 
 const getSortStorageKey = (boardId, userId = 'anonymous') =>
 	`kanban-column-sorts:${userId}:${boardId}`
@@ -229,7 +220,7 @@ const Workspace = () => {
 			)
 		} catch (error) {
 			setColumns(previousColumns)
-			toast.error(error.response?.data?.message || 'Could not reorder column')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.reorderColumnError'))
 		}
 	}, [columns])
 
@@ -291,7 +282,7 @@ const Workspace = () => {
 				}
 			} catch (error) {
 				if (error.response?.status !== 404) {
-					toast.error(error.response?.data?.message || 'Could not load boards')
+					toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.loadBoardsError'))
 				}
 			} finally {
 				setIsLoading(false)
@@ -356,9 +347,7 @@ const Workspace = () => {
 				if (isCurrent) applyLoadedColumns(nextColumns)
 			} catch (error) {
 				if (isCurrent) {
-					toast.error(
-						error.response?.data?.message || 'Could not load this board',
-					)
+					toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.loadBoardError'))
 				}
 			} finally {
 				if (isCurrent) {
@@ -526,8 +515,8 @@ const Workspace = () => {
 			navigate('/workspaces')
 			toast.error(
 				reason === 'board-deleted'
-					? `${boardName || 'This board'} was deleted by its owner`
-					: 'You no longer have access to this room',
+					? boardName ? translateCurrent('workspace.boardDeleted', { name: boardName }) : translateCurrent('workspace.boardDeletedUnnamed')
+					: translateCurrent('workspace.accessLost'),
 			)
 		},
 		'activity:new': (activity) => {
@@ -623,7 +612,7 @@ const Workspace = () => {
 			setNewBoardName('')
 			setNewBoardVisibility('private')
 			setIsCreatingBoard(false)
-			toast.success('Demo board created locally')
+			toast.success(translateCurrent('workspace.boardCreated'))
 			return
 		}
 		setIsSubmittingBoard(true)
@@ -776,7 +765,7 @@ const Workspace = () => {
 					member._id === memberId ? { ...member, role } : member,
 				),
 			)
-			toast.success('Demo member role updated')
+			toast.success(translateCurrent('workspace.memberRoleUpdated'))
 			return
 		}
 		try {
@@ -824,7 +813,7 @@ const Workspace = () => {
 		if (!selectedBoard || isDevAuthBypass) {
 			setColumns((current) => current.filter((col) => col._id !== columnId))
 			setDeleteColumnTarget(null)
-			toast.success('Demo column deleted')
+			toast.success(translateCurrent('workspace.columnDeleted'))
 			return
 		}
 
@@ -832,9 +821,9 @@ const Workspace = () => {
 			await axiosInstance.delete(`/board/columns/${columnId}`)
 			setColumns((current) => current.filter((col) => col._id !== columnId))
 			setDeleteColumnTarget(null)
-			toast.success('Column deleted')
+			toast.success(translateCurrent('workspace.columnDeleted'))
 		} catch (error) {
-			toast.error(error.response?.data?.message || 'Could not delete column')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.deleteColumnError'))
 		}
 	}
 
@@ -877,7 +866,7 @@ const Workspace = () => {
 				...readLocalSorts(selectedBoard._id, authUser?._id),
 				[columnId]: sortType,
 			})
-			toast.success('Tasks sorted')
+			toast.success(translateCurrent('workspace.tasksSorted'))
 			return
 		}
 		try {
@@ -900,10 +889,10 @@ const Workspace = () => {
 						: column,
 				),
 			)
-			toast.error(error.response?.data?.message || 'Could not save task sorting')
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.sortSaveError'))
 			return
 		}
-		toast.success('Tasks sorted')
+		toast.success(translateCurrent('workspace.tasksSorted'))
 	}
 
 	// Folded lists are remembered per person and board on this device.
@@ -1535,8 +1524,8 @@ const Workspace = () => {
 	}, [boardId, authUser?._id])
 
 	return (
-		<div className='workspace-shell flex h-dvh'>
-			<WorkspaceSidebar
+		<div className='workspace-shell'>
+			<AppSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
 				boards={boards}
@@ -1547,10 +1536,10 @@ const Workspace = () => {
 			/>
 
 			<main
-				className={`workspace-main flex-1 overflow-auto${boardId && selectedBoard?.background ? ' has-board-background' : ''}`}
+				className={`workspace-main${boardId && selectedBoard?.background ? ' has-board-background' : ''}`}
 				style={boardId && selectedBoard?.background ? { '--board-background': backgroundCss(selectedBoard.background) } : undefined}
 			>
-				<WorkspaceTopbar
+				<AppTopbar
 					isSidebarOpen={isSidebarOpen}
 					onSidebarToggle={() => setIsSidebarOpen((value) => !value)}
 					isSidebarCollapsed={isSidebarCollapsed}
@@ -1580,10 +1569,10 @@ const Workspace = () => {
 									onOpenSwitcher={() => setIsSwitcherOpen(true)}
 								/>
 							)}
-				</WorkspaceTopbar>
+				</AppTopbar>
 
 				{!boardId ? (
-					<WorkspaceOverview
+					<BoardsOverview
 						boards={boards}
 						isLoading={isLoading}
 						onOpenBoard={openOverviewBoard}
@@ -1594,22 +1583,12 @@ const Workspace = () => {
 						{isBoardContentLoading ? (
 							<BoardSkeleton />
 						) : !selectedBoard ? (
-							<div className='empty-state empty-state-accent'>
-								<div className='empty-icon'>
-									<Sparkles size={26} />
-								</div>
-								<h2>Start with a board</h2>
-								<p>
-									Boards give every project a home. Create one and turn loose
-									ideas into visible progress.
-								</p>
-								<button
-									className='primary-button'
-									onClick={() => setIsCreatingBoard(true)}
-								>
-									<Plus size={18} /> Create your first board
-								</button>
-							</div>
+							<EmptyState
+								icon={Sparkles}
+								title={tr('workspace.emptyTitle')}
+								description={tr('workspace.emptyText')}
+								action={<Button icon={Plus} onClick={() => setIsCreatingBoard(true)}>{tr('workspace.emptyAction')}</Button>}
+							/>
 						) : (
 							<>
 								<div className='bc-scroll'>
@@ -1679,7 +1658,7 @@ const Workspace = () => {
 					onLabelUpdate={updateLabel}
 					onLabelDelete={deleteLabel}
 					onAttachLink={(url, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments`, { url, name }))}
-					onAttachImage={(image, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments/image`, { image, name }))}
+					onAttachImage={(image, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments/image`, { image, name }, { timeout: 60_000 }))}
 					onRemoveAttachment={(item) => cardRequest(() => axiosInstance.delete(`/board/tasks/${openTask._id}/attachments/${item._id}`))}
 					onToggleWatch={() => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/watch`))}
 					onCopyLink={() => copyText(`${window.location.origin}/workspaces/${selectedBoard?._id}?task=${openTask._id}`, tr('card.linkCopied'))}
@@ -1744,6 +1723,7 @@ const Workspace = () => {
 						onChange={setCardFilter}
 						people={boardPeople}
 						labels={boardLabels(columns)}
+						savedLabels={selectedBoard?.labels || []}
 						currentUserId={authUser?._id}
 						matchCount={matchingCards}
 						totalCount={totalCards}
