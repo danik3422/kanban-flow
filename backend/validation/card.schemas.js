@@ -21,6 +21,12 @@ const taskFields = {
 		.transform((value) => value || null),
 	completed: z.boolean(),
 	estimateMinutes: z.number().int().min(0).max(100000),
+	repeat: z.object({
+		frequency: z.enum(['daily', 'weekdays', 'weekly', 'monthly', 'yearly']),
+		interval: z.number().int().min(1).max(99).default(1),
+		days: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+		until: z.union([z.iso.date(), z.null()]).optional(),
+	}).nullable(),
 	cover: z.union([
 		z.object({ type: z.literal('color'), key: z.enum(['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']), size: z.enum(['strip', 'full']).default('strip') }),
 		z.object({

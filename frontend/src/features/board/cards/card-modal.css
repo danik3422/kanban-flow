@@ -223,3 +223,18 @@
 .cp-cover-upload__icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-link); }
 .cp-cover-upload__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cp-cover-upload__title { font-size: var(--ui-text-sm); font-weight: 600; }
+
+/* Repeating cards: the rule in the dates picker and on the card. */
+.cp-repeat { display: flex; flex-direction: column; gap: var(--ui-space-2); padding-top: var(--ui-space-3); border-top: 1px solid var(--ui-border); }
+.cp-repeat__label { display: flex; align-items: center; gap: 6px; font-size: var(--ui-text-sm); font-weight: 600; }
+.cp-repeat__every { display: flex; align-items: center; gap: var(--ui-space-2); font-size: var(--ui-text-sm); }
+.cp-repeat__every input { width: 72px; }
+.cp-repeat__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cp-repeat__day { min-height: 36px; padding: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); color: var(--ui-text-2); font: inherit; font-size: var(--ui-text-xs); font-weight: 600; text-transform: capitalize; cursor: pointer; }
+.cp-repeat__day.is-on { border-color: var(--ui-accent); background: var(--ui-accent); color: var(--ui-accent-text); }
+.cp-repeat__day:disabled { cursor: default; }
+.cp-repeat__day:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.cp-repeat__summary { margin: 0; padding: 8px 10px; border-radius: var(--ui-radius-sm); background: var(--ui-accent-soft); color: var(--ui-text); font-size: var(--ui-text-sm); }
+.cm-repeat { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; margin-top: 0; padding: 4px 10px; border: 0; border-radius: var(--ui-radius-full); background: var(--ui-accent-soft); color: var(--ui-link); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.cm-repeat:hover { filter: brightness(0.97); }
+.cm-repeat:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }

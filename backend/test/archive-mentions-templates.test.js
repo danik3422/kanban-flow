@@ -239,3 +239,40 @@ describe('covers', () => {
 		assert.equal((await Task.findById(first._id)).cover, null)
 	})
 })
+
+describe('repeating cards', () => {
+	const key = (date) => new Date(date).toISOString().slice(0, 10)
+	it('completing a repeating card brings the next one, un-completing takes it back', async () => {
+		const { owner, member, todo, first } = await setup()
+		await Task.updateOne({ _id: first._id }, { $set: { assignees: [member._id], checklist: [{ text: 'Plan', completed: true }], dueDate: new Date('2099-01-05T00:00:00Z') } })
+		const set = await api('patch', `/tasks/${first._id}`, owner).send({ repeat: { frequency: 'weekly' } })
+		assert.equal(set.status, 200)
+		assert.deepEqual(set.body.repeat, { frequency: 'weekly', interval: 1, days: [1], until: null })
+
+		const done = await api('patch', `/tasks/${first._id}`, owner).send({ completed: true })
+		assert.equal(done.status, 200)
+		assert.equal(key(done.body.nextInSeries.dueDate), '2099-01-12')
+		assert.equal(done.body.repeat, null)
+		const next = await Task.findById(done.body.nextInSeries._id)
+		assert.equal(String(next.column), String(todo._id))
+		assert.equal(next.checklist[0].completed, false)
+		assert.deepEqual(next.assignees.map(String), [String(member._id)])
+		assert.equal(next.repeat.frequency, 'weekly')
+
+		const undone = await api('patch', `/tasks/${first._id}`, owner).send({ completed: false })
+		assert.equal(undone.body.repeat.frequency, 'weekly')
+		assert.equal(await Task.exists({ _id: next._id }), null)
+	})
+
+	it('a card done in the last list comes back in the first list; the series can end', async () => {
+		const { owner, todo, doing, second } = await setup()
+		await Task.updateOne({ _id: second._id }, { $set: { column: doing._id, position: 0, dueDate: new Date('2099-03-31T00:00:00Z') } })
+		await api('patch', `/tasks/${second._id}`, owner).send({ repeat: { frequency: 'monthly', until: '2099-04-30' } })
+		const done = await api('patch', `/tasks/${second._id}`, owner).send({ completed: true })
+		assert.equal(key(done.body.nextInSeries.dueDate), '2099-04-30')
+		assert.equal(String(done.body.nextInSeries.column), String(todo._id))
+		const last = await api('patch', `/tasks/${done.body.nextInSeries._id}`, owner).send({ completed: true })
+		assert.equal(last.body.nextInSeries, undefined)
+		assert.equal(last.body.repeat, null)
+	})
+})

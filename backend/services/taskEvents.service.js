@@ -18,6 +18,7 @@ export const describeTaskContent = (task) => ({
 	'start date': task.startDate ? new Date(task.startDate).toISOString() : '',
 	estimate: String(task.estimateMinutes || 0),
 	cover: task.cover ? JSON.stringify([task.cover.type, task.cover.key || task.cover.id || task.cover.url, task.cover.size]) : '',
+	repeat: task.repeat?.frequency ? JSON.stringify([task.repeat.frequency, task.repeat.interval, task.repeat.days, task.repeat.until]) : '',
 })
 
 export const recordTaskActivity = async ({ taskId, boardId, userId, type, message = '', fromColumn = '', toColumn = '', durationMinutes = 0, fields }) =>

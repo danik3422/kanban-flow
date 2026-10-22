@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
+import { intlLocale, translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
 import { templateStarter } from '../features/boards/boardTemplates'
 import CreateBoardModal from '../features/boards/CreateBoardModal'
@@ -13,10 +13,12 @@ import BoardBackgroundDialog from '../features/boards/backgrounds/BoardBackgroun
 import BoardColumn, { ListComposer } from '../features/board/columns/BoardColumn'
 import ColumnActions from '../features/board/columns/ColumnActions'
 import BoardDock from '../features/board/dock/BoardDock'
+import PhoneViewSwitch from '../features/board/dock/PhoneViewSwitch'
 import BoardPlanner from '../features/board/planner/BoardPlanner'
+import BoardTable from '../features/board/table/BoardTable'
 import { NO_DATE } from '../features/board/planner/plannerModel'
 import { resolveWeekStart } from '../lib/preferences'
-import { getDueDateKey } from '../lib/dueDate'
+import { formatDueDate, getDueDateKey } from '../lib/dueDate'
 import BoardSkeleton from '../features/board/BoardSkeleton'
 import BoardSwitcher from '../features/board/dock/BoardSwitcher'
 import '../features/board/columns/board-columns.css'
@@ -103,14 +105,15 @@ const columnsCache = new Map()
 const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column._id, column.sortBy || 'custom']))
 
 const PLANNER_KEY = 'kh:planner'
+const PHONE_VIEW_KEY = 'kh:phone-view'
 const PLANNER_MIN = 300
 const PLANNER_MAX = 560
 const readPlannerLayout = () => {
 	try {
 		const saved = JSON.parse(localStorage.getItem(PLANNER_KEY) || '{}')
-		return { open: Boolean(saved.open), board: saved.board !== false, width: Math.min(Math.max(Number(saved.width) || 360, PLANNER_MIN), PLANNER_MAX) }
+		return { open: Boolean(saved.open), board: saved.board !== false, view: saved.view === 'table' ? 'table' : 'board', width: Math.min(Math.max(Number(saved.width) || 360, PLANNER_MIN), PLANNER_MAX) }
 	} catch {
-		return { open: false, board: true, width: 360 }
+		return { open: false, board: true, view: 'board', width: 360 }
 	}
 }
 
@@ -915,6 +918,34 @@ const Workspace = () => {
 		}
 	}
 
+	// The table's batch actions: several cards to one list, or into the archive, with one message.
+	const moveCardsTo = async (taskIds, columnId) => {
+		if (!taskIds.length) return
+		setColumns((current) => taskIds.reduce((next, taskId) => moveCardInColumns(next, taskId, columnId, Number.MAX_SAFE_INTEGER), current))
+		try {
+			for (const taskId of taskIds) await axiosInstance.patch(`/board/tasks/${taskId}`, { column: columnId })
+			toast.success(tr('table.moved', { count: taskIds.length }))
+		} catch (error) {
+			cardError(error)
+			reloadColumns()
+		}
+	}
+	const archiveTasks = async (tasks) => {
+		if (!tasks.length) return
+		const done = []
+		for (const task of tasks) {
+			try {
+				await axiosInstance.post(`/board/tasks/${task._id}/archive`)
+				done.push(task._id)
+			} catch (error) {
+				cardError(error)
+				break
+			}
+		}
+		setColumns((current) => done.reduce((next, taskId) => removeTask(next, taskId), current))
+		if (done.length) toast.success(tr('table.archived', { count: done.length }))
+	}
+
 	const deleteTask = async (taskId) => {
 		const drop = () => {
 			setColumns((current) => removeTask(current, taskId))
@@ -1005,6 +1036,17 @@ const Workspace = () => {
 			}
 			return next
 		})
+	}
+
+	// Fold or unfold every list at once, from the board menu.
+	const setAllCollapsed = (collapse) => {
+		const next = collapse ? columns.map((column) => column._id) : []
+		setCollapsedColumnIds(next)
+		try {
+			if (collapsedKey) localStorage.setItem(collapsedKey, JSON.stringify(next))
+		} catch {
+			// Folding still works for this visit.
+		}
 	}
 
 	const columnError = (error, fallbackKey) => toast.error(translateServerMessageCurrent(error.response?.data?.message, fallbackKey))
@@ -1112,7 +1154,6 @@ const Workspace = () => {
 
 	// The planner sits beside the board; hiding the board leaves it full width. Phones,
 	// which have no room for both, open the calendar page instead.
-	const selectedBoardIdForPlanner = selectedBoard?._id
 	const [plannerLayout, setPlannerLayout] = useState(readPlannerLayout)
 	// Spoken by screen readers after keyboard moves and planner drops.
 	const [announcement, setAnnouncement] = useState('')
@@ -1123,19 +1164,44 @@ const Workspace = () => {
 			// Only a preference.
 		}
 	}, [plannerLayout])
+	// Phones show one view at a time: the board, the table or the planner.
+	const [phoneView, setPhoneView] = useState(() => {
+		try {
+			return ['table', 'planner'].includes(localStorage.getItem(PHONE_VIEW_KEY)) ? localStorage.getItem(PHONE_VIEW_KEY) : 'board'
+		} catch {
+			return 'board'
+		}
+	})
+	const choosePhoneView = useCallback((view) => {
+		setPhoneView(view)
+		try {
+			localStorage.setItem(PHONE_VIEW_KEY, view)
+		} catch {
+			// Only a preference.
+		}
+	}, [])
 	const togglePlanner = useCallback(() => {
 		if (isPhone) {
-			if (selectedBoardIdForPlanner) navigate(`/calendar?board=${selectedBoardIdForPlanner}`)
+			choosePhoneView(phoneView === 'planner' ? 'board' : 'planner')
 			return
 		}
 		setPlannerLayout((current) => (current.open ? { ...current, open: false, board: true } : { ...current, open: true }))
-	}, [isPhone, navigate, selectedBoardIdForPlanner])
-	// The board can be hidden only while the planner is open: one of them always shows.
-	const toggleBoard = useCallback(() => {
-		setPlannerLayout((current) => (!current.board ? { ...current, board: true } : current.open ? { ...current, board: false } : current))
+	}, [isPhone, phoneView, choosePhoneView])
+	// The board or the table fills the main area; it can be hidden only while the planner
+	// is open, so one of them always shows. Switching to the other view shows it.
+	const showMainView = useCallback((view) => {
+		setPlannerLayout((current) => {
+			if (current.view !== view) return { ...current, view, board: true }
+			return !current.board ? { ...current, board: true } : current.open ? { ...current, board: false } : current
+		})
 	}, [])
-	const plannerShown = !isPhone && plannerLayout.open
-	const boardShown = !plannerShown || plannerLayout.board
+	const toggleBoard = useCallback(() => showMainView('board'), [showMainView])
+	const toggleTable = useCallback(() => {
+		if (!isPhone) showMainView('table')
+	}, [isPhone, showMainView])
+	const plannerShown = isPhone ? phoneView === 'planner' : plannerLayout.open
+	const boardShown = isPhone ? phoneView !== 'planner' : !plannerShown || plannerLayout.board
+	const mainView = isPhone ? (phoneView === 'table' ? 'table' : 'board') : plannerLayout.view
 	const startPlannerResize = (event) => {
 		event.preventDefault()
 		const startX = event.clientX
@@ -1514,8 +1580,14 @@ const Workspace = () => {
 		if (local || isDevAuthBypass) return task
 		try {
 			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}`, fields)
-			setColumns((current) => replaceTask(current, data))
-			return data
+			// Completing a repeating card brings the next one of the series.
+			const { nextInSeries, ...saved } = data
+			setColumns((current) => {
+				const updated = replaceTask(current, saved)
+				return nextInSeries ? addTask(updated, nextInSeries) : updated
+			})
+			if (nextInSeries) toast.success(tr('repeat.created', { date: formatDueDate(nextInSeries.dueDate, { weekday: 'short', day: 'numeric', month: 'short' }, intlLocale(language)) }))
+			return saved
 		} catch (error) {
 			setColumns((current) => replaceTask(current, task))
 			cardError(error)
@@ -1845,10 +1917,12 @@ const Workspace = () => {
 								action={<Button icon={Plus} onClick={() => setIsCreatingBoard(true)}>{tr('workspace.emptyAction')}</Button>}
 							/>
 						) : (
-							<div className={`bp-layout${plannerShown ? ' has-planner' : ''}`}>
+							<>
+							{isPhone && <PhoneViewSwitch value={phoneView} onChange={choosePhoneView} />}
+							<div className={`bp-layout${plannerShown && !isPhone ? ' has-planner' : ''}`}>
 								{plannerShown && (
 									<BoardPlanner
-										mode={boardShown ? 'side' : 'full'}
+										mode={isPhone ? 'phone' : boardShown ? 'side' : 'full'}
 										columns={columns}
 										labels={boardLabelList}
 										weekStart={resolveWeekStart(language)}
@@ -1863,7 +1937,27 @@ const Workspace = () => {
 										onResizeStart={startPlannerResize}
 									/>
 								)}
-								{boardShown && <div className='bp-board'>
+								{boardShown && mainView === 'table' && (
+									<BoardTable
+										columns={columns}
+										lastColumnId={lastColumnId}
+										cardPasses={cardPasses}
+										labels={labelOptions}
+										people={boardPeople}
+										canEdit
+										onPatch={patchTask}
+										onMove={moveCard}
+										onMoveMany={moveCardsTo}
+										onArchiveMany={archiveTasks}
+										onOpen={setTaskDetails}
+										onAddCard={addCard}
+										canManageLabels={canManageBoard}
+										onLabelCreate={(draft, task) => createLabel(draft, { addTo: task })}
+										onLabelUpdate={updateLabel}
+										onLabelDelete={deleteLabel}
+									/>
+								)}
+								{boardShown && mainView === 'board' && <div className='bp-board'>
 								<div className='bc-scroll'>
 									<div className={`bc-board${isFiltering ? ' is-filtering' : ''}`} ref={boardListRef}>
 										{boardColumns.map((column) => (
@@ -1893,11 +1987,12 @@ const Workspace = () => {
 								</div>
 								</div>}
 							</div>
+							</>
 						)}
 					</div>
 				)}
 				{boardId && selectedBoard && !isBoardContentLoading && (
-					<BoardDock plannerOpen={plannerShown} boardVisible={boardShown} onTogglePlanner={togglePlanner} onToggleBoard={toggleBoard} onSwitchBoards={openSwitcher} />
+					<BoardDock plannerOpen={plannerShown} boardVisible={boardShown && mainView === 'board'} tableVisible={boardShown && mainView === 'table'} onTogglePlanner={togglePlanner} onToggleBoard={toggleBoard} onToggleTable={toggleTable} onSwitchBoards={openSwitcher} />
 				)}
 			</main>
 			<BoardSwitcher
@@ -1998,6 +2093,10 @@ const Workspace = () => {
 						onLeave={() => setIsLeaveBoardOpen(true)}
 						onDelete={() => setIsDeleteBoardOpen(true)}
 						onArchive={() => setIsArchiveOpen(true)}
+						listCount={isPhone ? 0 : columns.length}
+						collapsedCount={columns.filter((column) => collapsedColumnIds.includes(column._id)).length}
+						onCollapseAll={() => setAllCollapsed(true)}
+						onExpandAll={() => setAllCollapsed(false)}
 						onShortcuts={() => setIsShortcutsOpen(true)}
 					/>
 					<ShortcutsDialog open={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />

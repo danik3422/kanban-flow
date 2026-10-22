@@ -4,6 +4,7 @@
 const LIMITS = { lists: 100, cardsPerList: 2000, cards: 5000, labels: 50, title: 200, listTitle: 60, label: 40, item: 300, comment: 2000, comments: 100, description: 20000, boardDescription: 1000 }
 const COLORS = new Set(['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray'])
 const TRELLO_COLORS = { black: 'gray', null: 'gray' }
+const REPEATS = new Set(['daily', 'weekdays', 'weekly', 'monthly', 'yearly'])
 
 export class BoardFileError extends Error {
 	constructor(code) {
@@ -146,6 +147,7 @@ const fromKanbanHub = (data) => finish({
 			completed: Boolean(card.completed),
 			archived: Boolean(card.archived),
 			estimateMinutes: Number.isInteger(card.estimateMinutes) && card.estimateMinutes > 0 ? Math.min(card.estimateMinutes, 100000) : 0,
+			repeat: REPEATS.has(card.repeat?.frequency) ? { frequency: card.repeat.frequency, interval: Math.min(Math.max(Number(card.repeat.interval) || 1, 1), 99), ...(Array.isArray(card.repeat.days) && { days: card.repeat.days.filter((day) => Number.isInteger(day) && day >= 1 && day <= 7) }), until: /^\d{4}-\d{2}-\d{2}$/.test(card.repeat.until || '') ? card.repeat.until : null } : null,
 			comments: (card.comments || []).filter((comment) => comment?.text?.trim()).slice(0, LIMITS.comments).map((comment) => ({
 				text: clip(comment.text, LIMITS.comment),
 				author: clip(comment.author, 120),

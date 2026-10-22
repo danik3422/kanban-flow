@@ -82,3 +82,10 @@
 @media (prefers-reduced-motion: reduce) {
 	.bd-tip, .bs-tile__open, .bs-tile__star { transition: none; }
 }
+
+/* Phones: one view at a time, chosen from a segmented bar above the content. */
+.pv { display: grid; flex: 0 0 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 12px 0; padding: 4px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface) 92%, transparent); box-shadow: var(--ui-shadow-sm); backdrop-filter: blur(12px); }
+.pv__item { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 40px; padding: 0 4px; font-size: 13px !important; border: 0; border-radius: var(--ui-radius-md); background: none; color: var(--ui-text-2); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pv__item span { overflow: hidden; text-overflow: ellipsis; }
+.pv__item.is-active { background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
+.pv__item:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }

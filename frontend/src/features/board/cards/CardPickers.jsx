@@ -1,4 +1,4 @@
-import { Check, ImagePlus, Link2, Loader2, Pencil, Search } from 'lucide-react'
+import { Check, ImagePlus, Link2, Loader2, Pencil, Repeat, Search } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
@@ -6,11 +6,12 @@ import { Avatar, Button, Checkbox, Field, Input, Select } from '../../../ui'
 import { cx } from '../../../ui/utils'
 import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../../../lib/dueDate'
 import { CARD_COLORS, CARD_COLOR_KEYS } from '../model/cardDisplay'
+import { describeRepeat, FREQUENCIES, nextOccurrence, weekdayChoices, weekdayOfKey } from '../model/recurrence'
 import { BackgroundSwatch } from '../../boards/backgrounds/BackgroundPicker'
 import { usePhotoSearch } from '../../boards/backgrounds/usePhotoSearch'
 import { assetUrl } from '../../../lib/runtimeConfig'
 import { useServerConfig } from '../../../lib/serverConfig'
-import { translateServerMessageCurrent } from '../../../i18n/translate'
+import { intlLocale, translateServerMessageCurrent } from '../../../i18n/translate'
 import { prepareBackgroundImage } from '../../boards/backgrounds/prepareBackgroundImage'
 
 const ColorSwatches = ({ value, onChange, label }) => {
@@ -86,16 +87,47 @@ export const LabelsPicker = ({ labels, selected, canEdit, onToggle, onCreate, on
 }
 
 /** Start and due dates, with quick picks for the usual "today / tomorrow / next week". */
-export const DatesPicker = ({ startDate, dueDate, onSave, onRemove }) => {
-	const { t } = useI18n()
+/**
+ * Start and due dates, and how the card repeats: every day, on weekdays, on chosen
+ * days of the week, every month or year, every N of them, optionally until a date.
+ * A repeating card needs a due date; the next date is shown before saving.
+ */
+export const DatesPicker = ({ startDate, dueDate, repeat, onSave, onRemove }) => {
+	const { t, language } = useI18n()
 	const [start, setStart] = useState(getDueDateKey(startDate) || '')
 	const [due, setDue] = useState(getDueDateKey(dueDate) || '')
 	const [useStart, setUseStart] = useState(Boolean(startDate))
 	const [useDue, setUseDue] = useState(Boolean(dueDate) || !startDate)
+	const [frequency, setFrequency] = useState(repeat?.frequency || '')
+	const [interval, setRepeatInterval] = useState(repeat?.interval || 1)
+	const [days, setDays] = useState(repeat?.days || [])
+	const [until, setUntil] = useState(repeat?.until || '')
 	const today = getLocalDateKey()
 	const quick = [['today', today], ['tomorrow', addDaysToKey(today, 1)], ['nextWeek', addDaysToKey(today, 7)]]
+	const hasDue = useDue && Boolean(due)
+	const rule = hasDue && frequency ? {
+		frequency,
+		interval: frequency === 'weekdays' ? 1 : Math.min(Math.max(Number(interval) || 1, 1), 99),
+		...(frequency === 'weekly' && { days: days.length ? [...days].sort() : [weekdayOfKey(due)] }),
+		...((frequency === 'monthly' || frequency === 'yearly') && { dayOfMonth: Number(due.slice(8, 10)) }),
+		until: until || null,
+	} : null
+	const nextKey = rule ? nextOccurrence(rule, due) : null
+	const nextText = nextKey && (!rule.until || nextKey <= rule.until)
+		? new Intl.DateTimeFormat(intlLocale(language), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${nextKey}T00:00:00Z`))
+		: ''
+	const toggleDay = (day) => setDays((current) => {
+		const base = current.length ? current : due ? [weekdayOfKey(due)] : []
+		return base.includes(day) ? base.filter((item) => item !== day) : [...base, day]
+	})
+	const shownDays = days.length ? days : due ? [weekdayOfKey(due)] : []
+	const save = (event) => {
+		event.preventDefault()
+		const { dayOfMonth: _dayOfMonth, ...sent } = rule || {}
+		onSave({ startDate: useStart && start ? start : null, dueDate: hasDue ? due : null, repeat: rule ? sent : null })
+	}
 	return (
-		<form className='cp-form' onSubmit={(event) => { event.preventDefault(); onSave({ startDate: useStart && start ? start : null, dueDate: useDue && due ? due : null }) }}>
+		<form className='cp-form' onSubmit={save}>
 			<div className='cp-quick'>
 				{quick.map(([key, value]) => (
 					<button key={key} type='button' className={cx('ui-chip', useDue && due === value && 'is-on')} aria-pressed={useDue && due === value} onClick={() => { setUseDue(true); setDue(value) }}>{t(`card.${key}`)}</button>
@@ -108,6 +140,43 @@ export const DatesPicker = ({ startDate, dueDate, onSave, onRemove }) => {
 			<div className='cp-date-row'>
 				<Checkbox checked={useDue} onChange={(event) => setUseDue(event.target.checked)} label={t('card.dueDate')} />
 				<input type='date' className='ui-control' value={due} disabled={!useDue} min={start || undefined} onChange={(event) => setDue(event.target.value)} aria-label={t('card.dueDate')} />
+			</div>
+			<div className='cp-repeat'>
+				<label className='cp-repeat__label' htmlFor='card-repeat'><Repeat size={15} aria-hidden='true' />{t('repeat.title')}</label>
+				<Select
+					id='card-repeat'
+					value={hasDue ? frequency : ''}
+					disabled={!hasDue}
+					onChange={(event) => setFrequency(event.target.value)}
+					options={[{ value: '', label: t('repeat.never') }, ...FREQUENCIES.map((value) => ({ value, label: t(`repeat.options.${value}`) }))]}
+				/>
+				{!hasDue && <p className='cp-hint'>{t('repeat.needsDue')}</p>}
+				{rule && frequency !== 'weekdays' && (
+					<div className='cp-repeat__every'>
+						<span>{t('repeat.every')}</span>
+						<input type='number' className='ui-control' min={1} max={99} value={interval} onChange={(event) => setRepeatInterval(event.target.value)} aria-label={t('repeat.interval')} />
+						<span>{t(`repeat.units.${frequency}`, { count: rule.interval })}</span>
+					</div>
+				)}
+				{rule && frequency === 'weekly' && (
+					<div className='cp-repeat__days' role='group' aria-label={t('repeat.onDays')}>
+						{weekdayChoices(language).map(({ day, label }) => (
+							<button key={day} type='button' className={cx('cp-repeat__day', shownDays.includes(day) && 'is-on')} aria-pressed={shownDays.includes(day)} onClick={() => toggleDay(day)} disabled={shownDays.length === 1 && shownDays.includes(day)}>{label}</button>
+						))}
+					</div>
+				)}
+				{rule && (
+					<div className='cp-date-row'>
+						<Checkbox checked={Boolean(until)} onChange={(event) => setUntil(event.target.checked ? addDaysToKey(due, 30) : '')} label={t('repeat.untilLabel')} />
+						<input type='date' className='ui-control' value={until} disabled={!until} min={due} onChange={(event) => setUntil(event.target.value)} aria-label={t('repeat.untilLabel')} />
+					</div>
+				)}
+				{rule && (
+					<p className='cp-repeat__summary'>
+						{describeRepeat(t, rule, language)}
+						{nextText && <> · {t('repeat.next', { date: nextText })}</>}
+					</p>
+				)}
 			</div>
 			<div className='cp-form__actions'>
 				<Button type='submit'>{t('card.save')}</Button>

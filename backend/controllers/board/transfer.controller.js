@@ -6,6 +6,7 @@ import Column from '../../models/column.model.js'
 import Task from '../../models/task.model.js'
 import TaskActivity from '../../models/taskActivity.model.js'
 import { getBoardWithRole } from '../../services/boardAccess.service.js'
+import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import { boardLimitMessage, MAX_CARDS_PER_BOARD, reachedBoardLimit } from '../../services/limits.service.js'
 
@@ -111,6 +112,7 @@ export const exportBoard = async (req, res) => {
 					completed: Boolean(task.completed),
 					archived: Boolean(task.archivedAt && !task.archivedWithColumn),
 					estimateMinutes: task.estimateMinutes || 0,
+					repeat: task.repeat?.frequency ? { frequency: task.repeat.frequency, interval: task.repeat.interval || 1, ...(task.repeat.days?.length && { days: task.repeat.days }), until: task.repeat.until || null } : null,
 					members: (task.assignees || []).map((person) => person.name || person.email),
 					attachments: (task.attachments || []).filter((item) => item.kind === 'link').map(({ url, name }) => ({ url, name })),
 					comments: comments.map((comment) => ({ text: comment.message, author: comment.user?.name || comment.user?.email || '', date: comment.createdAt })),
@@ -185,6 +187,7 @@ export const importBoard = async (req, res) => {
 						completed: Boolean(card.completed),
 						completedAt: card.completed ? now : null,
 						estimateMinutes: card.estimateMinutes || 0,
+						repeat: !archived && card.repeat ? normalizeRepeat(card.repeat, card.dueDate ? String(card.dueDate).slice(0, 10) : null, todayKeyIn(req.user.timezone)) : null,
 						...(archived && { archivedAt: now, archivedBy: userId, archivedWithColumn: Boolean(column.archived && !card.archived) }),
 					})
 					commentsByTask.push(card.comments || [])

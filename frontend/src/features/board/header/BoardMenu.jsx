@@ -1,4 +1,4 @@
-import { Activity, Archive, Copy, Download, FileJson, FileSpreadsheet, Image as ImageIcon, Info, Keyboard, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
+import { Activity, Archive, ChevronsLeftRight, ChevronsRightLeft, Copy, Download, FileJson, FileSpreadsheet, Image as ImageIcon, Info, Keyboard, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
@@ -47,6 +47,10 @@ const BoardMenu = ({
 	onDelete,
 	onArchive,
 	onShortcuts,
+	listCount = 0,
+	collapsedCount = 0,
+	onCollapseAll,
+	onExpandAll,
 }) => {
 	const { t, language } = useI18n()
 	const [view, setView] = useState('main')
@@ -130,6 +134,8 @@ const BoardMenu = ({
 					</div>
 					<div className='bh-menu-group'>
 						<Item icon={Star} label={isStarred ? t('boardHeader.unstar') : t('boardHeader.star')} onClick={onToggleStar} />
+						{listCount > 0 && collapsedCount < listCount && <Item icon={ChevronsRightLeft} label={t('boardHeader.collapseAll')} onClick={closeAnd(onCollapseAll)} />}
+						{collapsedCount > 0 && <Item icon={ChevronsLeftRight} label={t('boardHeader.expandAll')} onClick={closeAnd(onExpandAll)} />}
 						<Item icon={Copy} label={t('boardHeader.copy')} onClick={() => go('copy')} />
 						<Item icon={Link2} label={t('boardHeader.copyLink')} onClick={onCopyLink} />
 					</div>

@@ -27,7 +27,7 @@ await page.goto(`${APP}/workspaces/${alpha._id}`); await page.waitForSelector('.
 
 // The dock.
 await page.waitForSelector('.bd')
-check('the dock offers Planner, Board and Switch boards (no Inbox)', (await page.locator('.bd-item').allInnerTexts()).map((text) => text.split('\n')[0]).join('|') === 'Planner|Board|Switch boards')
+check('the dock offers Planner, Board, Table and Switch boards (no Inbox)', (await page.locator('.bd-item').allInnerTexts()).map((text) => text.split('\n')[0]).join('|') === 'Planner|Board|Table|Switch boards')
 check('only the board is shown at first', (await page.locator('.bd-item[aria-pressed="true"]').allInnerTexts()).map((text) => text.split('\n')[0]).join('|') === 'Board')
 await page.locator('.bd-item', { hasText: 'Planner' }).hover()
 await page.waitForTimeout(500)

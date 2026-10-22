@@ -1,4 +1,4 @@
-import { AlertCircle, CalendarDays, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Flag, Inbox, Plus, X } from 'lucide-react'
+import { AlertCircle, CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Flag, Inbox, Plus, Repeat, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useI18n } from '../../../i18n'
@@ -66,6 +66,7 @@ const PlannerCard = ({ item, labelColors, drag, onOpen, onToggleComplete }) => {
 			<span className='pl-card__body'>
 				<span className='pl-card__title' data-i18n-ignore>{task.title}</span>
 				<span className='pl-card__meta'>
+					{task.repeat?.frequency && <Repeat size={12} className='pl-card__repeat' aria-label={t('repeat.title')} />}
 					{urgent && <Flag size={12} className={`pl-card__flag is-${task.priority}`} aria-label={t(`myTasks.priority.${task.priority}`)} />}
 					<span className='pl-card__list' data-i18n-ignore>{item.columnTitle}</span>
 					{(task.labels || []).slice(0, 4).map((name) => (
@@ -75,6 +76,20 @@ const PlannerCard = ({ item, labelColors, drag, onOpen, onToggleComplete }) => {
 				</span>
 			</span>
 		</div>
+	)
+}
+
+/** A coming date of a repeating card: shown faintly, opens the card it comes from. */
+const ProjectedCard = ({ item, onOpen }) => {
+	const { t } = useI18n()
+	return (
+		<button type='button' className='pl-card pl-card--projected' onClick={() => onOpen(item.task)} title={t('planner.projected')}>
+			<Repeat size={14} className='pl-card__projected-icon' aria-hidden='true' />
+			<span className='pl-card__body'>
+				<span className='pl-card__title' data-i18n-ignore>{item.task.title}</span>
+				<span className='pl-card__meta'><span className='pl-card__list'>{t('planner.projected')}</span></span>
+			</span>
+		</button>
 	)
 }
 
@@ -159,10 +174,11 @@ const BoardPlanner = ({ mode, columns, labels, weekStart, drag, canEdit, calenda
 		})
 	}
 
-	const cards = (items, emptyText) => (
+	const cards = (items, emptyText, projected = []) => (
 		<div className='pl-cards'>
 			{items.map((item) => <PlannerCard key={item.task._id} item={item} labelColors={labelColors} drag={drag} onOpen={onOpenTask} onToggleComplete={onToggleComplete} />)}
-			{!items.length && <p className='pl-empty'>{drag.active ? t('planner.dropHere') : emptyText}</p>}
+			{projected.map((item) => <ProjectedCard key={`${item.task._id}-next`} item={item} onOpen={onOpenTask} />)}
+			{!items.length && !projected.length && <p className='pl-empty'>{drag.active ? t('planner.dropHere') : emptyText}</p>}
 		</div>
 	)
 
@@ -182,7 +198,7 @@ const BoardPlanner = ({ mode, columns, labels, weekStart, drag, canEdit, calenda
 				{addingOn === key && (
 					<QuickAdd columns={openColumns} onAdd={(title, columnId) => onAddCard(key, title, columnId)} onDone={() => setAddingOn(null)} />
 				)}
-				{cards(items, mode === 'full' ? '' : t('planner.nothing'))}
+				{cards(items, mode === 'full' ? '' : t('planner.nothing'), groups.projected[key])}
 			</section>
 		)
 	}
@@ -228,11 +244,13 @@ const BoardPlanner = ({ mode, columns, labels, weekStart, drag, canEdit, calenda
 						</Button>
 					)}
 					<IconButton icon={showDone ? EyeOff : Eye} size='sm' label={showDone ? t('planner.hideDone') : t('planner.showDone')} aria-pressed={showDone} onClick={toggleDone} />
-					<Button as={Link} to={calendarHref} variant='ghost' size='sm'>{t('planner.calendar')}</Button>
-					<IconButton icon={X} size='sm' label={t('planner.close')} onClick={onClose} />
+					{mode === 'phone'
+						? <IconButton as={Link} to={calendarHref} icon={CalendarRange} size='sm' label={t('planner.calendar')} />
+						: <Button as={Link} to={calendarHref} variant='ghost' size='sm'>{t('planner.calendar')}</Button>}
+					{mode !== 'phone' && <IconButton icon={X} size='sm' label={t('planner.close')} onClick={onClose} />}
 				</div>
 			</header>
-			{mode === 'side' ? (
+			{mode !== 'full' ? (
 				<div className='pl-scroll'>
 					{overdue}
 					{days.map(daySection)}

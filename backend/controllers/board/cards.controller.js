@@ -9,6 +9,8 @@ import TimeEntry from '../../models/timeEntry.model.js'
 import { ensureBoardAccess, getCardAccess, validateBoardAssignees } from '../../services/boardAccess.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import { normalizeBackground } from '../../services/boardBackgrounds.service.js'
+import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.js'
+import { startNextInSeries, takeBackNextInSeries } from '../../services/repeatingCards.service.js'
 import { boardCardLimitMessage, exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
 import {
 	describeTaskContent,
@@ -256,6 +258,7 @@ export const updateTask = async (req, res) => {
 			completed,
 			estimateMinutes,
 			cover,
+			repeat,
 		} = req.body
 		if (assignees !== undefined && !await validateBoardAssignees(board, assignees)) {
 			return res.status(400).json({ message: 'All assignees must be active board members' })
@@ -292,6 +295,7 @@ export const updateTask = async (req, res) => {
 		if (priority !== undefined) task.priority = priority
 		if (startDate !== undefined) task.startDate = startDate || null
 		if (estimateMinutes !== undefined) task.estimateMinutes = estimateMinutes
+		if (repeat !== undefined) task.repeat = normalizeRepeat(repeat, task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : null, todayKeyIn(req.user.timezone))
 		if (cover !== undefined) {
 			try {
 				// An image already attached to this card can be its cover too.
@@ -370,6 +374,10 @@ export const updateTask = async (req, res) => {
 		} finally {
 			await session.endSession()
 		}
+		// A repeating card brings the next one when completed, and takes it back when un-completed.
+		let nextInSeries = null
+		if (completedChanged && task.completed && task.repeat?.frequency && !task.repeatedTo) nextInSeries = await startNextInSeries(task, boardId, req.user)
+		else if (completedChanged && !task.completed && task.repeatedTo) await takeBackNextInSeries(task, boardId)
 		const updatedTask = await Task.findById(task._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
@@ -484,7 +492,7 @@ export const updateTask = async (req, res) => {
 		}
 		if (moved) await notifyListWatchers({ column: targetColumn, task: updatedTask, board, actorId: req.user._id, fromColumn: originalColumn?.title })
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
-		return res.status(200).json(updatedTask)
+		return res.status(200).json(nextInSeries ? { ...updatedTask, nextInSeries } : updatedTask)
 	} catch (error) {
 		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error updating task:', error)

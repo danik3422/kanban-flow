@@ -1,4 +1,4 @@
-import { CalendarDays, Columns3, Layers } from 'lucide-react'
+import { CalendarDays, Columns3, Layers, Table2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useI18n } from '../../../i18n'
 import { cx } from '../../../ui/utils'
@@ -20,10 +20,10 @@ const DockItem = ({ icon: Icon, label, keys, active, pressed, onClick }) => (
 
 /**
  * The board's floating switcher, Trello-style: show or hide the planner and the board
- * (at least one stays open), and jump to another board. Shortcuts: g then p, g then b,
- * and b, in any keyboard layout. Phones use the app's bottom bar instead.
+ * or the table (at least one stays open), and jump to another board. Shortcuts: g then p,
+ * g then b, g then t, and b, in any keyboard layout. Phones use the app's bottom bar instead.
  */
-const BoardDock = ({ plannerOpen, boardVisible, onTogglePlanner, onToggleBoard, onSwitchBoards }) => {
+const BoardDock = ({ plannerOpen, boardVisible, tableVisible, onTogglePlanner, onToggleBoard, onToggleTable, onSwitchBoards }) => {
 	const { t } = useI18n()
 	const pendingG = useRef(0)
 
@@ -44,6 +44,10 @@ const BoardDock = ({ plannerOpen, boardVisible, onTogglePlanner, onToggleBoard, 
 				event.preventDefault()
 				pendingG.current = 0
 				onToggleBoard()
+			} else if (afterG && key === 't') {
+				event.preventDefault()
+				pendingG.current = 0
+				onToggleTable()
 			} else if (key === 'b') {
 				event.preventDefault()
 				onSwitchBoards()
@@ -51,12 +55,13 @@ const BoardDock = ({ plannerOpen, boardVisible, onTogglePlanner, onToggleBoard, 
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
-	}, [onTogglePlanner, onToggleBoard, onSwitchBoards])
+	}, [onTogglePlanner, onToggleBoard, onToggleTable, onSwitchBoards])
 
 	return (
 		<nav className='bd' aria-label={t('boardDock.label')}>
 			<DockItem icon={CalendarDays} label={t('boardDock.planner')} keys={['g+p']} active={plannerOpen} pressed={plannerOpen} onClick={onTogglePlanner} />
 			<DockItem icon={Columns3} label={t('boardDock.board')} keys={['g+b']} active={boardVisible} pressed={boardVisible} onClick={onToggleBoard} />
+			<DockItem icon={Table2} label={t('boardDock.table')} keys={['g+t']} active={tableVisible} pressed={tableVisible} onClick={onToggleTable} />
 			<span className='bd-divider' aria-hidden='true' />
 			<DockItem icon={Layers} label={t('boardDock.switch')} keys={['b']} onClick={onSwitchBoards} />
 		</nav>

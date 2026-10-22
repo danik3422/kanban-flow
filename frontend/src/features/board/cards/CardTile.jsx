@@ -1,4 +1,4 @@
-import { AlignLeft, CheckSquare, Circle, CircleCheck, Clock3, Eye, Flag, MessageSquare, Paperclip, Timer } from 'lucide-react'
+import { AlignLeft, CheckSquare, Circle, CircleCheck, Clock3, Eye, Flag, MessageSquare, Paperclip, Repeat, Timer } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useI18n } from '../../../i18n'
 import { intlLocale } from '../../../i18n/translate'
@@ -50,6 +50,7 @@ const CardTile = ({ task, boardLabels, done, meId, canEdit, isDragSource, isFilt
 				<span className={`ct-badge ct-due ct-due--${tone}`} title={t(`card.due.${tone}`)}>
 					{tone === 'done' ? <CircleCheck size={13} aria-hidden='true' /> : <Clock3 size={13} aria-hidden='true' />}
 					<span>{dateText}</span>
+					{task.repeat?.frequency && <Repeat size={12} className='ct-repeat' aria-label={t('repeat.title')} />}
 				</span>
 			)}
 			{!tone && task.startDate && <span className='ct-badge'><Clock3 size={13} aria-hidden='true' /><span>{dateText}</span></span>}

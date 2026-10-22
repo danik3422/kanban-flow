@@ -1,4 +1,4 @@
-import { Archive, AlignLeft, CheckSquare, ChevronDown, Circle, CircleCheck, Clock3, Copy, Eye, EyeOff, Flag, Image as ImageIcon, Link2, MessageSquare, MoreHorizontal, MoveRight, Paperclip, Plus, Tag, Trash2, UserPlus } from 'lucide-react'
+import { Archive, AlignLeft, CheckSquare, ChevronDown, Circle, CircleCheck, Clock3, Copy, Eye, EyeOff, Flag, Image as ImageIcon, Link2, MessageSquare, MoreHorizontal, MoveRight, Paperclip, Plus, Tag, Trash2, UserPlus, Repeat } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import useIsPhone from '../../../hooks/useIsPhone'
 import { useI18n } from '../../../i18n'
@@ -10,6 +10,7 @@ import { CARD_COLORS, dueTone, labelColorKey } from '../model/cardDisplay'
 import { formatDueDate } from '../../../lib/dueDate'
 import RichTextEditor from './RichTextEditor'
 import CardComments from './CardComments'
+import { describeRepeat } from '../model/recurrence'
 import CardPopover from './CardPopover'
 import { AttachmentPicker, CopyCardPicker, CoverPicker, DatesPicker, LabelsPicker, MembersPicker, MoveCardPicker } from './CardPickers'
 import { AttachmentsSection, ChecklistSection, SectionHead, TimeSection } from './CardSections'
@@ -301,6 +302,12 @@ const CardModal = ({
 							<span>{dateText}</span>
 							{tone && tone !== 'later' && <span className='cm-date__state'>{t(`card.due.${tone}`)}</span>}
 						</button>
+						{task.repeat?.frequency && (
+							<button type='button' className='cm-repeat' onClick={(event) => canEdit && open('dates', event.currentTarget)}>
+								<Repeat size={14} aria-hidden='true' />
+								<span>{describeRepeat(t, task.repeat, language)}</span>
+							</button>
+						)}
 					</div>
 				)}
 				<div className='cm-meta__group'>
@@ -380,7 +387,7 @@ const CardModal = ({
 					<LabelsPicker labels={labels} selected={task.labels || []} canEdit={canManage} onToggle={toggleLabel} onCreate={onLabelCreate} onUpdate={onLabelUpdate} onDelete={onLabelDelete} view={pickerView} setView={setPickerView} />
 				)}
 				{picker === 'dates' && (
-					<DatesPicker startDate={task.startDate} dueDate={task.dueDate} onSave={async (fields) => { await onPatch(fields); close() }} onRemove={async () => { await onPatch({ startDate: null, dueDate: null }); close() }} />
+					<DatesPicker startDate={task.startDate} dueDate={task.dueDate} repeat={task.repeat} onSave={async (fields) => { await onPatch(fields); close() }} onRemove={async () => { await onPatch({ startDate: null, dueDate: null, repeat: null }); close() }} />
 				)}
 				{picker === 'members' && <MembersPicker people={people} selected={memberIds} onToggle={toggleMember} />}
 				{picker === 'attachment' && (

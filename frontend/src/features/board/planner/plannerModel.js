@@ -1,6 +1,7 @@
 import { intlLocale } from '../../../i18n/translate.js'
 import { addDays, dateFromKey } from '../../../lib/calendarDates.js'
 import { getDueDateKey } from '../../../lib/dueDate.js'
+import { upcomingDates } from '../model/recurrence.js'
 
 // The planner: a board's cards placed on the days they are due, a week at a time.
 
@@ -27,11 +28,16 @@ export const plannerGroups = (columns, days, todayKey, { showDone = false } = {}
 	const byDay = Object.fromEntries(days.map((key) => [key, []]))
 	const overdue = []
 	const undated = []
+	// Repeating cards also show where their next ones will fall this week.
+	const projected = Object.fromEntries(days.map((key) => [key, []]))
 	for (const column of columns) {
 		for (const task of column.tasks || []) {
 			const item = { task, columnId: column._id, columnTitle: column.title }
 			const key = getDueDateKey(task.dueDate)
 			const done = Boolean(task.completed)
+			if (key && !done && task.repeat?.frequency) {
+				for (const date of upcomingDates(task.repeat, key, days[0], days[days.length - 1], 7)) projected[date].push(item)
+			}
 			if (!key) {
 				if (!done) undated.push(item)
 			} else if (key in byDay) {
@@ -44,7 +50,7 @@ export const plannerGroups = (columns, days, todayKey, { showDone = false } = {}
 	for (const key of days) byDay[key].sort(byImportance)
 	overdue.sort((left, right) => getDueDateKey(left.task.dueDate).localeCompare(getDueDateKey(right.task.dueDate)) || byImportance(left, right))
 	undated.sort(byImportance)
-	return { days: byDay, overdue, undated }
+	return { days: byDay, overdue, undated, projected }
 }
 
 /** "20 – 26 Oct 2026" in the reader's language. */

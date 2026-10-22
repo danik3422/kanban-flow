@@ -128,6 +128,12 @@ const importCard = z.object({
 	completed: z.boolean().optional(),
 	archived: z.boolean().optional(),
 	estimateMinutes: z.number().int().min(0).max(100000).optional(),
+	repeat: z.object({
+		frequency: z.enum(['daily', 'weekdays', 'weekly', 'monthly', 'yearly']),
+		interval: z.number().int().min(1).max(99).optional(),
+		days: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+		until: z.union([z.iso.date(), z.null()]).optional(),
+	}).nullable().optional(),
 	comments: z.array(z.object({
 		text: z.string().trim().min(1).max(2000),
 		author: z.string().max(120).optional(),

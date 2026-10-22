@@ -83,6 +83,20 @@ const taskSchema = new mongoose.Schema(
 		}],
 		// People who follow the card: they hear about comments and moves.
 		watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+		// A repeating card (services/recurrence.service.js): when it is completed, the next one
+		// of the series is created with the next due date and takes the rule over.
+		repeat: {
+			type: new mongoose.Schema({
+				frequency: { type: String, enum: ['daily', 'weekdays', 'weekly', 'monthly', 'yearly'], required: true },
+				interval: { type: Number, default: 1, min: 1, max: 99 },
+				days: { type: [Number], default: undefined },
+				dayOfMonth: { type: Number, min: 1, max: 31 },
+				until: { type: String, default: null },
+			}, { _id: false }),
+			default: null,
+		},
+		// The card created when this one was completed, so un-completing it can take it back.
+		repeatedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', default: null },
 	},
 	{ timestamps: true },
 )
