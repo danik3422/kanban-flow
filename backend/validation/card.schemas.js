@@ -52,7 +52,11 @@ export const reorderTasksSchema = z.object({
 	})).min(1, 'Task order is required').max(100),
 })
 
+// An id the app makes up for something created offline, so a resend is recognised.
+const clientId = z.string().regex(/^[\w-]{8,64}$/, 'Invalid client id').optional()
+
 export const createTaskSchema = z.object({
+	clientId,
 	title: taskFields.title,
 	description: taskFields.description.default(''),
 	dueDate: taskFields.dueDate.optional(),
@@ -109,4 +113,5 @@ export const copyTaskSchema = z.object({
 export const taskCommentSchema = z.object({
 	message: z.string().trim().min(1, 'Comment is required').max(2000, 'Comment is too long'),
 	mentions: z.array(objectId).max(20).optional(),
+	clientId,
 })

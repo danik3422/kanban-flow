@@ -276,3 +276,23 @@ describe('repeating cards', () => {
 		assert.equal(last.body.repeat, null)
 	})
 })
+
+describe('offline resends', () => {
+	it('a card or a comment sent twice with the same client id is saved once', async () => {
+		const { owner, todo, first } = await setup()
+		const body = { title: 'Written on the subway', clientId: 'local-7f3a9c21-offline' }
+		const one = await api('post', `/columns/${todo._id}/task`, owner).send(body)
+		const two = await api('post', `/columns/${todo._id}/task`, owner).send(body)
+		assert.equal(one.status, 201)
+		assert.equal(two.status, 200)
+		assert.equal(String(one.body._id), String(two.body._id))
+		assert.equal(await Task.countDocuments({ title: 'Written on the subway' }), 1)
+
+		const comment = { message: 'Sent offline', clientId: 'local-comment-0001' }
+		const c1 = await api('post', `/tasks/${first._id}/comments`, owner).send(comment)
+		const c2 = await api('post', `/tasks/${first._id}/comments`, owner).send(comment)
+		assert.equal(String(c1.body._id), String(c2.body._id))
+		assert.equal(await TaskActivity.countDocuments({ type: 'comment', message: 'Sent offline' }), 1)
+		assert.equal((await api('post', `/columns/${todo._id}/task`, owner).send({ title: 'x', clientId: 'bad id!' })).status, 400)
+	})
+})

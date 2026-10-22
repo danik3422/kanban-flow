@@ -57,6 +57,12 @@ export const addTaskComment = async (req, res) => {
 		if (!access) return res.status(404).json({ message: 'Task not found' })
 		if (!message) return res.status(400).json({ message: 'Comment is required' })
 		if (message.length > 2000) return res.status(400).json({ message: 'Comment is too long' })
+		// The same comment sent again (the first answer was lost on a bad connection).
+		const clientId = req.body.clientId
+		if (clientId) {
+			const existing = await withPeople(TaskActivity.findOne({ clientId, user: req.user._id, type: 'comment' }))
+			if (existing) return res.status(200).json(existing)
+		}
 		const mentions = await mentionedPeople(access.board, req.body.mentions, req.user._id)
 		const activity = await TaskActivity.create({
 			task: access.task._id,
@@ -65,6 +71,7 @@ export const addTaskComment = async (req, res) => {
 			type: 'comment',
 			message,
 			...(mentions.length && { mentions }),
+			...(clientId && { clientId }),
 		})
 		await recordBoardActivity({
 			boardId: access.board._id,

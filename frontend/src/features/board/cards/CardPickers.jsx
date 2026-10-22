@@ -124,7 +124,11 @@ export const DatesPicker = ({ startDate, dueDate, repeat, onSave, onRemove }) =>
 	const save = (event) => {
 		event.preventDefault()
 		const { dayOfMonth: _dayOfMonth, ...sent } = rule || {}
-		onSave({ startDate: useStart && start ? start : null, dueDate: hasDue ? due : null, repeat: rule ? sent : null })
+		const nextRepeat = rule ? sent : null
+		// The repeat rule goes along only when it changed, so a date change stays a date change.
+		const shape = (value) => (value ? JSON.stringify([value.frequency, value.interval || 1, value.frequency === 'weekly' ? [...(value.days || [])].sort() : [], value.until || null]) : null)
+		const repeatChanged = shape(nextRepeat) !== shape(repeat?.frequency ? repeat : null)
+		onSave({ startDate: useStart && start ? start : null, dueDate: hasDue ? due : null, ...(repeatChanged && { repeat: nextRepeat }) })
 	}
 	return (
 		<form className='cp-form' onSubmit={save}>

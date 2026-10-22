@@ -95,6 +95,8 @@ const taskSchema = new mongoose.Schema(
 			}, { _id: false }),
 			default: null,
 		},
+		// Set by an app that created the card while offline: sending it twice makes one card.
+		clientId: { type: String, default: undefined },
 		// The card created when this one was completed, so un-completing it can take it back.
 		repeatedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', default: null },
 	},
@@ -107,6 +109,7 @@ taskSchema.plugin(archivable)
 
 taskSchema.index({ column: 1, position: 1 })
 taskSchema.index({ assignees: 1 })
+taskSchema.index({ clientId: 1 }, { sparse: true })
 
 const Task = mongoose.model('Task', taskSchema)
 export default Task

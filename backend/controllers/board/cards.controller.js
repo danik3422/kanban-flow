@@ -156,6 +156,7 @@ export const createTask = async (req, res) => {
 			checklist = [],
 			dueDate = null,
 			priority = 'none',
+			clientId,
 		} = req.body
 
 		const column = await Column.findById(columnId)
@@ -180,6 +181,11 @@ export const createTask = async (req, res) => {
 		if (!title || title.trim() === '') {
 			return res.status(400).json({ message: 'Task title is required' })
 		}
+		// The same card sent again (the first answer was lost on a bad connection).
+		if (clientId) {
+			const existing = await Task.findOne({ clientId }).setOptions({ withArchived: true }).select('_id column')
+			if (existing) return res.status(200).json(await populatedTask(existing._id))
+		}
 
 		const taskCount = await Task.countDocuments({ column: column._id })
 		if (taskCount >= MAX_TASKS_PER_COLUMN) {
@@ -198,6 +204,7 @@ export const createTask = async (req, res) => {
 			labels,
 			checklist,
 			priority: ['none', 'low', 'medium', 'high', 'urgent'].includes(priority) ? priority : 'none',
+			...(clientId && { clientId }),
 		})
 
 		await newTask.save()

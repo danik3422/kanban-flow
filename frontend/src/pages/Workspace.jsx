@@ -46,7 +46,8 @@ import BoardsOverview from '../features/boards/BoardsOverview'
 import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
 import { axiosInstance } from '../lib/axios'
-import { peekCache } from '../lib/apiCache'
+import { cacheKey, peekCache, writeCache } from '../lib/apiCache'
+import { makeTempId, useOutbox } from '../lib/outbox'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../features/board/model/taskSorting'
 import { getColumnDropIndex, reorderColumns } from '../features/board/model/columnOrdering'
@@ -892,10 +893,31 @@ const Workspace = () => {
 		if (selectedBoardId) fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
 	}
 
+	// While changes wait to be sent, the board as it looks with them is saved on this
+	// device, so reopening the app without a connection still shows them.
+	const pendingChanges = useOutbox((state) => state.items.length)
+	useEffect(() => {
+		if (!selectedBoardId || !pendingChanges || isDevAuthBypass) return
+		writeCache(cacheKey(`/board/boards/${selectedBoardId}/content`), columns)
+	}, [columns, pendingChanges, selectedBoardId])
+
+	// Once everything kept offline has reached the server, show the board as the server has it.
+	useEffect(() => {
+		const handleSynced = (event) => {
+			const { sent, failed, realIds } = event.detail || {}
+			reloadColumns()
+			setTaskDetails((current) => (current && realIds?.[current._id] ? { ...current, _id: realIds[current._id] } : current))
+			if (failed) toast.error(tr('offline.syncedSome', { count: failed }))
+			else if (sent) toast.success(tr('offline.synced', { count: sent }))
+		}
+		window.addEventListener('kh:outbox-synced', handleSynced)
+		return () => window.removeEventListener('kh:outbox-synced', handleSynced)
+	})
+
 	// Archiving takes a card or list off the board without losing it; the toast can undo it.
 	const restoreArchived = async (path, message) => {
 		try {
-			await axiosInstance.post(path)
+			await axiosInstance.post(path, null, { offline: { response: {} } })
 			reloadColumns()
 			toast.success(tr(message))
 		} catch (error) {
@@ -904,7 +926,7 @@ const Workspace = () => {
 	}
 	const archiveTask = async (task) => {
 		try {
-			await axiosInstance.post(`/board/tasks/${task._id}/archive`)
+			await axiosInstance.post(`/board/tasks/${task._id}/archive`, null, { offline: { response: {} } })
 			setColumns((current) => removeTask(current, task._id))
 			setTaskDetails(null)
 			toast.success(tr('archive.cardArchived'), {
@@ -931,7 +953,7 @@ const Workspace = () => {
 		if (!taskIds.length) return
 		setColumns((current) => taskIds.reduce((next, taskId) => moveCardInColumns(next, taskId, columnId, Number.MAX_SAFE_INTEGER), current))
 		try {
-			for (const taskId of taskIds) await axiosInstance.patch(`/board/tasks/${taskId}`, { column: columnId })
+			for (const taskId of taskIds) await axiosInstance.patch(`/board/tasks/${taskId}`, { column: columnId }, { offline: { response: {} } })
 			toast.success(tr('table.moved', { count: taskIds.length }))
 		} catch (error) {
 			cardError(error)
@@ -943,7 +965,7 @@ const Workspace = () => {
 		const done = []
 		for (const task of tasks) {
 			try {
-				await axiosInstance.post(`/board/tasks/${task._id}/archive`)
+				await axiosInstance.post(`/board/tasks/${task._id}/archive`, null, { offline: { response: {} } })
 				done.push(task._id)
 			} catch (error) {
 				cardError(error)
@@ -1087,9 +1109,20 @@ const Workspace = () => {
 		}
 	}
 
+	// A card created without a connection: a temporary id, shown at once and sent later.
+	const offlineCard = (columnId, { title, dueDate = null }) => {
+		const tempId = makeTempId()
+		const position = columns.find((column) => column._id === columnId)?.tasks.length ?? 0
+		return {
+			tempId,
+			response: { _id: tempId, column: columnId, position, title, description: '', dueDate: dueDate ? `${dueDate}T00:00:00.000Z` : null, startDate: null, labels: [], assignees: [], checklist: [], attachments: [], watchers: [], priority: 'none', commentCount: 0, createdAt: new Date().toISOString(), pending: true },
+		}
+	}
+
 	const addCard = async (column, title) => {
 		try {
-			const { data } = await axiosInstance.post(`/board/columns/${column._id}/task`, { title })
+			const local = offlineCard(column._id, { title })
+			const { data } = await axiosInstance.post(`/board/columns/${column._id}/task`, { title, clientId: local.tempId }, { offline: local })
 			setColumns((current) => addTask(current, { ...data, column: data.column || column._id }))
 			requestAnimationFrame(() => {
 				const list = document.querySelector(`.bc-column[data-column-id="${column._id}"] .bc-tasks`)
@@ -1587,7 +1620,7 @@ const Workspace = () => {
 		try {
 			await axiosInstance.patch(`/board/boards/${selectedBoard._id}/tasks/reorder`, {
 				columns: [...new Set([sourceId, columnId])].filter(Boolean).map((id) => ({ columnId: id, taskIds: next.find((column) => column._id === id)?.tasks.map((task) => task._id) || [] })),
-			})
+			}, { offline: { response: {} } })
 		} catch (error) {
 			setColumns(previous)
 			setColumnSortBy(previousSorts)
@@ -1603,7 +1636,8 @@ const Workspace = () => {
 		setColumns((current) => replaceTask(current, { ...task, ...optimistic }))
 		if (local || isDevAuthBypass) return task
 		try {
-			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}`, fields)
+			// Without a connection the change is kept on this device and shown as pending.
+			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}`, fields, { offline: { response: { ...task, ...optimistic, pending: true } } })
 			// Completing a repeating card brings the next one of the series.
 			const { nextInSeries, ...saved } = data
 			setColumns((current) => {
@@ -1697,7 +1731,8 @@ const Workspace = () => {
 	}
 	const addPlannerCard = async (dayKey, title, columnId) => {
 		try {
-			const { data } = await axiosInstance.post(`/board/columns/${columnId}/task`, { title, dueDate: dayKey })
+			const local = offlineCard(columnId, { title, dueDate: dayKey })
+			const { data } = await axiosInstance.post(`/board/columns/${columnId}/task`, { title, dueDate: dayKey, clientId: local.tempId }, { offline: local })
 			setColumns((current) => addTask(current, { ...data, column: data.column || columnId }))
 			return true
 		} catch (error) {

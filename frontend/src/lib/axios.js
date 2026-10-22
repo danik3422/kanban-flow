@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { cacheKey, readCache, writeCache } from './apiCache'
 import { markApiReachable } from './connection'
+import { enqueue, flushOutbox, mustQueue, pendingCount, setOutboxSender, withRealIds } from './outbox'
 import { apiBaseUrl } from './runtimeConfig'
 
 let sessionExpiredHandler = null
@@ -33,9 +34,29 @@ const isGet = (config) => (config?.method || 'get').toLowerCase() === 'get'
 const isCacheable = (config) => isGet(config) && config.cache !== false
 const keyOf = (config) => cacheKey(config.url, config.params)
 
-// Changes need the server: fail at once with a clear message instead of waiting 8 seconds.
+// What the app shows for a change it keeps for later (see lib/outbox.js).
+const queuedResponse = (config) => ({ data: config.offline.response ?? {}, status: 202, statusText: 'Saved on this device', headers: {}, config, queued: true })
+const keepForLater = (config) => {
+	enqueue(config)
+	const signal = new Error('Queued')
+	signal.queuedResponse = queuedResponse(config)
+	return signal
+}
+const deviceOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+
+// Changes marked `offline` are kept on the device without a connection, or while earlier
+// ones wait; the rest fail at once with a clear message instead of waiting 8 seconds.
 axiosInstance.interceptors.request.use((config) => {
-	if (!isGet(config) && typeof navigator !== 'undefined' && navigator.onLine === false) {
+	if (isGet(config) || config.fromOutbox) return config
+	config.url = withRealIds(config.url)
+	config.data = withRealIds(config.data)
+	if (config.offline && (deviceOffline() || mustQueue(config))) {
+		const signal = keepForLater(config)
+		if (deviceOffline()) markApiReachable(false)
+		else void flushOutbox()
+		return Promise.reject(signal)
+	}
+	if (deviceOffline()) {
 		markApiReachable(false)
 		return Promise.reject(offlineError())
 	}
@@ -60,11 +81,21 @@ axiosInstance.interceptors.response.use((response) => {
 	if (isHtml(response)) return fallBackToCache(response.config, new Error('API returned HTML instead of JSON'))
 	markApiReachable(true)
 	if (isCacheable(response.config)) writeCache(keyOf(response.config), response.data)
+	// The server answers again: send what was kept while it did not.
+	if (!response.config?.fromOutbox && pendingCount()) void flushOutbox()
 	return response
 }, (error) => {
+	if (error?.queuedResponse) return error.queuedResponse
 	if (axios.isCancel(error)) return Promise.reject(error)
+	// No answer to a change the app can keep: save it for later instead of failing.
+	if (!error.response && error.config?.offline && !error.config.fromOutbox) {
+		markApiReachable(false)
+		return keepForLater(error.config).queuedResponse
+	}
 	if (!error.response) return fallBackToCache(error.config, error)
 	markApiReachable(true)
 	if (error.response.status === 401 && error.response.data?.message === 'Unauthorized - Session expired') sessionExpiredHandler?.()
 	return Promise.reject(error)
 })
+
+setOutboxSender((config) => axiosInstance.request(config))

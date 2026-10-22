@@ -83,3 +83,4 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 	.task-card.ct.task-card--ghost.is-lifted { rotate: 0deg; }
 }
 .ct-repeat { flex: 0 0 auto; margin-left: 1px; opacity: 0.85; }
+.ct-pending { color: var(--ui-link); }

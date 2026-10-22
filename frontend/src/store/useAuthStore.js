@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance, onSessionExpired } from '../lib/axios'
 import { clearApiCache, peekCache, setCacheOwner } from '../lib/apiCache'
+import { clearOutbox, flushOutbox } from '../lib/outbox'
 import { clearBoardsCache } from '../lib/boardsCache'
 import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
@@ -322,6 +323,13 @@ onSessionExpired(() => {
 // Saved answers belong to the signed-in account: kept while it stays, wiped when it leaves.
 useAuthStore.subscribe((state, previous) => {
 	const id = state.authUser?._id
-	if (id && id !== previous.authUser?._id && !isDevAuthBypass) setCacheOwner(id)
-	if (!id && previous.authUser?._id) clearApiCache()
+	if (id && id !== previous.authUser?._id && !isDevAuthBypass) {
+		setCacheOwner(id)
+		// Changes kept on this device during an earlier visit go out once the account is known.
+		window.setTimeout(() => void flushOutbox(), 1500)
+	}
+	if (!id && previous.authUser?._id) {
+		clearApiCache()
+		clearOutbox()
+	}
 })

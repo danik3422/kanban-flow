@@ -1,9 +1,12 @@
-import { MessageSquare } from 'lucide-react'
+import { CloudUpload, MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../../../i18n/translate'
 import { axiosInstance } from '../../../lib/axios'
+import { cacheKey, writeCache } from '../../../lib/apiCache'
+import { makeTempId } from '../../../lib/outbox'
+import { useAuthStore } from '../../../store/useAuthStore'
 import { Avatar, Button, ConfirmDialog } from '../../../ui'
 import { cx } from '../../../ui/utils'
 import { formatDuration } from '../model/cardDisplay'
@@ -55,6 +58,7 @@ const CardComments = ({ task, meId, canManage, version, people = [] }) => {
 	const [busy, setBusy] = useState(false)
 	const [editing, setEditing] = useState(null) // { id, text }
 	const [removing, setRemoving] = useState(null)
+	const authUser = useAuthStore((state) => state.authUser)
 
 	const load = useCallback(async () => {
 		try {
@@ -75,8 +79,16 @@ const CardComments = ({ task, meId, canManage, version, people = [] }) => {
 		if (!message) return
 		setBusy(true)
 		try {
-			const { data } = await axiosInstance.post(`/board/tasks/${task._id}/comments`, { message, mentions: mentionIdsIn(message, people) })
-			setItems((current) => [data, ...(current || [])])
+			// Without a connection the comment is kept on this device and sent later, once.
+			const clientId = makeTempId()
+			const mentions = mentionIdsIn(message, people)
+			const pending = { _id: clientId, type: 'comment', message, createdAt: new Date().toISOString(), pending: true, user: { _id: authUser?._id, name: authUser?.name, email: authUser?.email, avatar: authUser?.avatar }, mentions: people.filter((person) => mentions.includes(String(person._id))) }
+			const { data } = await axiosInstance.post(`/board/tasks/${task._id}/comments`, { message, mentions, clientId }, { offline: { response: pending } })
+			setItems((current) => {
+				const next = [data, ...(current || [])]
+				if (data.pending) writeCache(cacheKey(`/board/tasks/${task._id}/activities`), next)
+				return next
+			})
 			setDraft('')
 		} catch (error) {
 			fail(error)
@@ -155,6 +167,7 @@ const CardComments = ({ task, meId, canManage, version, people = [] }) => {
 									<strong data-i18n-ignore>{author}</strong>
 									<time className='cm-hint' dateTime={item.createdAt} title={fullDate(item.createdAt)}>{relativeTime(item.createdAt, language, t('boards.justNow'))}</time>
 									{item.editedAt && <span className='cm-hint'>({t('card.edited')})</span>}
+									{item.pending && <span className='cc__pending' title={t('offline.pendingComment')}><CloudUpload size={13} aria-hidden='true' />{t('offline.notSent')}</span>}
 								</div>
 								{editing?.id === item._id ? (
 									<form className='cc__edit' onSubmit={saveEdit}>

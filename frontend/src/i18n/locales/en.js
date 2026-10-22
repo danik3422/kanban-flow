@@ -655,7 +655,7 @@ const en = {
 		},
 		offline: {
 			title: 'No connection.',
-			text: 'Showing what was saved on this device. Changes will work again once you’re back online.',
+			text: 'Showing what was saved on this device. Cards, changes and comments you make now are kept here and sent once you’re back online.',
 			back: 'Back online',
 		},
 		notifications: {
@@ -2164,6 +2164,35 @@ const en = {
 				action: 'Read the guide',
 			},
 		},
+	},
+	offline: {
+		kept: {
+			one: '{count} change is saved on this device and will be sent once you’re back online.',
+			few: '{count} changes are saved on this device and will be sent once you’re back online.',
+			many: '{count} changes are saved on this device and will be sent once you’re back online.',
+			other: '{count} changes are saved on this device and will be sent once you’re back online.',
+		},
+		sending: {
+			one: 'Sending {count} change…',
+			few: 'Sending {count} changes…',
+			many: 'Sending {count} changes…',
+			other: 'Sending {count} changes…',
+		},
+		synced: {
+			one: '{count} change saved',
+			few: 'All {count} changes saved',
+			many: 'All {count} changes saved',
+			other: 'All {count} changes saved',
+		},
+		syncedSome: {
+			one: '{count} change could not be saved: the card may have been deleted',
+			few: '{count} changes could not be saved: the cards may have been deleted',
+			many: '{count} changes could not be saved: the cards may have been deleted',
+			other: '{count} changes could not be saved: the cards may have been deleted',
+		},
+		pendingCard: 'Not sent yet: will be saved when you’re back online',
+		pendingComment: 'Will be sent when you’re back online',
+		notSent: 'not sent yet',
 	},
 	server: {
 		'Could not export the board': 'Could not export the board. Please try again.',

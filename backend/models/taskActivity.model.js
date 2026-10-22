@@ -17,6 +17,8 @@ const taskActivitySchema = new mongoose.Schema(
 		// Which fields an update touched, so the app can say it in the reader's language.
 		fields: { type: [String], default: undefined },
 		editedAt: { type: Date, default: null },
+		// Set by an app that wrote the comment while offline: sending it twice makes one comment.
+		clientId: { type: String, default: undefined },
 		// People a comment calls on with @name; they get their own notification.
 		mentions: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: undefined },
 	},
@@ -24,6 +26,7 @@ const taskActivitySchema = new mongoose.Schema(
 )
 
 taskActivitySchema.index({ task: 1, createdAt: -1 })
+taskActivitySchema.index({ clientId: 1 }, { sparse: true })
 
 const TaskActivity = mongoose.model('TaskActivity', taskActivitySchema)
 export default TaskActivity

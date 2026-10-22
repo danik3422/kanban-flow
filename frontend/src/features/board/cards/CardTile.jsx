@@ -1,4 +1,4 @@
-import { AlignLeft, CheckSquare, Circle, CircleCheck, Clock3, Eye, Flag, MessageSquare, Paperclip, Repeat, Timer } from 'lucide-react'
+import { AlignLeft, CheckSquare, Circle, CircleCheck, Clock3, CloudUpload, Eye, Flag, MessageSquare, Paperclip, Repeat, Timer } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useI18n } from '../../../i18n'
 import { intlLocale } from '../../../i18n/translate'
@@ -54,6 +54,7 @@ const CardTile = ({ task, boardLabels, done, meId, canEdit, isDragSource, isFilt
 				</span>
 			)}
 			{!tone && task.startDate && <span className='ct-badge'><Clock3 size={13} aria-hidden='true' /><span>{dateText}</span></span>}
+			{task.pending && <span className='ct-badge ct-icon-badge ct-pending' title={t('offline.pendingCard')}><CloudUpload size={13} aria-label={t('offline.pendingCard')} /></span>}
 			{watching && <span className='ct-badge ct-icon-badge' title={t('card.badges.watching')}><Eye size={13} aria-label={t('card.badges.watching')} /></span>}
 			{task.description && task.description.replace(/<[^>]*>/g, '').trim() && (
 				<span className='ct-badge ct-icon-badge' title={t('card.badges.description')}><AlignLeft size={13} aria-label={t('card.badges.description')} /></span>
