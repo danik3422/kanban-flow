@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { boardLabelSchema } from './card.schemas.js'
 import { email, objectId, position } from './fields.js'
 
 const boardName = z.string().trim().min(1, 'Board name is required').max(100, 'Board name is too long')
@@ -48,10 +49,27 @@ export const backgroundUploadSchema = z.object({
 	adjust: backgroundAdjust.optional(),
 }).strict()
 
+// A template's lists, labels and example cards, written in the creator's language by the app.
+const starterCard = z.object({
+	title: z.string().trim().min(1).max(200),
+	description: z.string().max(2000).optional(),
+	labels: z.array(z.string().trim().min(1).max(40)).max(5).optional(),
+	checklist: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+	priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).optional(),
+})
+const boardStarter = z.object({
+	labels: z.array(boardLabelSchema).max(10).default([]),
+	columns: z.array(z.object({
+		title: columnTitle,
+		cards: z.array(starterCard).max(6).default([]),
+	})).min(1).max(8),
+})
+
 export const createBoardSchema = z.object({
 	name: boardName,
 	visibility: boardVisibility.default('private'),
 	background: boardBackground.optional(),
+	starter: boardStarter.optional(),
 })
 
 export const updateBoardSchema = z.object({
@@ -94,4 +112,38 @@ export const columnPositionSchema = z.object({ position })
 
 export const columnSortSchema = z.object({
 	sortBy: z.enum(['date-newest', 'date-oldest', 'name-alpha', 'due-date', 'priority', 'custom']).nullable(),
+})
+
+// A whole board brought in from a file (a Trello export or KanbanHub's own), already
+// put into this shape by the app. Sizes match the board limits in services/limits.service.js.
+const importDate = z.union([z.iso.date(), z.iso.datetime({ offset: true }), z.null()]).optional()
+const importCard = z.object({
+	title: z.string().trim().min(1).max(200),
+	description: z.string().max(20000).optional(),
+	dueDate: importDate,
+	startDate: importDate,
+	priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).optional(),
+	labels: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+	checklist: z.array(z.object({ text: z.string().trim().min(1).max(300), completed: z.boolean().default(false) })).max(100).optional(),
+	completed: z.boolean().optional(),
+	archived: z.boolean().optional(),
+	estimateMinutes: z.number().int().min(0).max(100000).optional(),
+	comments: z.array(z.object({
+		text: z.string().trim().min(1).max(2000),
+		author: z.string().max(120).optional(),
+		date: z.string().max(40).optional(),
+	})).max(100).optional(),
+})
+export const importBoardSchema = z.object({
+	name: boardName,
+	description: z.string().max(1000).optional(),
+	visibility: boardVisibility.default('private'),
+	source: z.enum(['trello', 'kanbanhub']),
+	labels: z.array(boardLabelSchema).max(50).default([]),
+	columns: z.array(z.object({
+		title: columnTitle,
+		color: z.enum(['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']).nullable().optional(),
+		archived: z.boolean().optional(),
+		cards: z.array(importCard).max(2000).default([]),
+	})).min(1).max(100),
 })

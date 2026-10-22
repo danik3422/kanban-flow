@@ -501,19 +501,21 @@ export const deleteTask = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid task ID' })
 		}
 
-		const task = await Task.findById(taskId).populate('column', 'board title')
-		if (!task) {
+		// Archived cards can be deleted for good from the archive, even when their list is archived too.
+		const task = await Task.findById(taskId).setOptions({ withArchived: true })
+		const column = task && await Column.findById(task.column).setOptions({ withArchived: true }).select('board title')
+		if (!task || !column) {
 			return res.status(404).json({ message: 'Task not found' })
 		}
 
-		const { board, allowed } = await ensureBoardAccess(userId, task.column.board)
+		const { board, allowed } = await ensureBoardAccess(userId, column.board)
 		if (!board || !allowed) {
 			return res.status(403).json({ message: 'Access denied' })
 		}
 
-		const columnId = task.column._id
+		const columnId = column._id
 		const position = task.position
-		const columnTitle = task.column.title
+		const columnTitle = column.title
 		const session = await mongoose.startSession()
 		let activity
 		try {
@@ -526,11 +528,14 @@ export const deleteTask = async (req, res) => {
 					error.statusCode = 404
 					throw error
 				}
-				await Task.updateMany(
-					{ column: columnId, position: { $gt: position } },
-					{ $inc: { position: -1 } },
-					{ session },
-				)
+				// An archived card already left the order when it was archived.
+				if (!task.archivedAt) {
+					await Task.updateMany(
+						{ column: columnId, position: { $gt: position }, archivedAt: null },
+						{ $inc: { position: -1 } },
+						{ session },
+					)
+				}
 				await TaskActivity.deleteMany({ task: taskId }, { session })
 				await TimeEntry.deleteMany({ task: taskId }, { session })
 				await Notification.deleteMany({ task: taskId }, { session })

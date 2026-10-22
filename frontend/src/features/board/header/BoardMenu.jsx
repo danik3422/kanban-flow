@@ -1,6 +1,9 @@
-import { Activity, Copy, Image as ImageIcon, Info, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
+import { Activity, Archive, Copy, Download, FileJson, FileSpreadsheet, Image as ImageIcon, Info, Keyboard, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
+import { translateServerMessageCurrent } from '../../../i18n/translate'
+import { downloadFromApi } from '../../../lib/download'
 import { Avatar, Button, Checkbox, EmptyState, Field, Input, Modal, RadioCards, Textarea } from '../../../ui'
 import { cx } from '../../../ui/utils'
 import { relativeTime } from '../../../lib/relativeTime'
@@ -42,6 +45,8 @@ const BoardMenu = ({
 	onCopyBoard,
 	onLeave,
 	onDelete,
+	onArchive,
+	onShortcuts,
 }) => {
 	const { t, language } = useI18n()
 	const [view, setView] = useState('main')
@@ -64,7 +69,7 @@ const BoardMenu = ({
 		setView(next)
 	}
 	const visibility = board?.visibility || 'private'
-	const titles = { main: t('boardHeader.menuTitle'), about: t('boardHeader.about'), visibility: t('boardHeader.visibilityItem'), activity: t('boardHeader.activity'), copy: t('boardHeader.copy') }
+	const titles = { export: t('boardHeader.export'), main: t('boardHeader.menuTitle'), about: t('boardHeader.about'), visibility: t('boardHeader.visibilityItem'), activity: t('boardHeader.activity'), copy: t('boardHeader.copy') }
 
 	const saveDescription = async (event) => {
 		event.preventDefault()
@@ -80,6 +85,18 @@ const BoardMenu = ({
 		const ok = await onCopyBoard(copyName.trim(), keepCards)
 		setBusy(false)
 		if (ok) onClose()
+	}
+	const exportAs = async (format) => {
+		if (busy) return
+		setBusy(true)
+		try {
+			await downloadFromApi(`/board/boards/${board._id}/export${format === 'csv' ? '?format=csv' : ''}`, `board.${format}`)
+			toast.success(t('boardHeader.exported'))
+		} catch (error) {
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'boardHeader.exportError'))
+		} finally {
+			setBusy(false)
+		}
 	}
 	const closeAnd = (action) => () => {
 		onClose()
@@ -107,6 +124,9 @@ const BoardMenu = ({
 						<Item icon={VISIBILITY_ICONS[visibility]} label={t('boardHeader.visibilityItem')} hint={t(`boards.visibility.${visibility}`)} onClick={() => go('visibility')} />
 						{canManage && <Item icon={ImageIcon} label={t('boardHeader.background')} onClick={closeAnd(onBackground)} />}
 						<Item icon={Activity} label={t('boardHeader.activity')} onClick={() => go('activity')} />
+						<Item icon={Archive} label={t('boardHeader.archive')} onClick={closeAnd(onArchive)} />
+						<Item icon={Download} label={t('boardHeader.export')} onClick={() => go('export')} />
+						{onShortcuts && <Item icon={Keyboard} label={t('shortcuts.title')} hint='?' onClick={closeAnd(onShortcuts)} />}
 					</div>
 					<div className='bh-menu-group'>
 						<Item icon={Star} label={isStarred ? t('boardHeader.unstar') : t('boardHeader.star')} onClick={onToggleStar} />
@@ -132,6 +152,16 @@ const BoardMenu = ({
 				) : (
 					<p className={cx('bh-about-read', !board?.description && 'bh-muted')} data-i18n-ignore={board?.description ? true : undefined}>{board?.description || t('boardHeader.descriptionEmpty')}</p>
 				)
+			)}
+
+			{view === 'export' && (
+				<div className='bh-menu-body'>
+					<p className='bh-muted bh-export-text'>{t('boardHeader.exportText')}</p>
+					<div className='bh-menu-group'>
+						<Item icon={FileJson} label={t('boardHeader.exportJson')} hint={t('boardHeader.exportJsonHint')} onClick={() => exportAs('json')} />
+						<Item icon={FileSpreadsheet} label={t('boardHeader.exportCsv')} hint={t('boardHeader.exportCsvHint')} onClick={() => exportAs('csv')} />
+					</div>
+				</div>
 			)}
 
 			{view === 'visibility' && (

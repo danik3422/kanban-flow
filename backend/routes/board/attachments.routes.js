@@ -10,9 +10,9 @@ import { validateBody } from '../../middlewares/validateBody.middleware.js'
 import { validateObjectIdParams } from '../../middlewares/validateObjectId.middleware.js'
 import { attachmentSchema, imageAttachmentSchema } from '../../validation/card.schemas.js'
 
-// Card images and board background photos are the only large request bodies. app.js
-// skips its 200 KB parser for these paths; each route parses them after sign-in.
-const IMAGE_UPLOAD_PATHS = [/^\/api\/board\/tasks\/[^/]+\/attachments\/image$/, /^\/api\/board\/boards\/[^/]+\/background\/upload$/]
+// Card images, board background photos and board imports are the only large request
+// bodies. app.js skips its 200 KB parser for these paths; each route parses them after sign-in.
+const IMAGE_UPLOAD_PATHS = [/^\/api\/board\/tasks\/[^/]+\/attachments\/image$/, /^\/api\/board\/boards\/[^/]+\/background\/upload$/, /^\/api\/board\/boards\/import$/]
 export const isImageUploadPath = (path) => IMAGE_UPLOAD_PATHS.some((pattern) => pattern.test(path))
 const imageBody = express.json({ limit: '8mb' })
 

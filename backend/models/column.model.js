@@ -1,5 +1,7 @@
 import mongoose from 'mongoose'
 
+import { archivable } from './archivable.js'
+
 const COLUMN_COLORS = ['green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'gray']
 
 const columnSchema = new mongoose.Schema(
@@ -37,6 +39,8 @@ const columnSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 )
+
+columnSchema.plugin(archivable)
 
 columnSchema.index({ board: 1, position: 1 })
 

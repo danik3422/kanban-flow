@@ -367,7 +367,8 @@ export const deleteColumn = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid column ID' })
 		}
 
-		const column = await Column.findById(columnId)
+		// An archived list can be deleted for good from the archive.
+		const column = await Column.findById(columnId).setOptions({ withArchived: true })
 		if (!column) {
 			return res.status(404).json({ message: 'Column not found' })
 		}
@@ -390,17 +391,20 @@ export const deleteColumn = async (req, res) => {
 		let activity
 		try {
 			await session.withTransaction(async () => {
-				const taskIds = await Task.find({ column: columnId }).distinct('_id').session(session)
+				const taskIds = await Task.find({ column: columnId }).setOptions({ withArchived: true }).distinct('_id').session(session)
 				await Task.deleteMany({ column: columnId }, { session })
 				await TaskActivity.deleteMany({ task: { $in: taskIds } }, { session })
 				await TimeEntry.deleteMany({ task: { $in: taskIds } }, { session })
 				await Notification.deleteMany({ task: { $in: taskIds } }, { session })
 				await Column.deleteOne({ _id: columnId }, { session })
-				await Column.updateMany(
-					{ board: column.board, position: { $gt: column.position } },
-					{ $inc: { position: -1 } },
-					{ session },
-				)
+				// An archived list already left the order when it was archived.
+				if (!column.archivedAt) {
+					await Column.updateMany(
+						{ board: column.board, position: { $gt: column.position } },
+						{ $inc: { position: -1 } },
+						{ session },
+					)
+				}
 				activity = await recordBoardActivity({
 					boardId: board._id,
 					userId,

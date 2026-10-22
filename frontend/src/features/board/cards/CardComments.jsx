@@ -4,9 +4,12 @@ import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
 import { intlLocale, translateServerMessageCurrent } from '../../../i18n/translate'
 import { axiosInstance } from '../../../lib/axios'
-import { Avatar, Button, ConfirmDialog, Textarea } from '../../../ui'
+import { Avatar, Button, ConfirmDialog } from '../../../ui'
+import { cx } from '../../../ui/utils'
 import { formatDuration } from '../model/cardDisplay'
+import { mentionIdsIn, splitMentions } from '../model/mentions'
 import { relativeTime } from '../../../lib/relativeTime'
+import MentionTextarea from './MentionTextarea'
 
 /** An activity record in the reader's language. */
 const describe = (t, item) => {
@@ -20,6 +23,8 @@ const describe = (t, item) => {
 		case 'time_logged': return t('card.activity.time_logged', { time: formatDuration((item.durationMinutes || 0) * 60, units) })
 		case 'attachment_added': return t('card.activity.attachment_added', { name: item.message })
 		case 'copied': return t('card.activity.copied', { name: item.message })
+		case 'restored': return item.toColumn ? t('card.activity.restored', { list: item.toColumn }) : item.message
+		case 'archived':
 		case 'completed':
 		case 'reopened':
 		case 'deleted':
@@ -28,11 +33,21 @@ const describe = (t, item) => {
 	}
 }
 
+/** A comment's text with the people it mentions picked out ("you" stands out more). */
+const CommentText = ({ message, mentions, meId }) => (
+	<p className='cc__message' data-i18n-ignore>
+		{splitMentions(message, mentions).map((part, index) => (part.person
+			? <span key={index} className={cx('cc__mention', String(part.person._id) === String(meId) && 'is-me')}>{part.text}</span>
+			: part.text))}
+	</p>
+)
+
 /**
  * Comments, newest first, with the card's history mixed in when "Show details" is
- * on. People edit and delete their own comments; admins can delete any.
+ * on. People edit and delete their own comments; admins can delete any. Typing "@"
+ * suggests people on the board; they are notified when the comment is saved.
  */
-const CardComments = ({ task, meId, canManage, version }) => {
+const CardComments = ({ task, meId, canManage, version, people = [] }) => {
 	const { t, language } = useI18n()
 	const [items, setItems] = useState(null)
 	const [details, setDetails] = useState(false)
@@ -60,7 +75,7 @@ const CardComments = ({ task, meId, canManage, version }) => {
 		if (!message) return
 		setBusy(true)
 		try {
-			const { data } = await axiosInstance.post(`/board/tasks/${task._id}/comments`, { message })
+			const { data } = await axiosInstance.post(`/board/tasks/${task._id}/comments`, { message, mentions: mentionIdsIn(message, people) })
 			setItems((current) => [data, ...(current || [])])
 			setDraft('')
 		} catch (error) {
@@ -73,7 +88,8 @@ const CardComments = ({ task, meId, canManage, version }) => {
 		event.preventDefault()
 		if (!editing?.text.trim()) return
 		try {
-			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}/comments/${editing.id}`, { message: editing.text.trim() })
+			const message = editing.text.trim()
+			const { data } = await axiosInstance.patch(`/board/tasks/${task._id}/comments/${editing.id}`, { message, mentions: mentionIdsIn(message, people) })
 			setItems((current) => current.map((item) => (item._id === data._id ? data : item)))
 			setEditing(null)
 		} catch (error) {
@@ -102,9 +118,10 @@ const CardComments = ({ task, meId, canManage, version }) => {
 				<Button variant='secondary' size='sm' aria-pressed={details} onClick={() => setDetails((value) => !value)}>{details ? t('card.hideDetails') : t('card.showDetails')}</Button>
 			</div>
 			<form className='cc__composer' onSubmit={post}>
-				<Textarea
+				<MentionTextarea
 					value={draft}
-					onChange={(event) => setDraft(event.target.value)}
+					onChange={setDraft}
+					people={people}
 					placeholder={t('card.writeComment')}
 					aria-label={t('card.writeComment')}
 					rows={draft ? 3 : 1}
@@ -141,14 +158,14 @@ const CardComments = ({ task, meId, canManage, version }) => {
 								</div>
 								{editing?.id === item._id ? (
 									<form className='cc__edit' onSubmit={saveEdit}>
-										<Textarea value={editing.text} onChange={(event) => setEditing({ ...editing, text: event.target.value })} rows={3} maxLength={2000} autoFocus aria-label={t('card.editComment')} onKeyDown={(event) => event.key === 'Escape' && (event.stopPropagation(), setEditing(null))} />
+										<MentionTextarea value={editing.text} onChange={(text) => setEditing({ ...editing, text })} people={people} rows={3} maxLength={2000} autoFocus aria-label={t('card.editComment')} onKeyDown={(event) => event.key === 'Escape' && (event.stopPropagation(), setEditing(null))} />
 										<div className='cm-row'>
 											<Button type='submit' size='sm'>{t('card.save')}</Button>
 											<Button variant='ghost' size='sm' onClick={() => setEditing(null)}>{t('card.cancel')}</Button>
 										</div>
 									</form>
 								) : (
-									<p className='cc__message' data-i18n-ignore>{item.message}</p>
+									<CommentText message={item.message} mentions={item.mentions} meId={meId} />
 								)}
 								{editing?.id !== item._id && (own || canManage) && (
 									<div className='cc__actions'>

@@ -1,4 +1,4 @@
-import { ArrowUpDown, Check, FolderKanban, Globe, Lock, Plus, Search, SearchX, Star, Users } from 'lucide-react'
+import { ArrowUpDown, Check, FolderKanban, Globe, Lock, Plus, Search, SearchX, Star, Users, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { relativeTime } from '../../lib/relativeTime'
@@ -87,7 +87,7 @@ const BoardCardSkeleton = () => (
 )
 
 /** The board list: find, filter and open boards, with live numbers for each. */
-const BoardsOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoard }) => {
+const BoardsOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoard, onImport }) => {
 	const { t } = useI18n()
 	const userId = useAuthStore((state) => state.authUser?._id)
 	const { starred, recent, toggleStar, load: loadPrefs } = useBoardPrefs()
@@ -177,7 +177,12 @@ const BoardsOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoard 
 				icon={FolderKanban}
 				title={t('boards.emptyTitle')}
 				description={t('boards.emptyText')}
-				action={<Button icon={Plus} onClick={onCreateBoard}>{t('boards.newBoard')}</Button>}
+				action={
+					<div className='boards-empty-actions'>
+						<Button icon={Plus} onClick={onCreateBoard}>{t('boards.newBoard')}</Button>
+						{onImport && <Button variant='secondary' icon={Upload} onClick={onImport}>{t('import.open')}</Button>}
+					</div>
+				}
 			/>
 		)
 	} else if (!visibleBoards.length) {
@@ -213,7 +218,12 @@ const BoardsOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoard 
 			<PageHeader
 				title={t('boards.title')}
 				description={description}
-				actions={<Button className='boards-page__new' icon={Plus} onClick={onCreateBoard}>{t('boards.newBoard')}</Button>}
+				actions={
+					<>
+						{onImport && <Button variant='secondary' icon={Upload} onClick={onImport}>{t('import.open')}</Button>}
+						<Button className='boards-page__new' icon={Plus} onClick={onCreateBoard}>{t('boards.newBoard')}</Button>
+					</>
+				}
 			/>
 			{!isLoading && boards.length > 0 && (
 				<div className='boards-toolbar'>

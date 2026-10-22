@@ -7,7 +7,7 @@ const taskActivitySchema = new mongoose.Schema(
 		user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		type: {
 			type: String,
-			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted', 'completed', 'reopened', 'attachment_added', 'copied'],
+			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted', 'completed', 'reopened', 'attachment_added', 'copied', 'archived', 'restored'],
 			required: true,
 		},
 		message: { type: String, default: '' },
@@ -17,6 +17,8 @@ const taskActivitySchema = new mongoose.Schema(
 		// Which fields an update touched, so the app can say it in the reader's language.
 		fields: { type: [String], default: undefined },
 		editedAt: { type: Date, default: null },
+		// People a comment calls on with @name; they get their own notification.
+		mentions: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: undefined },
 	},
 	{ timestamps: true },
 )

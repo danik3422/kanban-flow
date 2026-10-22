@@ -1,4 +1,4 @@
-import { AlignLeft, CheckSquare, ChevronDown, Circle, CircleCheck, Clock3, Copy, Eye, EyeOff, Flag, Image as ImageIcon, Link2, MessageSquare, MoreHorizontal, MoveRight, Paperclip, Plus, Tag, Trash2, UserPlus } from 'lucide-react'
+import { Archive, AlignLeft, CheckSquare, ChevronDown, Circle, CircleCheck, Clock3, Copy, Eye, EyeOff, Flag, Image as ImageIcon, Link2, MessageSquare, MoreHorizontal, MoveRight, Paperclip, Plus, Tag, Trash2, UserPlus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import useIsPhone from '../../../hooks/useIsPhone'
 import { useI18n } from '../../../i18n'
@@ -121,6 +121,7 @@ const CardModal = ({
 	onMove,
 	onCopy,
 	onDelete,
+	onArchive,
 	onLabelCreate,
 	onLabelUpdate,
 	onLabelDelete,
@@ -230,6 +231,7 @@ const CardModal = ({
 						{ label: t('card.move'), icon: MoveRight, onSelect: () => open('move', moreButton.current) },
 						{ label: t('card.copy'), icon: Copy, onSelect: () => open('copy', moreButton.current) },
 						{ separator: true },
+						{ label: t('card.archive'), icon: Archive, onSelect: onArchive },
 						{ label: t('card.delete'), icon: Trash2, tone: 'danger', onSelect: () => setConfirmDelete(true) },
 					] : []),
 				]}
@@ -355,7 +357,7 @@ const CardModal = ({
 				{!(isPhone && showComments) && main}
 				{showComments && (
 					<aside className='cm-side' aria-label={t('card.commentsTitle')}>
-						<CardComments task={task} meId={meId} canManage={canManage} version={commentsVersion} />
+						<CardComments task={task} meId={meId} canManage={canManage} version={commentsVersion} people={people} />
 					</aside>
 				)}
 			</div>

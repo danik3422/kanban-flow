@@ -40,7 +40,7 @@
 
 /* The create-board preview: a tiny board standing on the chosen background. */
 .bg-preview { position: relative; display: grid; place-items: center; height: 148px; overflow: hidden; border-radius: var(--ui-radius-lg); background: var(--ui-surface-3); transition: background var(--ui-duration) var(--ui-ease); }
-.bg-preview__board { display: grid; grid-template-columns: repeat(3, 72px); gap: 8px; align-items: start; padding-top: 18px; }
+.bg-preview__board { display: grid; grid-template-columns: repeat(var(--preview-lists, 3), minmax(0, 72px)); justify-content: center; gap: 8px; align-items: start; width: 100%; padding: 18px 12px 0; }
 .bg-preview__column { display: flex; flex-direction: column; gap: 5px; padding: 6px; border-radius: var(--ui-radius-sm); background: rgb(255 255 255 / 0.88); box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); }
 .bg-preview__column i { display: block; height: 10px; border-radius: 3px; background: rgb(15 23 42 / 0.1); }
 .bg-preview__column i:first-child { width: 60%; height: 6px; background: rgb(15 23 42 / 0.22); }
@@ -102,4 +102,18 @@ html[data-theme='dark'] .bg-adjust__list { background: rgb(18 26 24 / 0.82); }
 .bg-adjust__reset { align-self: flex-start; }
 @media (prefers-reduced-motion: reduce) {
 	.bg-adjust__focus { transition: none; }
+}
+
+/* Templates in the create-board dialog: an empty board or a ready-made set of lists. */
+.tpl-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ui-space-2); }
+.tpl-option { display: flex; align-items: center; gap: var(--ui-space-2); min-height: 44px; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-text-2); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; text-align: left; cursor: pointer; transition: border-color var(--ui-duration-fast) var(--ui-ease), background var(--ui-duration-fast) var(--ui-ease), color var(--ui-duration-fast) var(--ui-ease); }
+.tpl-option > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tpl-option svg { flex: 0 0 auto; color: var(--ui-text-muted); }
+.tpl-option:hover { border-color: var(--ui-border-strong); color: var(--ui-text); }
+.tpl-option:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.tpl-option.is-selected { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-text); box-shadow: inset 0 0 0 1px var(--ui-accent); }
+.tpl-option.is-selected svg { color: var(--ui-link); }
+.tpl-lists { margin: 2px 0 0; overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 720px) {
+	.tpl-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

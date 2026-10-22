@@ -19,10 +19,31 @@ import { boardLimitMessage, reachedBoardLimit } from '../../services/limits.serv
 
 // Boards themselves: create, copy, open, change, delete, leave, and the board list.
 
+const escapeHtml = (text) => text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+
+/** A template's lists, labels and example cards for a new board (validated by createBoardSchema). */
+const addStarter = async (board, starter, session) => {
+	const labels = [...new Map(starter.labels.map((label) => [label.name.toLowerCase(), label])).values()]
+	const labelNames = new Set(labels.map((label) => label.name))
+	board.labels = labels
+	await board.save({ session })
+	const columns = await Column.insertMany(starter.columns.map((column, position) => ({ board: board._id, title: column.title, position })), { session })
+	const tasks = starter.columns.flatMap((column, index) => column.cards.map((card, position) => ({
+		column: columns[index]._id,
+		position,
+		title: card.title,
+		description: card.description ? card.description.split(/\n+/).map((line) => `<p>${escapeHtml(line)}</p>`).join('') : '',
+		labels: (card.labels || []).filter((name) => labelNames.has(name)),
+		checklist: (card.checklist || []).map((text) => ({ text, completed: false })),
+		priority: card.priority || 'none',
+	})))
+	if (tasks.length) await Task.insertMany(tasks, { session })
+}
+
 export const createBoard = async (req, res) => {
 	const session = await mongoose.startSession()
 	try {
-		const { name, visibility = 'private', background } = req.body
+		const { name, visibility = 'private', background, starter } = req.body
 		if (!name?.trim()) {
 			return res.status(400).json({ message: 'Board name is required' })
 		}
@@ -49,6 +70,7 @@ export const createBoard = async (req, res) => {
 				background: boardBackground,
 			})
 			await newBoard.save({ session })
+			if (starter) await addStarter(newBoard, starter, session)
 			await BoardMember.create([{
 				board: newBoard._id,
 				user: req.user._id,
@@ -301,8 +323,9 @@ export const removeBoard = async (req, res) => {
 		try {
 			// Delete everything in one transaction so a failure never leaves orphans.
 			await session.withTransaction(async () => {
-				const columnIds = await Column.find({ board: boardId }).distinct('_id').session(session)
-				const taskIds = await Task.find({ column: { $in: columnIds } }).distinct('_id').session(session)
+				// Archived lists and cards go too.
+				const columnIds = await Column.find({ board: boardId }).setOptions({ withArchived: true }).distinct('_id').session(session)
+				const taskIds = await Task.find({ column: { $in: columnIds } }).setOptions({ withArchived: true }).distinct('_id').session(session)
 				await TaskActivity.deleteMany({ board: boardId }, { session })
 				await TimeEntry.deleteMany({ task: { $in: taskIds } }, { session })
 				await Notification.deleteMany({
@@ -357,7 +380,7 @@ export const leaveBoard = async (req, res) => {
 		let activity
 		try {
 			await session.withTransaction(async () => {
-				const columnIds = await Column.find({ board: board._id }).distinct('_id').session(session)
+				const columnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id').session(session)
 				await BoardMember.deleteMany({ board: board._id, user: userId }, { session })
 				await Notification.deleteMany({ user: userId, board: board._id }, { session })
 				await BoardInvite.deleteMany({ board: board._id, createdBy: userId, usedAt: null }, { session })

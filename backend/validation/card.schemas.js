@@ -102,4 +102,5 @@ export const copyTaskSchema = z.object({
 
 export const taskCommentSchema = z.object({
 	message: z.string().trim().min(1, 'Comment is required').max(2000, 'Comment is too long'),
+	mentions: z.array(objectId).max(20).optional(),
 })

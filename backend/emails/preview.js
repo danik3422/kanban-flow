@@ -15,6 +15,7 @@ const SAMPLE_ACTIVITY = {
 	task_assigned: sample('task_assigned', { toColumn: 'In progress' }),
 	task_unassigned: sample('task_unassigned', {}),
 	task_commented: sample('task_commented', { comment: 'Looks great! Can we try the darker illustration on the second screen before Friday?' }),
+	task_mentioned: sample('task_mentioned', { comment: '@Olena could you check the copy on the pricing page before we ship?' }),
 	task_moved: sample('task_moved', { fromColumn: 'In progress', toColumn: 'Review' }),
 	task_due_soon: sample('task_due_soon', { dueDate: new Date(tomorrow) }),
 	task_due_changed: sample('task_due_changed', { dueDate: new Date(tomorrow + 3 * day) }),

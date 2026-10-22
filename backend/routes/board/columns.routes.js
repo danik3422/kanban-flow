@@ -36,7 +36,7 @@ router.post('/boards/:id/columns', verifiedAuthMiddleware, boardMiddleware, vali
 router.patch('/columns/:id', verifiedAuthMiddleware, columnMiddleware, validateBody(updateColumnSchema), updateColumn)
 router.patch('/columns/:id/position', verifiedAuthMiddleware, columnMiddleware, validateBody(columnPositionSchema), reorderColumn)
 router.patch('/columns/:id/sort', verifiedAuthMiddleware, columnMiddleware, validateBody(columnSortSchema), updateColumnSort)
-router.delete('/columns/:id', verifiedAuthMiddleware, columnMiddleware, deleteColumn)
+router.delete('/columns/:id', verifiedAuthMiddleware, deleteColumn)
 router.post('/columns/:id/copy', verifiedAuthMiddleware, copyLimiter, columnMiddleware, validateBody(copyColumnSchema), copyColumn)
 router.post('/columns/:id/move-tasks', verifiedAuthMiddleware, columnMiddleware, validateBody(moveColumnTasksSchema), moveColumnTasks)
 router.post('/columns/:id/watch', verifiedAuthMiddleware, columnMiddleware, validateBody(watchColumnSchema), watchColumn)

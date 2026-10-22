@@ -11,6 +11,8 @@ const EMAIL_CATEGORY = {
 	task_assigned: null,
 	task_unassigned: 'removed',
 	task_commented: 'comments',
+	// Being called on by name always emails, like being added to a card.
+	task_mentioned: null,
 	task_moved: 'cardsMoved',
 	task_due_soon: 'dueDates',
 	task_due_changed: 'dueDates',

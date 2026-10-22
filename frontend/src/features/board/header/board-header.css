@@ -180,3 +180,29 @@
 /* Person card lines: job title, then email, each trimmed on its own. */
 .bh-card-line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-menu__header--person { max-width: 340px; }
+
+/* The archive: archived cards and lists with a way back. */
+.ar { display: flex; flex-direction: column; gap: var(--ui-space-3); }
+.ar input[type='search'] { font-size: 16px; }
+.ar-list { display: flex; flex-direction: column; gap: var(--ui-space-2); margin: 0; padding: 0; list-style: none; }
+.ar-row { display: flex; align-items: center; gap: var(--ui-space-3); min-height: 56px; padding: var(--ui-space-2) var(--ui-space-2) var(--ui-space-2) var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); }
+.ar-row:has(> .ui-skeleton) { padding: 0; border: 0; background: none; }
+.ar-row > .ui-skeleton { flex: 1; }
+.ar-row__icon { display: grid; flex: 0 0 auto; place-items: center; width: 32px; height: 32px; border-radius: var(--ui-radius-md); background: var(--ui-surface-2); color: var(--ui-text-2); }
+.ar-row__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.ar-row__title { overflow: hidden; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.ar-row__meta { color: var(--ui-text-muted); font-size: var(--ui-text-xs); overflow-wrap: anywhere; }
+.ar-row__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
+.ar-row__delete:hover:not(:disabled) { color: var(--ui-danger); }
+.bh-export-text { margin: 0; font-size: var(--ui-text-sm); line-height: 1.5; }
+
+/* Keyboard shortcuts: groups of actions with their keys. */
+.shortcuts { display: flex; flex-direction: column; gap: var(--ui-space-5); }
+.shortcuts__group { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.shortcuts__title { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.shortcuts__list { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); }
+.shortcuts__row { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); min-height: 44px; padding: 6px var(--ui-space-3); }
+.shortcuts__row + .shortcuts__row { border-top: 1px solid var(--ui-border); }
+.shortcuts__row dt { font-size: var(--ui-text-sm); }
+.shortcuts__row dd { display: flex; flex: 0 0 auto; gap: 4px; margin: 0; }
+.shortcuts kbd { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 7px; border: 1px solid var(--ui-border); border-bottom-width: 2px; border-radius: 6px; background: var(--ui-surface-2); color: var(--ui-text); font-family: var(--ui-font); font-size: var(--ui-text-xs); font-weight: 600; }

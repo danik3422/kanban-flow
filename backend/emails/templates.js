@@ -5,6 +5,7 @@ const TYPE_TONES = {
 	task_assigned: 'accent',
 	task_unassigned: 'gray',
 	task_commented: 'blue',
+	task_mentioned: 'accent',
 	task_moved: 'violet',
 	task_due_soon: 'amber',
 	task_due_changed: 'amber',

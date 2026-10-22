@@ -1,5 +1,7 @@
 import mongoose from 'mongoose'
 
+import { archivable } from './archivable.js'
+
 const taskSchema = new mongoose.Schema(
 	{
 		title: {
@@ -84,6 +86,10 @@ const taskSchema = new mongoose.Schema(
 	},
 	{ timestamps: true },
 )
+
+// Archived together with its list (restored with it), rather than on its own.
+taskSchema.add({ archivedWithColumn: { type: Boolean, default: false } })
+taskSchema.plugin(archivable)
 
 taskSchema.index({ column: 1, position: 1 })
 taskSchema.index({ assignees: 1 })

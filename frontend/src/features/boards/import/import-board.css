@@ -1,0 +1,22 @@
+/* Importing a board from a file: the drop zone, the steps for Trello and the summary. */
+.import { display: flex; flex-direction: column; gap: var(--ui-space-4); }
+.import-drop { display: flex; flex-direction: column; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-8) var(--ui-space-4); border: 1.5px dashed var(--ui-border-strong); border-radius: var(--ui-radius-xl); background: var(--ui-surface-2); color: var(--ui-text); font: inherit; text-align: center; cursor: pointer; transition: border-color var(--ui-duration-fast) var(--ui-ease), background var(--ui-duration-fast) var(--ui-ease); }
+.import-drop:hover, .import-drop.is-over { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.import-drop:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.import-drop__icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--ui-radius-lg); background: var(--ui-surface); color: var(--ui-link); box-shadow: var(--ui-shadow-xs); }
+.import-drop__title { font-family: var(--ui-font-display); font-size: var(--ui-text-md); font-weight: 600; }
+.import-drop__hint { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.import-help { padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); font-size: var(--ui-text-sm); }
+.import-help h3 { margin: 0 0 var(--ui-space-2); font-size: var(--ui-text-sm); font-weight: 600; }
+.import-help ol { display: flex; flex-direction: column; gap: 4px; margin: 0 0 var(--ui-space-3); padding-left: 1.3em; color: var(--ui-text-2); list-style: decimal; }
+.import-help p { margin: 0; color: var(--ui-text-muted); }
+.import-summary { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); }
+.import-summary__source { align-self: flex-start; padding: 2px 10px; border-radius: var(--ui-radius-full); background: var(--ui-accent-soft); color: var(--ui-link); font-size: var(--ui-text-xs); font-weight: 600; }
+.import-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2) var(--ui-space-4); margin: 0; padding: 0; list-style: none; }
+.import-facts li { display: flex; align-items: center; gap: var(--ui-space-2); font-size: var(--ui-text-sm); }
+.import-facts svg { flex: 0 0 auto; color: var(--ui-text-muted); }
+.import-note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.import-error { margin: 0; padding: var(--ui-space-2) var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-danger-soft, rgb(180 35 24 / 0.08)); color: var(--ui-danger); font-size: var(--ui-text-sm); }
+.create-board-import { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--ui-link); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.create-board-import:hover { text-decoration: underline; text-underline-offset: 2px; }
+.boards-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ui-space-2); }

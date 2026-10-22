@@ -9,28 +9,52 @@ import { backgroundCss, isPhotoBackground } from './backgrounds/boardBackground'
 import { BackgroundOverview, ColorsPanel, CompactPicker, PhotosPanel } from './backgrounds/BackgroundPicker'
 import { OwnPhoto, UploadSwatch } from './backgrounds/OwnPhoto'
 import { usePhotoSearch } from './backgrounds/usePhotoSearch'
+import { BOARD_TEMPLATES, templateLists } from './boardTemplates'
 
 const VISIBILITY_ICONS = { private: Lock, workspace: Users, public: Globe }
 
-/** A tiny board standing on the chosen background, named as the user types. */
-export const BoardPreview = ({ background, name }) => (
+// Cards drawn in each preview list, so the lists look different from each other.
+const PREVIEW_CARDS = [['', '', 'is-tall'], ['', 'is-tall'], ['', '', '', ''], ['', 'is-tall', ''], ['', '']]
+
+/** A tiny board standing on the chosen background, named as the user types, with the template's lists. */
+export const BoardPreview = ({ background, name, lists = 3 }) => (
 	<div className={cx('bg-preview', !background && 'is-plain')} style={background ? { background: backgroundCss(background) } : undefined} aria-hidden='true'>
 		{name && <span className='bg-preview__name' data-i18n-ignore>{name}</span>}
-		<div className='bg-preview__board'>
-			<span className='bg-preview__column'><i /><i /><i className='is-tall' /></span>
-			<span className='bg-preview__column'><i /><i className='is-tall' /></span>
-			<span className='bg-preview__column'><i /><i /><i /><i /></span>
+		<div className='bg-preview__board' style={{ '--preview-lists': Math.min(Math.max(lists, 1), 5) }}>
+			{PREVIEW_CARDS.slice(0, Math.min(Math.max(lists, 1), 5)).map((cards, index) => (
+				<span key={index} className='bg-preview__column'><i />{cards.map((tall, card) => <i key={card} className={tall || undefined} />)}</span>
+			))}
 		</div>
 	</div>
 )
+
+/** Start empty or from a ready-made set of lists, labels and example cards. */
+const TemplatePicker = ({ value, onChange }) => {
+	const { t, language } = useI18n()
+	const lists = templateLists(value, language)
+	return (
+		<div className='ui-field'>
+			<span className='ui-field__label' id='board-template-label'>{t('boards.templates.label')}</span>
+			<div className='tpl-picker' role='radiogroup' aria-labelledby='board-template-label'>
+				{BOARD_TEMPLATES.map(({ key, icon: Icon }) => (
+					<button key={key} type='button' role='radio' aria-checked={value === key} className={cx('tpl-option', value === key && 'is-selected')} onClick={() => onChange(key)}>
+						<Icon size={18} aria-hidden='true' />
+						<span>{t(`boards.templates.${key}`)}</span>
+					</button>
+				))}
+			</div>
+			<p className='tpl-lists' data-i18n-ignore={lists.length ? true : undefined}>{lists.length ? lists.join(' → ') : t('boards.templates.blankHint')}</p>
+		</div>
+	)
+}
 
 /**
  * Name a board, dress it with a background and choose who can open it. The
  * background browser opens inside the same dialog, with a way back.
  * Making it public asks once more, because anyone with its link can see it.
  */
-const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVisibilityChange, background, onBackgroundChange, onSubmit, isSubmitting, error }) => {
-	const { t } = useI18n()
+const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVisibilityChange, background, onBackgroundChange, template = 'blank', onTemplateChange, onImport, onSubmit, isSubmitting, error }) => {
+	const { t, language } = useI18n()
 	const nameRef = useRef(null)
 	const [isConfirmingPublic, setIsConfirmingPublic] = useState(false)
 	const [view, setView] = useState('form')
@@ -101,7 +125,7 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 						}}
 						noValidate
 					>
-						<BoardPreview background={background} name={name.trim()} />
+						<BoardPreview background={background} name={name.trim()} lists={templateLists(template, language).length || 3} />
 						<div className='ui-field'>
 							<span className='ui-field__label'>{t('backgrounds.label')}</span>
 							<CompactPicker value={background} onChange={onBackgroundChange} photos={featured.photos} showPhotos={photosOnline} onMore={() => setView('overview')} upload={<UploadSwatch onPick={pickOwnPhoto} />} />
@@ -117,6 +141,8 @@ const CreateBoardModal = ({ open, onClose, name, onNameChange, visibility, onVis
 								autoComplete='off'
 							/>
 						</Field>
+						{onTemplateChange && <TemplatePicker value={template} onChange={onTemplateChange} />}
+						{onImport && <button type='button' className='create-board-import' onClick={onImport}>{t('import.fromCreate')}</button>}
 						<RadioCards
 							legend={t('boards.create.access')}
 							name='board-visibility'

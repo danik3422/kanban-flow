@@ -1,4 +1,4 @@
-const KNOWN_TYPES = new Set(['task_assigned', 'task_unassigned', 'task_commented', 'task_moved', 'task_updated', 'task_due_soon', 'task_due_changed', 'list_card_added'])
+const KNOWN_TYPES = new Set(['task_assigned', 'task_unassigned', 'task_commented', 'task_mentioned', 'task_moved', 'task_updated', 'task_due_soon', 'task_due_changed', 'list_card_added'])
 
 // Due dates are calendar days stored at midnight UTC.
 const dueLabel = (translate, value, locale) => translate('app.notifications.due', { date: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(value)) })

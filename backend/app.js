@@ -54,6 +54,10 @@ app.use(
 	cors({
 		origin: env.corsOrigin,
 		credentials: true,
+		// The web app reads the file name of board exports.
+		exposedHeaders: ['Content-Disposition'],
+		// Browsers may reuse a preflight answer for ten minutes instead of asking before every change.
+		maxAge: 600,
 	})
 )
 

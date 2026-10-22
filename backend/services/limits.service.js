@@ -13,10 +13,10 @@ export const MAX_TASKS_PER_COLUMN = 2000
 export const boardCardLimitMessage = `A board can hold up to ${MAX_CARDS_PER_BOARD} cards`
 export const boardLimitMessage = `You can own up to ${MAX_BOARDS_PER_USER} boards`
 
-/** True when adding `extra` cards would take the board over its ceiling. */
+/** True when adding `extra` cards would take the board over its ceiling. Archived cards count: they still take space. */
 export const exceedsBoardCardLimit = async (boardId, extra = 1) => {
-	const columnIds = await Column.find({ board: boardId }).distinct('_id')
-	const count = await Task.countDocuments({ column: { $in: columnIds } })
+	const columnIds = await Column.find({ board: boardId }).setOptions({ withArchived: true }).distinct('_id')
+	const count = await Task.countDocuments({ column: { $in: columnIds } }).setOptions({ withArchived: true })
 	return count + extra > MAX_CARDS_PER_BOARD
 }
 

@@ -180,6 +180,7 @@ const ColumnActions = ({ open, anchor, column, columns, canManage, isWatching, i
 						<Button variant='secondary' size='sm' block icon={X} onClick={() => run('color', null)} disabled={!column.color}>{t('columns.menu.removeColor')}</Button>
 						<hr className='bc-menu__divider' />
 						<div className='bc-menu__list'>
+							<Item onClick={() => run('archive')}>{t('columns.menu.archive')}</Item>
 							<Item tone='danger' onClick={() => run('delete')}>{t('columns.menu.delete')}</Item>
 						</div>
 					</>

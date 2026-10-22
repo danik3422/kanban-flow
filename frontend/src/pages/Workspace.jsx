@@ -6,7 +6,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
+import { templateStarter } from '../features/boards/boardTemplates'
 import CreateBoardModal from '../features/boards/CreateBoardModal'
+import ImportBoardDialog from '../features/boards/import/ImportBoardDialog'
 import BoardBackgroundDialog from '../features/boards/backgrounds/BoardBackgroundDialog'
 import BoardColumn, { ListComposer } from '../features/board/columns/BoardColumn'
 import ColumnActions from '../features/board/columns/ColumnActions'
@@ -23,8 +25,10 @@ import { useBoardStats } from '../store/useBoardStats'
 import { toast } from 'sonner'
 import { BoardActions, BoardTitle } from '../features/board/header/BoardHeader'
 import BoardFilter from '../features/board/header/BoardFilter'
+import ArchiveDialog from '../features/board/header/ArchiveDialog'
 import BoardMenu from '../features/board/header/BoardMenu'
 import ShareDialog from '../features/board/header/ShareDialog'
+import ShortcutsDialog from '../features/board/header/ShortcutsDialog'
 import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../features/board/model/cardFilter'
 import CardModal from '../features/board/cards/CardModal'
 import CardTile from '../features/board/cards/CardTile'
@@ -95,13 +99,15 @@ const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column
 
 const Workspace = () => {
 	const { authUser } = useAuthStore()
-	const { t: tr } = useI18n()
+	const { t: tr, language } = useI18n()
 	const markBoardOpened = useBoardPrefs((state) => state.markOpened)
 	const loadBoardPrefs = useBoardPrefs((state) => state.load)
 	const starredBoardIds = useBoardPrefs((state) => state.starred)
 	const toggleBoardStar = useBoardPrefs((state) => state.toggleStar)
 	// Board top bar: the menu, the card filter and its panel.
 	const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false)
+	const [isArchiveOpen, setIsArchiveOpen] = useState(false)
+	const [isImportOpen, setIsImportOpen] = useState(false)
 	const [isFilterOpen, setIsFilterOpen] = useState(false)
 	const [cardFilter, setCardFilter] = useState(EMPTY_FILTER)
 	const [pendingVisibility, setPendingVisibility] = useState(null)
@@ -133,6 +139,7 @@ const Workspace = () => {
 	const [newBoardVisibility, setNewBoardVisibility] = useState('private')
 	// undefined until chosen: the create dialog then preselects its first photo.
 	const [newBoardBackground, setNewBoardBackground] = useState(undefined)
+	const [newBoardTemplate, setNewBoardTemplate] = useState('blank')
 	const [isBackgroundOpen, setIsBackgroundOpen] = useState(false)
 	const [isSubmittingBoard, setIsSubmittingBoard] = useState(false)
 	const [createBoardError, setCreateBoardError] = useState('')
@@ -626,6 +633,7 @@ const Workspace = () => {
 				name: newBoardName.trim(),
 				visibility: newBoardVisibility,
 				background: ownPhoto ? null : backgroundPayload(newBoardBackground),
+				starter: templateStarter(newBoardTemplate, language),
 			})
 			if (ownPhoto) {
 				try {
@@ -643,6 +651,7 @@ const Workspace = () => {
 			setNewBoardName('')
 			setNewBoardVisibility('private')
 			setNewBoardBackground(undefined)
+			setNewBoardTemplate('blank')
 			setIsCreatingBoard(false)
 			useBoardStats.getState().load({ force: true })
 			toast.success(tr('boards.create.created'))
@@ -851,6 +860,44 @@ const Workspace = () => {
 		}
 	}
 
+	const reloadColumns = () => {
+		if (selectedBoardId) fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+	}
+
+	// Archiving takes a card or list off the board without losing it; the toast can undo it.
+	const restoreArchived = async (path, message) => {
+		try {
+			await axiosInstance.post(path)
+			reloadColumns()
+			toast.success(tr(message))
+		} catch (error) {
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'archive.actionError'))
+		}
+	}
+	const archiveTask = async (task) => {
+		try {
+			await axiosInstance.post(`/board/tasks/${task._id}/archive`)
+			setColumns((current) => removeTask(current, task._id))
+			setTaskDetails(null)
+			toast.success(tr('archive.cardArchived'), {
+				action: { label: tr('archive.undo'), onClick: () => restoreArchived(`/board/tasks/${task._id}/restore`, 'archive.cardRestored') },
+			})
+		} catch (error) {
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'archive.actionError'))
+		}
+	}
+	const archiveColumn = async (column) => {
+		try {
+			await axiosInstance.post(`/board/columns/${column._id}/archive`)
+			setColumns((current) => removeColumn(current, column._id))
+			toast.success(tr('archive.listArchived'), {
+				action: { label: tr('archive.undo'), onClick: () => restoreArchived(`/board/columns/${column._id}/restore`, 'archive.listRestored') },
+			})
+		} catch (error) {
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'archive.actionError'))
+		}
+	}
+
 	const deleteTask = async (taskId) => {
 		const drop = () => {
 			setColumns((current) => removeTask(current, taskId))
@@ -1014,6 +1061,8 @@ const Workspace = () => {
 			updateColumnFields(column, { pinned: payload }, 'columns.errors.update')
 		} else if (type === 'delete') {
 			setDeleteColumnTarget(column)
+		} else if (type === 'archive') {
+			archiveColumn(column)
 		} else if (type === 'move') {
 			moveColumn(column, null, payload)
 		} else if (type === 'watch') {
@@ -1523,32 +1572,138 @@ const Workspace = () => {
 		return items
 	}
 
-	// F opens the filter, Q shows only my cards (Trello's shortcuts).
+	// Board shortcuts (see ShortcutsDialog). The handler is set up once per board and reads
+	// the latest cards and actions through this ref.
+	const shortcutActions = useRef(null)
+	useEffect(() => {
+		shortcutActions.current = { columns, findTask, patchTask, archiveTask, moveCard, meId: authUser?._id ? String(authUser._id) : '' }
+	})
+	const hoveredCardId = useRef(null)
+	const hoveredColumnId = useRef(null)
+	const [announcement, setAnnouncement] = useState('')
+	const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
+
 	useEffect(() => {
 		if (!boardId) return undefined
+		const onOver = (event) => {
+			const element = event.target instanceof Element ? event.target : null
+			hoveredCardId.current = element?.closest('.bc-board .task-card[data-task-id]')?.dataset.taskId || null
+			hoveredColumnId.current = element?.closest('.bc-board .bc-column[data-column-id]')?.dataset.columnId || null
+		}
+		// What is on screen, in order: lists that are open and the cards the filter shows.
+		const grid = () => [...document.querySelectorAll('.bc-board > .bc-column[data-column-id]:not(.bc-column--collapsed)')]
+			.map((column) => ({ id: column.dataset.columnId, cards: [...column.querySelectorAll('.task-card[data-task-id]:not(.is-filtered-out)')].map((card) => card.dataset.taskId) }))
+		const focusCard = (taskId) => window.requestAnimationFrame(() => {
+			const card = document.querySelector(`.bc-board .task-card[data-task-id="${taskId}"]`)
+			card?.focus({ preventScroll: true })
+			card?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+		})
+		const indexIn = (columnId, taskId) => shortcutActions.current.columns.find((column) => column._id === columnId)?.tasks.findIndex((task) => task._id === taskId) ?? -1
+
+		const arrows = (event, focusedId) => {
+			const lists = grid()
+			const columnIndex = lists.findIndex((list) => list.cards.includes(focusedId))
+			if (columnIndex < 0) return
+			const list = lists[columnIndex]
+			const row = list.cards.indexOf(focusedId)
+			const step = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -1, ArrowRight: 1 }[event.key]
+			const sideways = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+			event.preventDefault()
+			if (!event.altKey) {
+				if (!sideways) {
+					const next = list.cards[row + step]
+					if (next) focusCard(next)
+					return
+				}
+				for (let index = columnIndex + step; index >= 0 && index < lists.length; index += step) {
+					if (lists[index].cards.length) return focusCard(lists[index].cards[Math.min(row, lists[index].cards.length - 1)])
+				}
+				return
+			}
+			// Alt + arrows move the card: within its list, or to the next list at the same height.
+			const { moveCard, findTask } = shortcutActions.current
+			let target = list
+			let index
+			if (sideways) {
+				target = lists[columnIndex + step]
+				if (!target) return
+				const before = target.cards[row]
+				index = before ? indexIn(target.id, before) : (shortcutActions.current.columns.find((column) => column._id === target.id)?.tasks.length ?? 0)
+			} else {
+				const neighbour = list.cards[row + step]
+				if (!neighbour) return
+				index = indexIn(list.id, neighbour)
+			}
+			moveCard(focusedId, target.id, index)
+			const title = findTask(focusedId)?.title || ''
+			const columnTitle = shortcutActions.current.columns.find((column) => column._id === target.id)?.title || ''
+			setAnnouncement(translateCurrent('shortcuts.moved', { title, list: columnTitle, position: (sideways ? Math.min(row, target.cards.length) : row + step) + 1 }))
+			focusCard(focusedId)
+		}
+
 		const onKey = (event) => {
 			const target = event.target
 			const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-			if (event.metaKey || event.ctrlKey || event.altKey || typing || document.body.classList.contains('has-modal')) return
+			if (event.metaKey || event.ctrlKey || typing || document.body.classList.contains('has-modal')) return
+			const focusedId = document.activeElement?.closest?.('.bc-board .task-card[data-task-id]')?.dataset.taskId || null
+			if (event.key.startsWith('Arrow')) {
+				if (focusedId) arrows(event, focusedId)
+				else if (!event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowRight')) {
+					const first = grid().find((list) => list.cards.length)?.cards[0]
+					if (first) {
+						event.preventDefault()
+						focusCard(first)
+					}
+				}
+				return
+			}
+			if (event.altKey) return
 			const key = event.key.toLowerCase()
-			if (key === 'f') {
+			const { findTask, patchTask, archiveTask, meId } = shortcutActions.current
+			const task = findTask(focusedId || hoveredCardId.current)
+			if (event.key === '?') {
+				event.preventDefault()
+				setIsShortcutsOpen(true)
+			} else if (key === 'f') {
 				event.preventDefault()
 				setIsFilterOpen(true)
-			} else if (key === 'q' && authUser?._id) {
+			} else if (key === 'q' && meId) {
 				event.preventDefault()
 				setCardFilter((current) => {
-					const me = String(authUser._id)
-					const onlyMine = current.members.length === 1 && current.members[0] === me
-					return { ...current, members: onlyMine ? [] : [me] }
+					const onlyMine = current.members.length === 1 && current.members[0] === meId
+					return { ...current, members: onlyMine ? [] : [meId] }
 				})
+			} else if (key === 'n') {
+				const columnId = (task && String(task.column)) || hoveredColumnId.current || grid()[0]?.id
+				if (!columnId) return
+				event.preventDefault()
+				setActiveTaskColumn(columnId)
+			} else if (task && key === 'e') {
+				event.preventDefault()
+				setTaskDetails(task)
+			} else if (task && key === 'm' && meId) {
+				event.preventDefault()
+				const ids = (task.assignees || []).map((person) => String(person?._id || person))
+				patchTask(task, { assignees: ids.includes(meId) ? ids.filter((id) => id !== meId) : [...ids, meId] })
+			} else if (task && key === 'c') {
+				event.preventDefault()
+				patchTask(task, { completed: !task.completed })
+			} else if (task && key === 'a') {
+				event.preventDefault()
+				archiveTask(task)
 			}
 		}
+		document.addEventListener('mouseover', onOver, { passive: true })
 		document.addEventListener('keydown', onKey)
-		return () => document.removeEventListener('keydown', onKey)
-	}, [boardId, authUser?._id])
+		return () => {
+			document.removeEventListener('mouseover', onOver)
+			document.removeEventListener('keydown', onKey)
+		}
+	}, [boardId])
 
 	return (
 		<div className='workspace-shell'>
+			<p className='ui-visually-hidden' aria-live='polite' data-i18n-ignore>{announcement}</p>
 			<AppSidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
@@ -1602,6 +1757,7 @@ const Workspace = () => {
 						isLoading={isLoading}
 						onOpenBoard={openOverviewBoard}
 						onCreateBoard={() => setIsCreatingBoard(true)}
+						onImport={() => setIsImportOpen(true)}
 					/>
 				) : (
 					<div className='workspace-content bc-content has-dock'>
@@ -1679,6 +1835,7 @@ const Workspace = () => {
 					}}
 					onCopy={(payload) => copyCard(openTask, payload)}
 					onDelete={() => deleteTask(openTask._id)}
+					onArchive={() => archiveTask(openTask)}
 					onLabelCreate={(draft) => createLabel(draft, { addTo: openTask })}
 					onLabelUpdate={updateLabel}
 					onLabelDelete={deleteLabel}
@@ -1740,6 +1897,16 @@ const Workspace = () => {
 						onCopyBoard={copyCurrentBoard}
 						onLeave={() => setIsLeaveBoardOpen(true)}
 						onDelete={() => setIsDeleteBoardOpen(true)}
+						onArchive={() => setIsArchiveOpen(true)}
+						onShortcuts={() => setIsShortcutsOpen(true)}
+					/>
+					<ShortcutsDialog open={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
+					<ArchiveDialog
+						open={isArchiveOpen}
+						onClose={() => setIsArchiveOpen(false)}
+						boardId={selectedBoard._id}
+						canManage={canManageBoard}
+						onRestored={reloadColumns}
 					/>
 					<BoardFilter
 						open={isFilterOpen}
@@ -1815,6 +1982,19 @@ const Workspace = () => {
 				onUpload={uploadBoardBackground}
 				canUpload={canManageBoard}
 			/>
+			<ImportBoardDialog
+				open={isImportOpen}
+				onClose={() => setIsImportOpen(false)}
+				onImported={(board) => {
+					setIsImportOpen(false)
+					setBoards((current) => [board, ...current])
+					setSelectedBoard(board)
+					setIsActivityLoading(true)
+					navigate(`/workspaces/${board._id}`)
+					useBoardStats.getState().load({ force: true })
+					toast.success(tr('import.done', { count: board.imported?.cards ?? 0 }))
+				}}
+			/>
 			<CreateBoardModal
 				open={isCreatingBoard}
 				onClose={closeCreateBoard}
@@ -1827,6 +2007,12 @@ const Workspace = () => {
 				onVisibilityChange={setNewBoardVisibility}
 				background={newBoardBackground}
 				onBackgroundChange={setNewBoardBackground}
+				template={newBoardTemplate}
+				onTemplateChange={setNewBoardTemplate}
+				onImport={() => {
+					closeCreateBoard()
+					setIsImportOpen(true)
+				}}
 				onSubmit={createBoard}
 				isSubmitting={isSubmittingBoard}
 				error={createBoardError}

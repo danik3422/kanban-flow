@@ -1,4 +1,4 @@
-import { AlarmClock, ArrowRightLeft, Bell, CalendarClock, BellOff, Check, CheckCheck, ClipboardList, MessageCircle, MoreHorizontal, PencilLine, Trash2, UserMinus, X } from 'lucide-react'
+import { AlarmClock, ArrowRightLeft, AtSign, Bell, CalendarClock, BellOff, Check, CheckCheck, ClipboardList, MessageCircle, MoreHorizontal, PencilLine, Trash2, UserMinus, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -19,6 +19,7 @@ import { peekCache } from '../../lib/apiCache'
 const TYPE_LOOK = {
 	task_assigned: { icon: ClipboardList, tone: 'accent' },
 	task_commented: { icon: MessageCircle, tone: 'info' },
+	task_mentioned: { icon: AtSign, tone: 'accent' },
 	task_moved: { icon: ArrowRightLeft, tone: 'warning' },
 	task_updated: { icon: PencilLine, tone: 'neutral' },
 	task_unassigned: { icon: UserMinus, tone: 'neutral' },
