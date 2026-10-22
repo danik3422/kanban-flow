@@ -35,6 +35,8 @@ import ArchiveDialog from '../features/board/header/ArchiveDialog'
 import BoardMenu from '../features/board/header/BoardMenu'
 import ShareDialog from '../features/board/header/ShareDialog'
 import ShortcutsDialog from '../features/board/header/ShortcutsDialog'
+import { CalendarLinkDialog } from '../features/calendar/CalendarLink'
+import AutomationDialog from '../features/board/automation/AutomationDialog'
 import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../features/board/model/cardFilter'
 import CardModal from '../features/board/cards/CardModal'
 import CardTile from '../features/board/cards/CardTile'
@@ -130,6 +132,9 @@ const Workspace = () => {
 	const [isArchiveOpen, setIsArchiveOpen] = useState(false)
 	const [isImportOpen, setIsImportOpen] = useState(false)
 	const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
+	const [isCalendarLinkOpen, setIsCalendarLinkOpen] = useState(false)
+	const [isAutomationOpen, setIsAutomationOpen] = useState(false)
+	const [rulesVersion, setRulesVersion] = useState(0)
 	const [isFilterOpen, setIsFilterOpen] = useState(false)
 	const [cardFilter, setCardFilter] = useState(EMPTY_FILTER)
 	const [pendingVisibility, setPendingVisibility] = useState(null)
@@ -594,6 +599,8 @@ const Workspace = () => {
 		'board:content-changed': () => {
 			fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
 		},
+		// Someone changed the board's automation rules: an open rules dialog reloads them.
+		'board:rules-changed': () => setRulesVersion((version) => version + 1),
 	})
 
 	useEffect(() => {
@@ -2156,8 +2163,21 @@ const Workspace = () => {
 						onCollapseAll={() => setAllCollapsed(true)}
 						onExpandAll={() => setAllCollapsed(false)}
 						onShortcuts={() => setIsShortcutsOpen(true)}
+						onCalendar={() => setIsCalendarLinkOpen(true)}
+						onAutomation={() => setIsAutomationOpen(true)}
 					/>
 					<ShortcutsDialog open={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
+					<AutomationDialog
+						open={isAutomationOpen}
+						onClose={() => setIsAutomationOpen(false)}
+						boardId={selectedBoard?._id}
+						columns={columns}
+						labels={selectedBoard?.labels || []}
+						members={boardPeople}
+						timezone={authUser?.timezone}
+						version={rulesVersion}
+					/>
+					<CalendarLinkDialog open={isCalendarLinkOpen} onClose={() => setIsCalendarLinkOpen(false)} board={selectedBoard?._id || null} boardName={selectedBoard?.name || ''} />
 					<ArchiveDialog
 						open={isArchiveOpen}
 						onClose={() => setIsArchiveOpen(false)}

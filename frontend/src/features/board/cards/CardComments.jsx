@@ -1,4 +1,4 @@
-import { CloudUpload, MessageSquare } from 'lucide-react'
+import { CloudUpload, MessageSquare, Zap } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
@@ -11,6 +11,7 @@ import { Avatar, Button, ConfirmDialog } from '../../../ui'
 import { cx } from '../../../ui/utils'
 import { formatDuration } from '../model/cardDisplay'
 import { mentionIdsIn, splitMentions } from '../model/mentions'
+import { describeRun } from '../automation/ruleModel'
 import { relativeTime } from '../../../lib/relativeTime'
 import MentionTextarea from './MentionTextarea'
 
@@ -27,6 +28,7 @@ const describe = (t, item) => {
 		case 'attachment_added': return t('card.activity.attachment_added', { name: item.message })
 		case 'copied': return t('card.activity.copied', { name: item.message })
 		case 'restored': return item.toColumn ? t('card.activity.restored', { list: item.toColumn }) : item.message
+		case 'automation': return describeRun(t, item)
 		case 'archived':
 		case 'completed':
 		case 'reopened':
@@ -167,6 +169,7 @@ const CardComments = ({ task, meId, canManage, version, people = [] }) => {
 									<strong data-i18n-ignore>{author}</strong>
 									<time className='cm-hint' dateTime={item.createdAt} title={fullDate(item.createdAt)}>{relativeTime(item.createdAt, language, t('boards.justNow'))}</time>
 									{item.editedAt && <span className='cm-hint'>({t('card.edited')})</span>}
+									{item.rule && <span className='cc__rule'><Zap size={12} aria-hidden='true' />{t('automation.fromRule')}</span>}
 									{item.pending && <span className='cc__pending' title={t('offline.pendingComment')}><CloudUpload size={13} aria-hidden='true' />{t('offline.notSent')}</span>}
 								</div>
 								{editing?.id === item._id ? (

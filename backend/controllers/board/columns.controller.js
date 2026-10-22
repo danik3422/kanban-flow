@@ -9,6 +9,7 @@ import Task from '../../models/task.model.js'
 import TaskActivity from '../../models/taskActivity.model.js'
 import TimeEntry from '../../models/timeEntry.model.js'
 import { canManageBoard, ensureBoardAccess } from '../../services/boardAccess.service.js'
+import { runCardAutomations } from '../../services/automation.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import {
 	boardCardLimitMessage,
@@ -536,7 +537,9 @@ export const moveColumnTasks = async (req, res) => {
 			details: `moved ${tasks.length} cards from ${column.title} to ${target.title}`,
 		})
 		emitBoardEvent(board._id.toString(), 'board:content-changed', { reason: 'cards-moved' })
-		return res.status(200).json({ moved: tasks.length })
+		res.status(200).json({ moved: tasks.length })
+		await runCardAutomations(tasks.map((task) => ({ boardId: board._id, taskId: task._id, events: [{ type: 'moved', column: target._id }], actor: req.user })))
+		return undefined
 	} catch (error) {
 		console.error('Error moving column cards:', error)
 		return res.status(500).json({ message: 'Could not move the cards' })

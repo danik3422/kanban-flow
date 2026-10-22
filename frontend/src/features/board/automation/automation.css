@@ -1,0 +1,73 @@
+/* Board automation: the rules list, ideas and the "when → then" editor. */
+.am-modal .ui-modal__body { display: flex; flex-direction: column; gap: var(--ui-space-4); }
+.am-list { display: flex; flex-direction: column; gap: var(--ui-space-5); }
+.am-loading { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.am-note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.5; }
+
+.am-group { display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.am-group__title { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; letter-spacing: var(--ui-tracking-caps); text-transform: uppercase; }
+.am-rules { display: flex; flex-direction: column; gap: var(--ui-space-2); margin: 0; padding: 0; list-style: none; }
+
+.am-rule { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-3) var(--ui-space-3) var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface); transition: opacity var(--ui-duration) var(--ui-ease), border-color var(--ui-duration) var(--ui-ease); }
+.am-rule.is-off { background: var(--ui-surface-2); }
+.am-rule.is-off .am-rule__body { opacity: 0.62; }
+.am-rule__icon { display: grid; place-items: center; width: 32px; height: 32px; margin-top: 2px; border-radius: var(--ui-radius-md); background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
+.am-rule.is-off .am-rule__icon { background: var(--ui-surface); color: var(--ui-text-muted); }
+.am-rule__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.am-rule__name { color: var(--ui-text); font-size: var(--ui-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.am-rule__text { margin: 0; color: var(--ui-text-2); font-size: var(--ui-text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.am-rule__when { color: var(--ui-text); font-weight: 500; }
+.am-rule__arrow { color: var(--ui-accent); font-weight: 700; }
+.am-rule__meta { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.45; }
+.am-rule__warning { display: flex; align-items: flex-start; gap: 6px; margin: 2px 0 0; color: var(--ui-warning-soft-text); font-size: var(--ui-text-xs); line-height: 1.45; }
+.am-rule__warning svg { flex: 0 0 auto; margin-top: 1px; }
+.am-rule__controls { display: flex; align-items: center; gap: 2px; }
+.am-rule__switch { gap: 0; }
+.am-rule__spacer { display: inline-block; width: 32px; }
+
+.am-ideas__list { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); margin: 0; padding: 0; list-style: none; }
+.am-idea { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; border: 1px dashed var(--ui-border-strong); border-radius: 999px; background: transparent; color: var(--ui-text-2); font: inherit; font-size: var(--ui-text-sm); text-align: left; cursor: pointer; transition: background var(--ui-duration) var(--ui-ease), border-color var(--ui-duration) var(--ui-ease), color var(--ui-duration) var(--ui-ease); }
+.am-idea:hover { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); }
+.am-idea:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.am-idea svg { flex: 0 0 auto; color: var(--ui-accent); }
+
+/* Editor */
+.am-editor { display: flex; flex-direction: column; gap: var(--ui-space-5); }
+.am-block { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); }
+.am-block__title { margin: 0; }
+.am-block__badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--ui-accent); color: var(--ui-accent-text); font-size: var(--ui-text-xs); font-weight: 700; letter-spacing: var(--ui-tracking-caps); text-transform: uppercase; }
+.am-block__badge--then { background: var(--ui-text); color: var(--ui-surface); }
+.am-fields { display: flex; flex-direction: column; gap: var(--ui-space-3); min-width: 0; }
+.am-fields--two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-3); }
+.am-fields--narrow { max-width: 260px; }
+.am-schedule { display: flex; flex-direction: column; gap: var(--ui-space-3); }
+.am-sub { display: flex; flex-direction: column; gap: 6px; }
+.am-sub__label { color: var(--ui-text-2); font-size: var(--ui-text-sm); font-weight: 500; }
+.am-days, .am-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.am-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); max-width: 420px; }
+.am-days .ui-chip { min-width: 0; padding-inline: 0; justify-content: center; text-transform: capitalize; }
+.am-chips .ui-chip { gap: 6px; }
+.am-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot); }
+.am-error { color: var(--ui-danger); font-size: var(--ui-text-xs); font-weight: 500; }
+
+.am-actions { display: flex; flex-direction: column; gap: var(--ui-space-2); margin: 0; padding: 0; list-style: none; }
+.am-action { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
+.am-action.has-error { border-color: var(--ui-danger); }
+.am-action__head { display: flex; align-items: center; gap: var(--ui-space-2); }
+.am-action__number { display: grid; place-items: center; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: var(--ui-surface-2); color: var(--ui-text-2); font-size: var(--ui-text-xs); font-weight: 700; }
+.am-action__type { flex: 1 1 auto; min-width: 0; }
+.am-action__tools { display: flex; flex: 0 0 auto; gap: 2px; }
+.am-action__head + .am-fields:empty { display: none; }
+.am-due { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--ui-space-3); }
+.am-due__days { width: 200px; }
+
+@media (max-width: 560px) {
+	.am-fields--two { grid-template-columns: minmax(0, 1fr); }
+	.am-fields--narrow { max-width: none; }
+	.am-rule { grid-template-columns: minmax(0, 1fr) auto; padding: var(--ui-space-3); }
+	.am-rule__icon { display: none; }
+	.am-block { padding: var(--ui-space-3); }
+	.am-due__days { width: 100%; }
+	.am-modal .ui-modal__footer { flex-wrap: wrap; }
+	.am-modal .ui-modal__footer .ui-btn { flex: 1 1 auto; }
+}

@@ -17,6 +17,7 @@ const BOARD_EVENTS = [
 	'column:deleted',
 	'columns:reordered',
 	'board:content-changed',
+	'board:rules-changed',
 ]
 
 const HEARTBEAT_MS = 20_000

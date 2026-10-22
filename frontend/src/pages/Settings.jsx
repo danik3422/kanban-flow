@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import '../features/settings/settings.css'
 import NotificationSettings from '../features/settings/NotificationSettings'
 import SecuritySection from '../features/settings/SecuritySection'
+import CalendarLink from '../features/calendar/CalendarLink'
 import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
 import useIsPhone from '../hooks/useIsPhone'
@@ -16,7 +17,7 @@ import { weekdayNames, weekStartFor } from '../lib/calendarDates'
 import { getStartPage, getWeekStart, setStartPage, setWeekStart, START_PAGES } from '../lib/preferences'
 import { applyTheme, useThemeStore } from '../lib/theme'
 
-const SECTIONS = ['account', 'preferences', 'notifications', 'security']
+const SECTIONS = ['account', 'preferences', 'notifications', 'calendar', 'security']
 const THEME_ICONS = { light: Sun, dark: Moon, system: Monitor }
 const START_PAGE_LABELS = { boards: 'app.nav.boards', myTasks: 'app.nav.myTasks', calendar: 'app.nav.calendar' }
 
@@ -208,6 +209,12 @@ const Settings = () => {
 
 							<Section id='notifications' title={t('settings.sections.notifications')} text={t('settings.sectionText.notifications')}>
 								<NotificationSettings />
+							</Section>
+
+							<Section id='calendar' title={t('settings.sections.calendar')} text={t('settings.sectionText.calendar')}>
+								<div className='st-card st-calendar'>
+									<CalendarLink />
+								</div>
 							</Section>
 
 							<Section id='security' title={t('settings.sections.security')} text={t('settings.sectionText.security')}>

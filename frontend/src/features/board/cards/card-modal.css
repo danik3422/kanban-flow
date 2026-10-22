@@ -239,3 +239,4 @@
 .cm-repeat:hover { filter: brightness(0.97); }
 .cm-repeat:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
 .cc__pending { display: inline-flex; align-items: center; gap: 4px; color: var(--ui-link); font-size: var(--ui-text-xs); font-weight: 600; }
+.cc__rule { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--ui-accent-soft); color: var(--ui-accent-soft-text); font-size: var(--ui-text-xs); font-weight: 600; }

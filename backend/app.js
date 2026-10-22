@@ -11,6 +11,7 @@ import { apiLimiter } from './middlewares/rateLimit.middleware.js'
 import authRoutes from './routes/auth.routes.js'
 import { isImageUploadPath } from './routes/board/attachments.routes.js'
 import boardRoutes from './routes/board.routes.js'
+import calendarRoutes from './routes/calendar.routes.js'
 import devRoutes from './routes/dev.routes.js'
 import notificationRoutes from './routes/notifications.routes.js'
 
@@ -94,6 +95,7 @@ app.use((req, res, next) => (isImageUploadPath(req.path) ? next() : jsonBody(req
 
 app.use('/api/auth', authRoutes)
 app.use('/api/board', boardRoutes)
+app.use('/api/calendar', calendarRoutes)
 app.use('/api/notifications', notificationRoutes)
 
 // Email previews and a manual run of the email jobs; local only.

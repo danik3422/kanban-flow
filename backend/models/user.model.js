@@ -61,6 +61,10 @@ const userSchema = new mongoose.Schema(
 			lastUsedAt: { type: Date, default: null },
 		}],
 		passkeyRegistrationChallenge: { type: String, default: '' },
+		// The secret calendar link (services/calendarFeed.service.js): a hash of its token,
+		// and a counter that makes a new token when the old link is reset.
+		calendarTokenHash: { type: String, default: undefined, select: false },
+		calendarTokenVersion: { type: Number, default: 0 },
 		passkeyRegistrationChallengeExpiresAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
@@ -85,6 +89,9 @@ userSchema.index(
 		},
 	},
 )
+
+// Calendar apps fetch the feed by its token.
+userSchema.index({ calendarTokenHash: 1 }, { sparse: true })
 
 // Passkey sign-in looks the account up by credential.
 userSchema.index({ 'passkeys.credentialID': 1 }, { sparse: true })

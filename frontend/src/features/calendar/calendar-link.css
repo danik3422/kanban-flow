@@ -1,0 +1,22 @@
+/* The calendar link: settings card, calendar page and board menu dialogs. */
+.clk { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ui-space-3); min-width: 0; }
+.clk--off { gap: var(--ui-space-4); }
+.clk__text { margin: 0; color: var(--ui-text-2); font-size: var(--ui-text-sm); line-height: 1.5; }
+.clk__url { display: flex; gap: var(--ui-space-2); width: 100%; min-width: 0; }
+.clk__url .ui-control { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ui-text-xs); color: var(--ui-text-2); }
+.clk__url .ui-btn { flex: 0 0 auto; }
+.clk__apps { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
+.clk__hint { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.5; }
+.clk__local { width: 100%; font-size: var(--ui-text-sm); }
+.clk__manage { display: flex; flex-wrap: wrap; gap: var(--ui-space-1); margin-left: calc(-1 * var(--ui-space-2)); }
+.clk .ui-segmented { max-width: 100%; }
+
+/* In settings the link sits in a card of its own. */
+.st-card.st-calendar { padding: var(--ui-space-4); overflow: visible; }
+
+@media (max-width: 520px) {
+	.clk__url { flex-direction: column; }
+	.clk__url .ui-btn { width: 100%; }
+	.clk__apps { width: 100%; }
+	.clk__apps .ui-btn { flex: 1 1 0; justify-content: center; }
+}

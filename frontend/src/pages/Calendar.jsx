@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, RotateCcw, X } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Plus, RotateCcw, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -7,6 +7,7 @@ import '../features/my-tasks/my-tasks.css'
 import '../features/calendar/calendar.css'
 import MonthGrid from '../features/calendar/MonthGrid'
 import QuickCreateTask from '../features/calendar/QuickCreateTask'
+import { CalendarLinkDialog } from '../features/calendar/CalendarLink'
 import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
 import useTaskActions from '../features/my-tasks/useTaskActions'
@@ -58,6 +59,7 @@ const Calendar = () => {
 	const [loadError, setLoadError] = useState('')
 	const [reloadKey, setReloadKey] = useState(0)
 	const [createDate, setCreateDate] = useState(null)
+	const [subscribeOpen, setSubscribeOpen] = useState(false)
 	const { isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
 	// Opened from a board's planner: only that board's tasks.
 	const [searchParams, setSearchParams] = useSearchParams()
@@ -222,6 +224,7 @@ const Calendar = () => {
 					<Button variant='secondary' size='sm' onClick={goToday}>{t('calendar.today')}</Button>
 					<IconButton icon={ChevronRight} label={t('calendar.next')} onClick={() => goToMonth(1)} />
 				</span>
+				<Button variant='secondary' size='sm' icon={CalendarPlus} className='cal-subscribe' title={t('calendarLink.subscribeLabel')} onClick={() => setSubscribeOpen(true)}>{t('calendarLink.subscribe')}</Button>
 			</div>
 		</div>
 	)
@@ -340,6 +343,7 @@ const Calendar = () => {
 					setReloadKey((key) => key + 1)
 				}}
 			/>
+			<CalendarLinkDialog open={subscribeOpen} onClose={() => setSubscribeOpen(false)} board={filteredBoard?._id || null} boardName={filteredBoard?.name || ''} />
 		</div>
 	)
 }

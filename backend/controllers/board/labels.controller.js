@@ -1,4 +1,5 @@
 import { emitBoardEvent } from '../../lib/realtime.js'
+import BoardRule from '../../models/boardRule.model.js'
 import Column from '../../models/column.model.js'
 import Task from '../../models/task.model.js'
 import { getBoardWithRole } from '../../services/boardAccess.service.js'
@@ -51,6 +52,10 @@ export const updateBoardLabel = async (req, res) => {
 		if (label.name !== previousName) {
 			const columnIds = await Column.find({ board: board._id }).distinct('_id')
 			await Task.updateMany({ column: { $in: columnIds }, labels: previousName }, { $set: { 'labels.$': label.name } })
+			// Automation rules that name the label follow the new name.
+			await BoardRule.updateMany({ board: board._id, 'actions.label': previousName }, { $set: { 'actions.$[action].label': label.name } }, { arrayFilters: [{ 'action.label': previousName }] })
+			await BoardRule.updateMany({ board: board._id, 'actions.labels': previousName }, { $set: { 'actions.$[].labels.$[name]': label.name } }, { arrayFilters: [{ name: previousName }] })
+			emitBoardEvent(board._id.toString(), 'board:rules-changed', {})
 			emitBoardEvent(board._id.toString(), 'board:content-changed', {})
 		}
 		emitBoardEvent(board._id.toString(), 'board:updated', { _id: board._id, labels: board.labels })

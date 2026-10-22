@@ -12,6 +12,7 @@ import labelRoutes from './board/labels.routes.js'
 import memberRoutes from './board/members.routes.js'
 import personalViewRoutes from './board/personalViews.routes.js'
 import publicLinkRoutes from './board/publicLinks.routes.js'
+import ruleRoutes from './board/rules.routes.js'
 import timeTrackingRoutes from './board/timeTracking.routes.js'
 import transferRoutes from './board/transfer.routes.js'
 
@@ -33,5 +34,6 @@ router.use(timeTrackingRoutes)
 router.use(attachmentRoutes)
 router.use(labelRoutes)
 router.use(archiveRoutes)
+router.use(ruleRoutes)
 
 export default router

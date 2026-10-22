@@ -1,4 +1,4 @@
-import { Activity, Archive, ChevronsLeftRight, ChevronsRightLeft, Copy, Download, FileJson, FileSpreadsheet, Image as ImageIcon, Info, Keyboard, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
+import { Activity, Archive, CalendarDays, Zap, ChevronsLeftRight, ChevronsRightLeft, Copy, Download, FileJson, FileSpreadsheet, Image as ImageIcon, Info, Keyboard, Link2, LogOut, Star, Trash2, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
@@ -47,6 +47,8 @@ const BoardMenu = ({
 	onDelete,
 	onArchive,
 	onShortcuts,
+	onCalendar,
+	onAutomation,
 	listCount = 0,
 	collapsedCount = 0,
 	onCollapseAll,
@@ -128,7 +130,9 @@ const BoardMenu = ({
 						<Item icon={VISIBILITY_ICONS[visibility]} label={t('boardHeader.visibilityItem')} hint={t(`boards.visibility.${visibility}`)} onClick={() => go('visibility')} />
 						{canManage && <Item icon={ImageIcon} label={t('boardHeader.background')} onClick={closeAnd(onBackground)} />}
 						<Item icon={Activity} label={t('boardHeader.activity')} onClick={() => go('activity')} />
+						{onAutomation && <Item icon={Zap} label={t('boardHeader.automationItem')} hint={t('automation.menuHint')} onClick={closeAnd(onAutomation)} />}
 						<Item icon={Archive} label={t('boardHeader.archive')} onClick={closeAnd(onArchive)} />
+						{onCalendar && <Item icon={CalendarDays} label={t('boardHeader.calendarItem')} hint={t('boardHeader.calendarHint')} onClick={closeAnd(onCalendar)} />}
 						<Item icon={Download} label={t('boardHeader.export')} onClick={() => go('export')} />
 						{onShortcuts && <Item icon={Keyboard} label={t('shortcuts.title')} hint='?' onClick={closeAnd(onShortcuts)} />}
 					</div>

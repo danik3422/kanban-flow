@@ -11,6 +11,7 @@ import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import { normalizeBackground } from '../../services/boardBackgrounds.service.js'
 import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.js'
 import { startNextInSeries, takeBackNextInSeries } from '../../services/repeatingCards.service.js'
+import { runCardAutomations } from '../../services/automation.service.js'
 import { boardCardLimitMessage, exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
 import {
 	describeTaskContent,
@@ -75,6 +76,7 @@ export const reorderTasks = async (req, res) => {
 
 		const columnIds = columns.map((item) => item?.columnId)
 		const taskIds = columns.flatMap((item) => item.taskIds || [])
+		const columnBefore = new Map()
 		session = await mongoose.startSession()
 		await session.withTransaction(async () => {
 			if (columnIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
@@ -94,6 +96,7 @@ export const reorderTasks = async (req, res) => {
 				throw error
 			}
 			const tasks = await Task.find({ column: { $in: columnIds } }).select('_id column').session(session)
+			for (const task of tasks) columnBefore.set(task._id.toString(), task.column.toString())
 			const orderedIds = new Set(taskIds)
 			if (tasks.length !== taskIds.length || !tasks.every((task) => orderedIds.has(task._id.toString()))) {
 				const error = new Error('Task order does not match the board')
@@ -135,7 +138,12 @@ export const reorderTasks = async (req, res) => {
 				sortBy: 'custom',
 			})
 		}
-		return res.status(200).json({ message: 'Task order updated' })
+		res.status(200).json({ message: 'Task order updated' })
+		// Cards dragged into another list may set off the board's rules.
+		await runCardAutomations(columns.flatMap((column) => column.taskIds
+			.filter((taskId) => columnBefore.get(taskId.toString()) !== column.columnId.toString())
+			.map((taskId) => ({ boardId: board._id, taskId, events: [{ type: 'moved', column: column.columnId }], actor: req.user }))))
+		return undefined
 	} catch (error) {
 		if (session) await session.endSession().catch(() => {})
 		console.error('Error reordering tasks:', error)
@@ -235,7 +243,9 @@ export const createTask = async (req, res) => {
 		})
 		await notifyListWatchers({ column, task: savedTask, board, actorId: req.user._id })
 		emitBoardEvent(column.board.toString(), 'task:created', savedTask)
-		return res.status(201).json(savedTask)
+		res.status(201).json(savedTask)
+		await runCardAutomations({ boardId: column.board, taskId: savedTask._id, events: [{ type: 'created', column: column._id }], actor: req.user })
+		return undefined
 	} catch (error) {
 		console.error('Error creating task:', error)
 		res.status(500).json({ message: 'Internal server error' })
@@ -289,6 +299,8 @@ export const updateTask = async (req, res) => {
 			task.column = targetColumn._id
 		}
 		const contentBefore = describeTaskContent(task)
+		const checklistDone = (items) => items.length > 0 && items.every((item) => item.completed)
+		const checklistWasDone = checklistDone(task.checklist)
 		if (title !== undefined) task.title = title.trim()
 		if (description !== undefined) task.description = description
 		const originalDueTime = task.dueDate ? new Date(task.dueDate).getTime() : null
@@ -499,7 +511,15 @@ export const updateTask = async (req, res) => {
 		}
 		if (moved) await notifyListWatchers({ column: targetColumn, task: updatedTask, board, actorId: req.user._id, fromColumn: originalColumn?.title })
 		emitBoardEvent(boardId, 'task:updated', updatedTask)
-		return res.status(200).json(nextInSeries ? { ...updatedTask, nextInSeries } : updatedTask)
+		res.status(200).json(nextInSeries ? { ...updatedTask, nextInSeries } : updatedTask)
+		// What the change set off on the board's automation rules.
+		const events = [
+			...(moved ? [{ type: 'moved', column: targetColumn._id }] : []),
+			...(completedChanged && task.completed ? [{ type: 'completed', column: task.column }] : []),
+			...(!checklistWasDone && checklistDone(task.checklist) ? [{ type: 'checklist_done', column: task.column }] : []),
+		]
+		await runCardAutomations({ boardId, taskId: task._id, events, actor: req.user })
+		return undefined
 	} catch (error) {
 		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error updating task:', error)
@@ -622,7 +642,9 @@ export const copyTask = async (req, res) => {
 			await TaskActivity.create([{ task: copy._id, board: board._id, user: req.user._id, type: 'copied', message: task.title }], { session })
 		})
 		emitBoardEvent(board._id.toString(), 'board:content-changed', {})
-		return res.status(201).json(await populatedTask(copy._id))
+		res.status(201).json(await populatedTask(copy._id))
+		await runCardAutomations({ boardId: board._id, taskId: copy._id, events: [{ type: 'created', column: targetColumn._id }], actor: req.user })
+		return undefined
 	} catch (error) {
 		console.error('Card copy failed:', error)
 		return res.status(500).json({ message: 'Could not copy the card' })

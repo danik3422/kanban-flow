@@ -7,7 +7,7 @@ const taskActivitySchema = new mongoose.Schema(
 		user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		type: {
 			type: String,
-			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted', 'completed', 'reopened', 'attachment_added', 'copied', 'archived', 'restored'],
+			enum: ['created', 'updated', 'moved', 'comment', 'time_logged', 'deleted', 'completed', 'reopened', 'attachment_added', 'copied', 'archived', 'restored', 'automation'],
 			required: true,
 		},
 		message: { type: String, default: '' },
@@ -21,6 +21,8 @@ const taskActivitySchema = new mongoose.Schema(
 		clientId: { type: String, default: undefined },
 		// People a comment calls on with @name; they get their own notification.
 		mentions: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: undefined },
+		// A comment an automation rule wrote (services/automation.service.js).
+		rule: { type: mongoose.Schema.Types.ObjectId, ref: 'BoardRule', default: undefined },
 	},
 	{ timestamps: true },
 )

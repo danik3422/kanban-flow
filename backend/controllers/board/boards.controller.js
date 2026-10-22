@@ -5,6 +5,7 @@ import Board from '../../models/board.model.js'
 import BoardActivity from '../../models/boardActivity.model.js'
 import BoardInvite from '../../models/boardInvite.model.js'
 import BoardMember from '../../models/boardMember.model.js'
+import BoardRule from '../../models/boardRule.model.js'
 import Column from '../../models/column.model.js'
 import Notification from '../../models/notification.model.js'
 import Task from '../../models/task.model.js'
@@ -336,6 +337,7 @@ export const removeBoard = async (req, res) => {
 				await BoardMember.deleteMany({ board: boardId }, { session })
 				await BoardInvite.deleteMany({ board: boardId }, { session })
 				await BoardActivity.deleteMany({ board: boardId }, { session })
+				await BoardRule.deleteMany({ board: boardId }, { session })
 				await Board.deleteOne({ _id: boardId }, { session })
 			})
 		} finally {
