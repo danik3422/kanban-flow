@@ -214,3 +214,12 @@
 .mention-list__email { overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-xs); white-space: nowrap; text-overflow: ellipsis; }
 .cc__mention { padding: 0 3px; border-radius: 4px; background: var(--ui-accent-soft); color: var(--ui-link); font-weight: 600; }
 .cc__mention.is-me { background: var(--ui-accent); color: var(--ui-accent-text); }
+
+/* Cover picker: your own picture first. */
+.cp-cover-upload { display: flex; align-items: center; gap: var(--ui-space-3); width: 100%; min-height: 60px; padding: var(--ui-space-2) var(--ui-space-3); border: 1.5px dashed var(--ui-border-strong); border-radius: var(--ui-radius-lg); background: var(--ui-surface-2); color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--ui-duration-fast) var(--ui-ease), background var(--ui-duration-fast) var(--ui-ease); }
+.cp-cover-upload:hover:not(:disabled), .cp-cover-upload.is-over { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.cp-cover-upload:focus-visible { outline: none; box-shadow: var(--ui-focus-ring); }
+.cp-cover-upload:disabled { cursor: progress; opacity: 0.75; }
+.cp-cover-upload__icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-link); }
+.cp-cover-upload__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-cover-upload__title { font-size: var(--ui-text-sm); font-weight: 600; }

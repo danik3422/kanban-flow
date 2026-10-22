@@ -16,6 +16,7 @@ import { Button, Chip, EmptyState, IconButton, Input, Menu, Modal, PageHeader, S
 import { cx } from '../ui/utils'
 import { addDaysToKey, getDueDateKey, getLocalDateKey } from '../lib/dueDate'
 import { peekCache } from '../lib/apiCache'
+import { shortcutKey } from '../lib/shortcutKey'
 
 const PRIORITY_WEIGHT = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 }
 const DATE_SECTIONS = ['overdue', 'today', 'tomorrow', 'week', 'later', 'noDate']
@@ -122,7 +123,7 @@ const MyTasks = () => {
 	useEffect(() => {
 		const handleKeyDown = (event) => {
 			const typing = event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')
-			if (event.key === '/' && !typing && !document.body.classList.contains('has-modal')) {
+			if (shortcutKey(event) === '/' && !typing && !document.body.classList.contains('has-modal')) {
 				event.preventDefault()
 				searchRef.current?.focus()
 			}

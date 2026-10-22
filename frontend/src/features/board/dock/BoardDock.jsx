@@ -3,11 +3,12 @@ import { useEffect, useRef } from 'react'
 import { useI18n } from '../../../i18n'
 import { cx } from '../../../ui/utils'
 import './board-dock.css'
+import { shortcutKey } from '../../../lib/shortcutKey'
 
 const isTyping = (target) => target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 
-const DockItem = ({ icon: Icon, label, keys, active, onClick }) => (
-	<button type='button' className={cx('bd-item', active && 'is-active')} onClick={onClick} aria-current={active ? 'page' : undefined} aria-keyshortcuts={keys.join(' ').replace('+', ' ')}>
+const DockItem = ({ icon: Icon, label, keys, active, pressed, onClick }) => (
+	<button type='button' className={cx('bd-item', active && 'is-active')} onClick={onClick} aria-pressed={pressed} aria-keyshortcuts={keys.join(' ').replace('+', ' ')}>
 		<Icon size={17} aria-hidden='true' />
 		<span>{label}</span>
 		<span className='bd-tip' role='tooltip'>
@@ -18,18 +19,18 @@ const DockItem = ({ icon: Icon, label, keys, active, onClick }) => (
 )
 
 /**
- * The board's floating switcher, Trello-style: the planner (this board in the
- * calendar), the board itself, and jumping to another board. Shortcuts: g then p,
- * g then b, and b. Phones use the app's bottom bar instead.
+ * The board's floating switcher, Trello-style: show or hide the planner and the board
+ * (at least one stays open), and jump to another board. Shortcuts: g then p, g then b,
+ * and b, in any keyboard layout. Phones use the app's bottom bar instead.
  */
-const BoardDock = ({ onPlanner, onSwitchBoards }) => {
+const BoardDock = ({ plannerOpen, boardVisible, onTogglePlanner, onToggleBoard, onSwitchBoards }) => {
 	const { t } = useI18n()
 	const pendingG = useRef(0)
 
 	useEffect(() => {
 		const onKey = (event) => {
 			if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target) || document.body.classList.contains('has-modal')) return
-			const key = event.key.toLowerCase()
+			const key = shortcutKey(event)
 			const afterG = Date.now() - pendingG.current < 1200
 			if (key === 'g') {
 				pendingG.current = Date.now()
@@ -38,9 +39,11 @@ const BoardDock = ({ onPlanner, onSwitchBoards }) => {
 			if (afterG && key === 'p') {
 				event.preventDefault()
 				pendingG.current = 0
-				onPlanner()
+				onTogglePlanner()
 			} else if (afterG && key === 'b') {
+				event.preventDefault()
 				pendingG.current = 0
+				onToggleBoard()
 			} else if (key === 'b') {
 				event.preventDefault()
 				onSwitchBoards()
@@ -48,12 +51,12 @@ const BoardDock = ({ onPlanner, onSwitchBoards }) => {
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
-	}, [onPlanner, onSwitchBoards])
+	}, [onTogglePlanner, onToggleBoard, onSwitchBoards])
 
 	return (
 		<nav className='bd' aria-label={t('boardDock.label')}>
-			<DockItem icon={CalendarDays} label={t('boardDock.planner')} keys={['g+p']} onClick={onPlanner} />
-			<DockItem icon={Columns3} label={t('boardDock.board')} keys={['g+b']} active onClick={() => {}} />
+			<DockItem icon={CalendarDays} label={t('boardDock.planner')} keys={['g+p']} active={plannerOpen} pressed={plannerOpen} onClick={onTogglePlanner} />
+			<DockItem icon={Columns3} label={t('boardDock.board')} keys={['g+b']} active={boardVisible} pressed={boardVisible} onClick={onToggleBoard} />
 			<span className='bd-divider' aria-hidden='true' />
 			<DockItem icon={Layers} label={t('boardDock.switch')} keys={['b']} onClick={onSwitchBoards} />
 		</nav>

@@ -227,3 +227,15 @@ describe('export and import', () => {
 		assert.equal((await api('post', '/boards/import', owner).send({ name: 'Big', source: 'trello', columns: [{ title: 'All', cards }] })).status, 400)
 	})
 })
+
+describe('covers', () => {
+	it('removing the picture a card uses as its cover removes the cover too', async () => {
+		const { owner, first } = await setup()
+		const url = '/uploads/cards/test/cover.webp'
+		await Task.updateOne({ _id: first._id }, { $set: { attachments: [{ kind: 'image', url, name: 'cover.webp', addedBy: owner._id }], cover: { type: 'photo', id: 'attachment-x', url, thumb: url, size: 'full' } } })
+		const attachmentId = (await Task.findById(first._id)).attachments[0]._id
+		const response = await api('delete', `/tasks/${first._id}/attachments/${attachmentId}`, owner)
+		assert.equal(response.status, 200)
+		assert.equal((await Task.findById(first._id)).cover, null)
+	})
+})

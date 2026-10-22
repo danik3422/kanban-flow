@@ -56,6 +56,8 @@ export const deleteAttachment = async (req, res) => {
 		const own = attachment.addedBy?.toString() === req.user._id.toString()
 		if (!own && !access.isManager) return res.status(403).json({ message: 'You can remove only what you attached' })
 		const removed = attachment.kind === 'image' ? attachment.url : ''
+		// A picture shown as the cover goes from the cover too.
+		if (removed && access.task.cover?.url === removed) access.task.cover = null
 		attachment.deleteOne()
 		await access.task.save()
 		// The file goes too, unless a copied card still shows it.

@@ -13,6 +13,10 @@ import BoardBackgroundDialog from '../features/boards/backgrounds/BoardBackgroun
 import BoardColumn, { ListComposer } from '../features/board/columns/BoardColumn'
 import ColumnActions from '../features/board/columns/ColumnActions'
 import BoardDock from '../features/board/dock/BoardDock'
+import BoardPlanner from '../features/board/planner/BoardPlanner'
+import { NO_DATE } from '../features/board/planner/plannerModel'
+import { resolveWeekStart } from '../lib/preferences'
+import { getDueDateKey } from '../lib/dueDate'
 import BoardSkeleton from '../features/board/BoardSkeleton'
 import BoardSwitcher from '../features/board/dock/BoardSwitcher'
 import '../features/board/columns/board-columns.css'
@@ -66,6 +70,7 @@ import {
 	isDevAuthBypass,
 } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
+import { shortcutKey } from '../lib/shortcutKey'
 
 const getSortStorageKey = (boardId, userId = 'anonymous') =>
 	`kanban-column-sorts:${userId}:${boardId}`
@@ -96,6 +101,18 @@ const fetchColumns = async (boardId) => {
 // while a fresh copy loads behind it. Keyed by user and board.
 const columnsCache = new Map()
 const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column._id, column.sortBy || 'custom']))
+
+const PLANNER_KEY = 'kh:planner'
+const PLANNER_MIN = 300
+const PLANNER_MAX = 560
+const readPlannerLayout = () => {
+	try {
+		const saved = JSON.parse(localStorage.getItem(PLANNER_KEY) || '{}')
+		return { open: Boolean(saved.open), board: saved.board !== false, width: Math.min(Math.max(Number(saved.width) || 360, PLANNER_MIN), PLANNER_MAX) }
+	} catch {
+		return { open: false, board: true, width: 360 }
+	}
+}
 
 const Workspace = () => {
 	const { authUser } = useAuthStore()
@@ -1093,10 +1110,49 @@ const Workspace = () => {
 		}
 	}
 
+	// The planner sits beside the board; hiding the board leaves it full width. Phones,
+	// which have no room for both, open the calendar page instead.
 	const selectedBoardIdForPlanner = selectedBoard?._id
-	const openPlanner = useCallback(() => {
-		if (selectedBoardIdForPlanner) navigate(`/calendar?board=${selectedBoardIdForPlanner}`)
-	}, [navigate, selectedBoardIdForPlanner])
+	const [plannerLayout, setPlannerLayout] = useState(readPlannerLayout)
+	// Spoken by screen readers after keyboard moves and planner drops.
+	const [announcement, setAnnouncement] = useState('')
+	useEffect(() => {
+		try {
+			localStorage.setItem(PLANNER_KEY, JSON.stringify(plannerLayout))
+		} catch {
+			// Only a preference.
+		}
+	}, [plannerLayout])
+	const togglePlanner = useCallback(() => {
+		if (isPhone) {
+			if (selectedBoardIdForPlanner) navigate(`/calendar?board=${selectedBoardIdForPlanner}`)
+			return
+		}
+		setPlannerLayout((current) => (current.open ? { ...current, open: false, board: true } : { ...current, open: true }))
+	}, [isPhone, navigate, selectedBoardIdForPlanner])
+	// The board can be hidden only while the planner is open: one of them always shows.
+	const toggleBoard = useCallback(() => {
+		setPlannerLayout((current) => (!current.board ? { ...current, board: true } : current.open ? { ...current, board: false } : current))
+	}, [])
+	const plannerShown = !isPhone && plannerLayout.open
+	const boardShown = !plannerShown || plannerLayout.board
+	const startPlannerResize = (event) => {
+		event.preventDefault()
+		const startX = event.clientX
+		const startWidth = plannerLayout.width
+		document.body.classList.add('is-resizing-planner')
+		const move = (moveEvent) => {
+			const width = Math.round(Math.min(Math.max(startWidth + moveEvent.clientX - startX, PLANNER_MIN), Math.min(PLANNER_MAX, window.innerWidth * 0.6)))
+			setPlannerLayout((current) => (current.width === width ? current : { ...current, width }))
+		}
+		const stop = () => {
+			document.body.classList.remove('is-resizing-planner')
+			window.removeEventListener('pointermove', move)
+			window.removeEventListener('pointerup', stop)
+		}
+		window.addEventListener('pointermove', move)
+		window.addEventListener('pointerup', stop)
+	}
 	const openSwitcher = useCallback(() => setIsSwitcherOpen(true), [])
 
 	const startColumnDrag = (event, column) => {
@@ -1534,7 +1590,26 @@ const Workspace = () => {
 	}
 
 	// Card drag: the slot opens where the card would land, cards glide around it.
-	const cardDrag = useCardDrag({ boardRef: boardListRef, enabled: Boolean(selectedBoard) && !isDevAuthBypass, onDrop: moveCard })
+	// A card dropped on a planner day takes that due date; on "No date" it loses it.
+	const plannerDrop = (taskId, dayKey) => {
+		const task = findTask(taskId)
+		if (!task) return
+		const dueDate = dayKey === NO_DATE ? null : dayKey
+		if ((getDueDateKey(task.dueDate) || null) === dueDate) return
+		patchTask(task, { dueDate })
+		setAnnouncement(translateCurrent(dueDate ? 'planner.scheduled' : 'planner.unscheduled', { title: task.title }))
+	}
+	const addPlannerCard = async (dayKey, title, columnId) => {
+		try {
+			const { data } = await axiosInstance.post(`/board/columns/${columnId}/task`, { title, dueDate: dayKey })
+			setColumns((current) => addTask(current, { ...data, column: data.column || columnId }))
+			return true
+		} catch (error) {
+			columnError(error, 'columns.errors.addCard')
+			return false
+		}
+	}
+	const cardDrag = useCardDrag({ boardRef: boardListRef, enabled: Boolean(selectedBoard) && !isDevAuthBypass, onDrop: moveCard, onPlannerDrop: plannerDrop })
 	const cardLayoutKey = `${columns.map((column) => column.tasks.map((task) => task._id).join('.')).join('|')}#${cardDrag.drag ? `${cardDrag.drag.columnId}:${cardDrag.drag.index}` : ''}`
 	useFlipCards(boardListRef, cardLayoutKey)
 
@@ -1580,7 +1655,6 @@ const Workspace = () => {
 	})
 	const hoveredCardId = useRef(null)
 	const hoveredColumnId = useRef(null)
-	const [announcement, setAnnouncement] = useState('')
 	const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
 
 	useEffect(() => {
@@ -1658,10 +1732,10 @@ const Workspace = () => {
 				return
 			}
 			if (event.altKey) return
-			const key = event.key.toLowerCase()
+			const key = shortcutKey(event)
 			const { findTask, patchTask, archiveTask, meId } = shortcutActions.current
 			const task = findTask(focusedId || hoveredCardId.current)
-			if (event.key === '?') {
+			if (key === '?') {
 				event.preventDefault()
 				setIsShortcutsOpen(true)
 			} else if (key === 'f') {
@@ -1771,7 +1845,25 @@ const Workspace = () => {
 								action={<Button icon={Plus} onClick={() => setIsCreatingBoard(true)}>{tr('workspace.emptyAction')}</Button>}
 							/>
 						) : (
-							<>
+							<div className={`bp-layout${plannerShown ? ' has-planner' : ''}`}>
+								{plannerShown && (
+									<BoardPlanner
+										mode={boardShown ? 'side' : 'full'}
+										columns={columns}
+										labels={boardLabelList}
+										weekStart={resolveWeekStart(language)}
+										drag={{ taskId: cardDrag.drag?.taskId, plannerDay: cardDrag.drag?.plannerDay, active: Boolean(cardDrag.drag), onPointerDown: cardDrag.onPointerDown, consumeClick: cardDrag.consumeClick }}
+										canEdit
+										calendarHref={`/calendar?board=${selectedBoard._id}`}
+										onOpenTask={setTaskDetails}
+										onToggleComplete={(task) => patchTask(task, { completed: !task.completed })}
+										onAddCard={addPlannerCard}
+										onClose={togglePlanner}
+										width={plannerLayout.width}
+										onResizeStart={startPlannerResize}
+									/>
+								)}
+								{boardShown && <div className='bp-board'>
 								<div className='bc-scroll'>
 									<div className={`bc-board${isFiltering ? ' is-filtering' : ''}`} ref={boardListRef}>
 										{boardColumns.map((column) => (
@@ -1799,12 +1891,13 @@ const Workspace = () => {
 										{canEditBoardName && <ListComposer onSubmit={addList} />}
 									</div>
 								</div>
-							</>
+								</div>}
+							</div>
 						)}
 					</div>
 				)}
 				{boardId && selectedBoard && !isBoardContentLoading && (
-					<BoardDock onPlanner={openPlanner} onSwitchBoards={openSwitcher} />
+					<BoardDock plannerOpen={plannerShown} boardVisible={boardShown} onTogglePlanner={togglePlanner} onToggleBoard={toggleBoard} onSwitchBoards={openSwitcher} />
 				)}
 			</main>
 			<BoardSwitcher
@@ -1841,6 +1934,13 @@ const Workspace = () => {
 					onLabelDelete={deleteLabel}
 					onAttachLink={(url, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments`, { url, name }))}
 					onAttachImage={(image, name) => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/attachments/image`, { image, name }, { timeout: 60_000 }))}
+					onUploadCover={async (image, name, size) => {
+						// The picture is kept with the card's attachments, then shown as its cover.
+						const { data } = await axiosInstance.post(`/board/tasks/${openTask._id}/attachments/image`, { image, name }, { timeout: 60_000 })
+						const attachment = (data.attachments || []).filter((item) => item.kind === 'image').at(-1)
+						setColumns((current) => replaceTask(current, data))
+						if (attachment) await patchTask(data, { cover: { type: 'photo', id: `attachment-${attachment._id}`, url: attachment.url, thumb: attachment.url, size } })
+					}}
 					onRemoveAttachment={(item) => cardRequest(() => axiosInstance.delete(`/board/tasks/${openTask._id}/attachments/${item._id}`))}
 					onToggleWatch={() => cardRequest(() => axiosInstance.post(`/board/tasks/${openTask._id}/watch`))}
 					onCopyLink={() => copyText(`${window.location.origin}/workspaces/${selectedBoard?._id}?task=${openTask._id}`, tr('card.linkCopied'))}

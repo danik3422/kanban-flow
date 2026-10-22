@@ -28,7 +28,7 @@ await page.goto(`${APP}/workspaces/${alpha._id}`); await page.waitForSelector('.
 // The dock.
 await page.waitForSelector('.bd')
 check('the dock offers Planner, Board and Switch boards (no Inbox)', (await page.locator('.bd-item').allInnerTexts()).map((text) => text.split('\n')[0]).join('|') === 'Planner|Board|Switch boards')
-check('Board is the current view', (await page.locator('.bd-item[aria-current="page"]').innerText()).startsWith('Board'))
+check('only the board is shown at first', (await page.locator('.bd-item[aria-pressed="true"]').allInnerTexts()).map((text) => text.split('\n')[0]).join('|') === 'Board')
 await page.locator('.bd-item', { hasText: 'Planner' }).hover()
 await page.waitForTimeout(500)
 check('hovering shows the shortcut', (await page.locator('.bd-item', { hasText: 'Planner' }).locator('.bd-tip').innerText()).includes('g+p'))
@@ -72,13 +72,24 @@ await page.waitForSelector('.bs')
 check('the list view is remembered', (await page.locator('.bs-grid--list').count()) > 0)
 await page.keyboard.press('Escape')
 
-// g then p: the planner for this board only.
+// g then p: the planner opens beside the board, with this board's cards; its
+// Calendar link opens the calendar for this board only.
 await page.mouse.click(1100, 700)
 await page.keyboard.press('g')
 await page.keyboard.press('p')
+await page.waitForSelector('.pl--side')
+check('g then p opens the planner beside the board', (await page.locator('.bc-board').count()) === 1 && (await page.locator('.bd-item', { hasText: 'Planner' }).getAttribute('aria-pressed')) === 'true')
+await page.keyboard.press('g')
+await page.keyboard.press('b')
+await page.waitForSelector('.pl--full')
+check('g then b hides the board and widens the planner', (await page.locator('.bc-board').count()) === 0)
+await page.keyboard.press('g')
+await page.keyboard.press('b')
+await page.waitForSelector('.pl--side')
+await page.locator('.pl-head').getByRole('link', { name: 'Calendar' }).click()
 await page.waitForURL(/\/calendar\?board=/)
 await page.waitForSelector('.cal-board-filter')
-check('g then p opens the planner for this board', page.url().includes(`board=${beta._id}`) && (await page.locator('.cal-board-filter').innerText()).includes('Beta research'))
+check('the planner links to the calendar for this board', page.url().includes(`board=${beta._id}`) && (await page.locator('.cal-board-filter').innerText()).includes('Beta research'))
 await page.waitForTimeout(800)
 await page.getByRole('radio', { name: 'All' }).click()
 await page.waitForTimeout(800)
@@ -89,6 +100,7 @@ await page.waitForTimeout(900)
 check('clearing the board shows every board again', !page.url().includes('board=') && (await page.locator('.cal-chip', { hasText: 'Alpha card' }).count()) >= 1)
 
 // Dragging a list: a ghost lifts off, a slot moves, the order is saved.
+await page.evaluate(() => localStorage.removeItem('kh:planner'))
 await page.goto(`${APP}/workspaces/${alpha._id}`); await page.waitForSelector('.bc-column')
 const first = await page.locator('.bc-board > .bc-column').first().locator('.bc-column__header').boundingBox()
 // Picked up and put back: it stays first, nothing is sent.

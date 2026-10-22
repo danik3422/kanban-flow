@@ -1,5 +1,6 @@
-import { Check, ImagePlus, Link2, Pencil, Search } from 'lucide-react'
+import { Check, ImagePlus, Link2, Loader2, Pencil, Search } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useI18n } from '../../../i18n'
 import { Avatar, Button, Checkbox, Field, Input, Select } from '../../../ui'
 import { cx } from '../../../ui/utils'
@@ -8,6 +9,9 @@ import { CARD_COLORS, CARD_COLOR_KEYS } from '../model/cardDisplay'
 import { BackgroundSwatch } from '../../boards/backgrounds/BackgroundPicker'
 import { usePhotoSearch } from '../../boards/backgrounds/usePhotoSearch'
 import { assetUrl } from '../../../lib/runtimeConfig'
+import { useServerConfig } from '../../../lib/serverConfig'
+import { translateServerMessageCurrent } from '../../../i18n/translate'
+import { prepareBackgroundImage } from '../../boards/backgrounds/prepareBackgroundImage'
 
 const ColorSwatches = ({ value, onChange, label }) => {
 	const { t } = useI18n()
@@ -203,15 +207,63 @@ export const AttachmentPicker = ({ uploads, onLink, onImage }) => {
 	)
 }
 
-/** Cover: a colour or a photo, as a band above the title or filling the card. */
-export const CoverPicker = ({ cover, images, onChange }) => {
+/**
+ * Cover: a colour or a photo, as a band above the title or filling the card. The photo
+ * can be your own (resized in the browser, kept with the card's attachments), one
+ * already attached, or one from the photo library when the server offers it.
+ */
+export const CoverPicker = ({ cover, images, onChange, onUpload }) => {
 	const { t } = useI18n()
+	const photosOnline = useServerConfig((state) => state.photos)
 	const [query, setQuery] = useState('')
-	const search = usePhotoSearch(query)
+	const search = usePhotoSearch(query, photosOnline)
+	const fileRef = useRef(null)
+	const [isUploading, setIsUploading] = useState(false)
+	const [isOver, setIsOver] = useState(false)
 	const size = cover?.size || 'strip'
 	const choose = (next) => onChange({ ...next, size })
+	const upload = async (file) => {
+		if (!file || isUploading) return
+		setIsUploading(true)
+		try {
+			const { image } = await prepareBackgroundImage(file)
+			await onUpload(image, file.name, size)
+		} catch (error) {
+			if (error.code) toast.error(t(`backgrounds.own.errors.${error.code}`))
+			else toast.error(translateServerMessageCurrent(error.response?.data?.message, 'card.coverUploadError'))
+		} finally {
+			setIsUploading(false)
+		}
+	}
 	return (
 		<div className='cp-stack'>
+			{onUpload && (
+				<>
+					<button
+						type='button'
+						className={cx('cp-cover-upload', isOver && 'is-over')}
+						disabled={isUploading}
+						onClick={() => fileRef.current?.click()}
+						onDragOver={(event) => {
+							event.preventDefault()
+							setIsOver(true)
+						}}
+						onDragLeave={() => setIsOver(false)}
+						onDrop={(event) => {
+							event.preventDefault()
+							setIsOver(false)
+							upload(event.dataTransfer.files?.[0])
+						}}
+					>
+						<span className='cp-cover-upload__icon' aria-hidden='true'>{isUploading ? <Loader2 size={18} className='bg-spin' /> : <ImagePlus size={18} />}</span>
+						<span className='cp-cover-upload__text'>
+							<span className='cp-cover-upload__title'>{isUploading ? t('backgrounds.own.uploading') : t('card.coverUpload')}</span>
+							<span className='cp-hint'>{t('card.coverUploadHint')}</span>
+						</span>
+					</button>
+					<input ref={fileRef} type='file' accept='image/jpeg,image/png,image/webp,image/gif' hidden onChange={(event) => { upload(event.target.files?.[0]); event.target.value = '' }} />
+				</>
+			)}
 			{cover && (
 				<>
 					<h4 className='cp-section'>{t('card.size')}</h4>
@@ -237,13 +289,17 @@ export const CoverPicker = ({ cover, images, onChange }) => {
 					</div>
 				</>
 			)}
-			<h4 className='cp-section'>{t('card.photos')}</h4>
-			<Input icon={Search} type='search' value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('card.searchPhotos')} aria-label={t('card.searchPhotos')} />
-			<div className='cp-photos'>
-				{search.photos.slice(0, 12).map((photo) => (
-					<BackgroundSwatch key={photo.id} background={{ type: 'photo', ...photo }} selected={cover?.id === photo.id} label={photo.author || t('card.photos')} onSelect={(value) => choose({ ...value, type: 'photo' })} />
-				))}
-			</div>
+			{photosOnline && (
+				<>
+					<h4 className='cp-section'>{t('card.photos')}</h4>
+					<Input icon={Search} type='search' value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('card.searchPhotos')} aria-label={t('card.searchPhotos')} />
+					<div className='cp-photos'>
+						{search.photos.slice(0, 12).map((photo) => (
+							<BackgroundSwatch key={photo.id} background={{ type: 'photo', ...photo }} selected={cover?.id === photo.id} label={photo.author || t('card.photos')} onSelect={(value) => choose({ ...value, type: 'photo' })} />
+						))}
+					</div>
+				</>
+			)}
 			{cover && <Button variant='secondary' block onClick={() => onChange(null)}>{t('card.removeCover')}</Button>}
 		</div>
 	)

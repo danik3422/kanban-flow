@@ -127,6 +127,7 @@ const CardModal = ({
 	onLabelDelete,
 	onAttachLink,
 	onAttachImage,
+	onUploadCover,
 	onRemoveAttachment,
 	onToggleWatch,
 	onCopyLink,
@@ -385,7 +386,7 @@ const CardModal = ({
 				{picker === 'attachment' && (
 					<AttachmentPicker uploads={uploads} onLink={async (url, name) => { const ok = await onAttachLink(url, name); if (ok) close(); return ok }} onImage={async (image, name) => { const ok = await onAttachImage(image, name); if (ok) close(); return ok }} />
 				)}
-				{picker === 'cover' && <CoverPicker cover={cover} images={images} onChange={(next) => onPatch({ cover: next })} />}
+				{picker === 'cover' && <CoverPicker cover={cover} images={images} onChange={(next) => onPatch({ cover: next })} onUpload={uploads ? onUploadCover : undefined} />}
 				{picker === 'copy' && <CopyCardPicker task={task} columns={columns} onCopy={async (payload) => { const ok = await onCopy(payload); if (ok) close() }} />}
 				{picker === 'move' && <MoveCardPicker task={task} columns={columns} onMove={(columnId, index) => { onMove(columnId, index); close() }} />}
 			</CardPopover>

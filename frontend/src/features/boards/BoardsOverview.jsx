@@ -10,6 +10,7 @@ import { cx } from '../../ui/utils'
 import { backgroundCss } from './backgrounds/boardBackground'
 import BoardTile from './BoardTile'
 import '../../app/shell/app-shell.css'
+import { shortcutKey } from '../../lib/shortcutKey'
 
 const VISIBILITY_ICONS = { private: Lock, workspace: Users, public: Globe }
 const SORTS = ['active', 'opened', 'name', 'newest']
@@ -110,7 +111,7 @@ const BoardsOverview = ({ boards, isLoading = false, onOpenBoard, onCreateBoard,
 	useEffect(() => {
 		const handleKeyDown = (event) => {
 			const typing = event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')
-			if (event.key === '/' && !typing && !document.body.classList.contains('has-modal')) {
+			if (shortcutKey(event) === '/' && !typing && !document.body.classList.contains('has-modal')) {
 				event.preventDefault()
 				searchRef.current?.focus()
 			}

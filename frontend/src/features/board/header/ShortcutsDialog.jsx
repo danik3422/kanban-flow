@@ -9,6 +9,7 @@ const MOD = isMac ? '⌘' : 'Ctrl'
 const GROUPS = [
 	{ key: 'board', rows: [['n', ['N']], ['filter', ['F']], ['mine', ['Q']], ['search', [MOD, 'K']], ['help', ['?']]] },
 	{ key: 'card', rows: [['open', ['Enter']], ['me', ['M']], ['complete', ['C']], ['archive', ['A']]] },
+	{ key: 'views', rows: [['planner', ['G', 'P']], ['board', ['G', 'B']], ['switchBoards', ['B']]] },
 	{ key: 'move', rows: [['select', ['↑', '↓', '←', '→']], ['moveInList', [ALT, '↑ ↓']], ['moveToList', [ALT, '← →']], ['close', ['Esc']]] },
 ]
 

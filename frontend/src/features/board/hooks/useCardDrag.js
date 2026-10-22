@@ -14,14 +14,18 @@ const isControl = (target) => target instanceof Element && Boolean(target.closes
  * card follows the pointer as a tilted ghost, a slot opens where it would land,
  * the board and lists scroll at their edges, Escape cancels, and the ghost glides
  * into place on drop. `onDrop(taskId, columnId, index)` decides what happens.
+ * Cards can also be dropped on a planner day (`[data-planner-day]`), which calls
+ * `onPlannerDrop(taskId, dayKey)`, and picked up from the planner with the same handler.
  */
-const useCardDrag = ({ boardRef, enabled, onDrop }) => {
-	const [drag, setDrag] = useState(null) // { taskId, columnId, index, height }
+const useCardDrag = ({ boardRef, enabled, onDrop, onPlannerDrop }) => {
+	const [drag, setDrag] = useState(null) // { taskId, columnId, index, height, plannerDay }
 	const session = useRef(null)
 	const suppressClick = useRef(false)
 	const onDropRef = useRef(onDrop)
+	const onPlannerDropRef = useRef(onPlannerDrop)
 	useEffect(() => {
 		onDropRef.current = onDrop
+		onPlannerDropRef.current = onPlannerDrop
 	})
 
 	const cleanup = () => {
@@ -40,6 +44,8 @@ const useCardDrag = ({ boardRef, enabled, onDrop }) => {
 		if (ghost) ghost.style.visibility = 'hidden'
 		const under = document.elementFromPoint(x, y)
 		if (ghost) ghost.style.visibility = ''
+		const day = under?.closest?.('[data-planner-day]')
+		if (day) return { plannerDay: day.dataset.plannerDay }
 		const column = under?.closest?.('.bc-column[data-column-id]')
 		if (!column || !boardRef.current?.contains(column)) return null
 		const list = column.querySelector('.bc-tasks')
@@ -67,6 +73,13 @@ const useCardDrag = ({ boardRef, enabled, onDrop }) => {
 			if (x < rect.left + EDGE) scroller.scrollLeft -= Math.ceil((rect.left + EDGE - x) / 4)
 			else if (x > rect.right - EDGE) scroller.scrollLeft += Math.ceil((x - rect.right + EDGE) / 4)
 		}
+		// The planner scrolls at its edges too, so far days and "No date" can be reached.
+		const planner = document.elementFromPoint(x, y)?.closest?.('.pl-scroll, .pl-side, .pl-week > .pl-day')
+		if (planner) {
+			const rect = planner.getBoundingClientRect()
+			if (y < rect.top + EDGE) planner.scrollTop -= Math.ceil((rect.top + EDGE - y) / 3)
+			else if (y > rect.bottom - EDGE) planner.scrollTop += Math.ceil((y - rect.bottom + EDGE) / 3)
+		}
 		const list = current.list
 		if (list) {
 			const rect = list.getBoundingClientRect()
@@ -74,10 +87,14 @@ const useCardDrag = ({ boardRef, enabled, onDrop }) => {
 			else if (y > rect.bottom - EDGE / 2) list.scrollTop += Math.ceil((y - rect.bottom + EDGE / 2) / 3)
 		}
 		const spot = locate(x, y)
-		if (spot) {
+		if (spot?.plannerDay) {
+			current.list = null
+			current.target = { plannerDay: spot.plannerDay }
+			setDrag((state) => (state && state.plannerDay !== spot.plannerDay ? { ...state, columnId: null, index: -1, plannerDay: spot.plannerDay } : state))
+		} else if (spot) {
 			current.list = spot.list
 			current.target = { columnId: spot.columnId, index: spot.index }
-			setDrag((state) => (state && (state.columnId !== spot.columnId || state.index !== spot.index) ? { ...state, columnId: spot.columnId, index: spot.index } : state))
+			setDrag((state) => (state && (state.columnId !== spot.columnId || state.index !== spot.index || state.plannerDay) ? { ...state, columnId: spot.columnId, index: spot.index, plannerDay: null } : state))
 		}
 		current.frame = requestAnimationFrame(autoScroll)
 	}
@@ -102,9 +119,10 @@ const useCardDrag = ({ boardRef, enabled, onDrop }) => {
 		document.body.classList.add('is-dragging-card')
 		window.getSelection()?.removeAllRanges()
 		if (current.pointerType !== 'mouse') navigator.vibrate?.(10)
+		// A card picked up from the planner starts on its day, not in a list.
 		const column = card.closest('.bc-column[data-column-id]')
 		const siblings = [...(column?.querySelectorAll('.task-card[data-task-id]') || [])]
-		current.target = { columnId: column?.dataset.columnId, index: siblings.indexOf(card) }
+		current.target = column ? { columnId: column.dataset.columnId, index: siblings.indexOf(card) } : { plannerDay: card.closest('[data-planner-day]')?.dataset.plannerDay }
 		setDrag({ taskId: current.taskId, ...current.target, height: rect.height })
 		current.list = column?.querySelector('.bc-tasks') || null
 		current.frame = requestAnimationFrame(autoScroll)
@@ -130,10 +148,13 @@ const useCardDrag = ({ boardRef, enabled, onDrop }) => {
 		window.setTimeout(() => {
 			suppressClick.current = false
 		}, 0)
-		if (!cancelled && target) onDropRef.current?.(taskId, target.columnId, target.index)
+		if (!cancelled && target?.plannerDay) onPlannerDropRef.current?.(taskId, target.plannerDay)
+		else if (!cancelled && target?.columnId) onDropRef.current?.(taskId, target.columnId, target.index)
 		// The ghost glides into the card's new place, then hands over to it.
 		requestAnimationFrame(() => requestAnimationFrame(() => {
-			const landed = boardRef.current?.querySelector(`.task-card[data-task-id="${taskId}"]`)
+			const landed = target?.plannerDay
+				? document.querySelector(`[data-planner-day="${target.plannerDay}"] [data-planner-task-id="${taskId}"]`)
+				: boardRef.current?.querySelector(`.task-card[data-task-id="${taskId}"]`)
 			const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 			if (!ghost) return
 			if (!landed || reduceMotion) {

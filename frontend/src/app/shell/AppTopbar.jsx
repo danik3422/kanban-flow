@@ -8,6 +8,7 @@ import QuickSwitcher from './QuickSwitcher'
 import './app-shell.css'
 import NotificationCenter from '../../features/notifications/NotificationCenter'
 import OfflineBanner from '../OfflineBanner'
+import { shortcutKey } from '../../lib/shortcutKey'
 
 const LIVE_ICONS = { connected: Wifi, connecting: LoaderCircle, reconnecting: LoaderCircle, offline: WifiOff }
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -30,7 +31,7 @@ const AppTopbar = ({
 	// Ctrl/⌘+K opens the switcher from anywhere in the app.
 	useEffect(() => {
 		const handleKeyDown = (event) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+			if ((event.metaKey || event.ctrlKey) && shortcutKey(event) === 'k') {
 				event.preventDefault()
 				setIsSearchOpen(true)
 			}
