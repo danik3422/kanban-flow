@@ -141,7 +141,7 @@ export const SegmentedControl = ({ options, value, onChange, label, block = fals
 					onClick={() => onChange(option.value)}
 				>
 					{Icon && <Icon size={15} aria-hidden='true' />}
-					{option.label}
+					<span className='ui-segmented__label'>{option.label}</span>
 				</button>
 			)
 		})}

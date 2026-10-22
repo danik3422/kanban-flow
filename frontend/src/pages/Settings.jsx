@@ -6,6 +6,7 @@ import NotificationSettings from '../features/settings/NotificationSettings'
 import SecuritySection from '../features/settings/SecuritySection'
 import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
+import useIsPhone from '../hooks/useIsPhone'
 import useWorkspaceNavigation from '../app/shell/useWorkspaceNavigation'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../i18n'
 import { fetchBoardsWithCache } from '../lib/boardsCache'
@@ -45,6 +46,7 @@ const Settings = () => {
 	const authUser = useAuthStore((state) => state.authUser)
 	const theme = useThemeStore((state) => state.theme)
 	const { isSidebarCollapsed, setIsSidebarCollapsed } = useWorkspaceNavigation()
+	const isPhone = useIsPhone()
 	const [boards, setBoards] = useState([])
 	const [startPage, setStartPageState] = useState(getStartPage)
 	const [weekStart, setWeekStartState] = useState(getWeekStart)
@@ -170,7 +172,7 @@ const Settings = () => {
 											label={t('settings.theme.title')}
 											value={theme}
 											onChange={applyTheme}
-											options={['light', 'dark', 'system'].map((value) => ({ value, label: t(`theme.${value}`), icon: THEME_ICONS[value] }))}
+											options={['light', 'dark', 'system'].map((value) => ({ value, label: t(isPhone && value === 'system' ? 'theme.systemShort' : `theme.${value}`), icon: THEME_ICONS[value] }))}
 										/>
 									</Row>
 									<Row title={t('settings.language.title')} description={t('settings.language.text')} stack>

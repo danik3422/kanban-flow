@@ -598,3 +598,4 @@ html[data-theme='dark'] .ui-label { background: color-mix(in srgb, var(--label) 
 @media (prefers-reduced-motion: reduce) {
 	.ui-modal.ui-modal--panel { animation: none; }
 }
+.ui-segmented__label { min-width: 0; }

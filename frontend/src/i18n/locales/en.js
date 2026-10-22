@@ -25,6 +25,7 @@ const en = {
 		light: 'Light',
 		dark: 'Dark',
 		system: 'System',
+		systemShort: 'Auto',
 	},
 	language: {
 		label: 'Language',
@@ -2074,6 +2075,94 @@ const en = {
 			priority: 'Priority',
 			checklist: 'Checklist',
 			time: 'Time',
+		},
+	},
+	tips: {
+		label: 'Tips',
+		labelNew: 'Tips — something new to see',
+		close: 'Close tips',
+		eyebrow: 'Tip {index} of {total}',
+		next: 'Next tip',
+		nextShort: 'Next',
+		swipeHint: 'Swipe to see more tips',
+		links: 'About KanbanHub',
+		about: 'About',
+		selfHost: 'Run it yourself',
+		shortcuts: 'Keyboard shortcuts',
+		report: 'Report a problem',
+		items: {
+			planner: {
+				titlePhone: 'Plan the week day by day',
+				textPhone: 'Switch to “Plan” above the board: the week day by day, with + to add a card on any day.',
+				title: 'Plan the week beside your board',
+				text: 'Open the planner and drag a card onto a day to give it a due date. Drop it on “No date” to clear it.',
+				action: 'Open the planner',
+			},
+			table: {
+				textPhone: 'Switch to “Table” above the board: every card in a list you can sort, search and change several at once.',
+				title: 'See every card as a table',
+				text: 'Sort by due date or priority, change several cards at once and edit right in the cells.',
+				action: 'Open the table',
+			},
+			repeat: {
+				title: 'Cards that come back on their own',
+				text: 'In a card’s dates, choose how it repeats. When you complete it, the next one appears with the next due date.',
+			},
+			mentions: {
+				title: 'Call someone with @',
+				text: 'Type @ in a comment and pick a person on the board. They get a notification and an email.',
+			},
+			shortcuts: {
+				title: 'Work without the mouse',
+				text: 'N adds a card, F filters, M adds you, arrows select cards and Alt + arrows move them. They work in any keyboard layout.',
+				action: 'Show all shortcuts',
+			},
+			templates: {
+				title: 'Start from a template',
+				text: 'Development, content plan, personal or moving: lists, labels and example cards in your language.',
+				action: 'Create a board',
+			},
+			archive: {
+				title: 'Archive instead of delete',
+				text: 'Archived cards and lists leave the board but not your history. Bring them back from the board menu → Archive.',
+			},
+			import: {
+				title: 'Moving from Trello?',
+				text: 'Import a board from Trello’s JSON export: lists, labels, checklists, due dates and comments come along.',
+				action: 'Import a board',
+			},
+			search: {
+				textPhone: 'Tap the magnifier at the top to jump to a board, a card or a page.',
+				title: 'Find anything fast',
+				text: 'Press ⌘K or Ctrl K to jump to a board, a card or a page from anywhere.',
+				action: 'Open search',
+			},
+			filter: {
+				textPhone: 'Tap the funnel on the board to show only some people, labels, priorities or dates.',
+				title: 'Only what matters now',
+				text: 'Press F to filter cards by person, label, priority or date, and Q to see only your cards.',
+			},
+			cover: {
+				title: 'Give a card a cover',
+				text: 'Upload your own picture or pick a colour or a photo, as a band above the title or filling the whole card.',
+			},
+			background: {
+				title: 'Make the board yours',
+				text: 'Upload your own background photo and adjust its position, blur, brightness and dimming.',
+			},
+			collapse: {
+				title: 'Fold lists out of the way',
+				text: 'Collapse one list from its header, or all of them at once from the board menu.',
+			},
+			offline: {
+				title: 'Works without a connection',
+				text: 'If the internet drops, KanbanHub still opens with everything already loaded and tells you what has to wait.',
+			},
+			selfHost: {
+				title: 'Run your own copy',
+				text: 'KanbanHub is open source. Install it with Docker in a few minutes, even with no internet at all.',
+				action: 'Read the guide',
+			},
 		},
 	},
 	server: {

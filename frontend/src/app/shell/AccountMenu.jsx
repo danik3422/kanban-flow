@@ -1,4 +1,5 @@
-import { Languages, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
+import { Languages, Lightbulb, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
+import useIsPhone from '../../hooks/useIsPhone'
 import { useNavigate } from 'react-router-dom'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../../i18n'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -14,6 +15,8 @@ const AccountMenu = () => {
 	const { authUser, logout } = useAuthStore()
 	const theme = useThemeStore((state) => state.theme)
 	const name = authUser?.name || authUser?.email || ''
+	// Phones have no room for the light bulb in the top bar; the tips live here instead.
+	const isPhone = useIsPhone()
 
 	return (
 		<Menu
@@ -27,6 +30,7 @@ const AccountMenu = () => {
 				{ header: { title: authUser?.name || authUser?.email || '', subtitle: authUser?.name ? authUser?.email : '' } },
 				{ label: t('app.account.profile'), icon: UserRound, onSelect: () => navigate('/profile') },
 				{ label: t('app.account.settings'), icon: Settings2, onSelect: () => navigate('/settings') },
+				...(isPhone ? [{ label: t('tips.label'), icon: Lightbulb, onSelect: () => window.dispatchEvent(new CustomEvent('kh:tips')) }] : []),
 				{ separator: true },
 				{
 					group: {

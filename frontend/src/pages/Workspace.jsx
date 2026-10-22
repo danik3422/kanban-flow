@@ -128,6 +128,7 @@ const Workspace = () => {
 	const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false)
 	const [isArchiveOpen, setIsArchiveOpen] = useState(false)
 	const [isImportOpen, setIsImportOpen] = useState(false)
+	const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
 	const [isFilterOpen, setIsFilterOpen] = useState(false)
 	const [cardFilter, setCardFilter] = useState(EMPTY_FILTER)
 	const [pendingVisibility, setPendingVisibility] = useState(null)
@@ -740,6 +741,13 @@ const Workspace = () => {
 
 	// "New board" chosen on another page lands here with the dialog already open.
 	useEffect(() => {
+		if (location.state?.importBoard) {
+			queueMicrotask(() => {
+				setIsImportOpen(true)
+				navigate(location.pathname, { replace: true, state: null })
+			})
+			return
+		}
 		if (!location.state?.createBoard) return
 		queueMicrotask(() => {
 			setIsCreatingBoard(true)
@@ -1199,6 +1207,22 @@ const Workspace = () => {
 	const toggleTable = useCallback(() => {
 		if (!isPhone) showMainView('table')
 	}, [isPhone, showMainView])
+	// Tips (the light bulb in the top bar) can open the planner, the table or the shortcuts.
+	useEffect(() => {
+		const handleView = (event) => {
+			const view = event.detail
+			if (isPhone) choosePhoneView(view)
+			else if (view === 'planner') setPlannerLayout((current) => ({ ...current, open: true }))
+			else setPlannerLayout((current) => ({ ...current, view, board: true }))
+		}
+		const handleShortcuts = () => setIsShortcutsOpen(true)
+		window.addEventListener('kh:board-view', handleView)
+		window.addEventListener('kh:shortcuts', handleShortcuts)
+		return () => {
+			window.removeEventListener('kh:board-view', handleView)
+			window.removeEventListener('kh:shortcuts', handleShortcuts)
+		}
+	}, [isPhone, choosePhoneView])
 	const plannerShown = isPhone ? phoneView === 'planner' : plannerLayout.open
 	const boardShown = isPhone ? phoneView !== 'planner' : !plannerShown || plannerLayout.board
 	const mainView = isPhone ? (phoneView === 'table' ? 'table' : 'board') : plannerLayout.view
@@ -1727,7 +1751,6 @@ const Workspace = () => {
 	})
 	const hoveredCardId = useRef(null)
 	const hoveredColumnId = useRef(null)
-	const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
 
 	useEffect(() => {
 		if (!boardId) return undefined

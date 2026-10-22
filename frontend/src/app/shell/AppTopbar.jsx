@@ -7,6 +7,7 @@ import AccountMenu from './AccountMenu'
 import QuickSwitcher from './QuickSwitcher'
 import './app-shell.css'
 import NotificationCenter from '../../features/notifications/NotificationCenter'
+import TipsCenter from '../../features/tips/TipsCenter'
 import OfflineBanner from '../OfflineBanner'
 import { shortcutKey } from '../../lib/shortcutKey'
 
@@ -36,8 +37,14 @@ const AppTopbar = ({
 				setIsSearchOpen(true)
 			}
 		}
+		// Tips can open search too.
+		const handleSearch = () => setIsSearchOpen(true)
 		document.addEventListener('keydown', handleKeyDown)
-		return () => document.removeEventListener('keydown', handleKeyDown)
+		window.addEventListener('kh:search', handleSearch)
+		return () => {
+			document.removeEventListener('keydown', handleKeyDown)
+			window.removeEventListener('kh:search', handleSearch)
+		}
 	}, [])
 
 	// Unknown states read as a connection in progress rather than breaking the bar.
@@ -73,6 +80,7 @@ const AppTopbar = ({
 					<kbd className='app-search-trigger__kbd' aria-hidden='true'>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
 				</button>
 				<NotificationCenter />
+				<TipsCenter />
 				<AccountMenu />
 			</div>
 			<QuickSwitcher open={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
