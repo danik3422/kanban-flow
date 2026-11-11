@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { create } from 'zustand'
 import { axiosInstance, onSessionExpired } from '../lib/axios'
 import { clearApiCache, peekCache, setCacheOwner } from '../lib/apiCache'
-import { clearOutbox, flushOutbox } from '../lib/outbox'
+import { clearOutbox, flushOutbox, setOutboxSessionCheck, syncOutboxOwner } from '../lib/outbox'
 import { clearBoardsCache } from '../lib/boardsCache'
 import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
@@ -51,6 +51,12 @@ export const useAuthStore = create((set, get) => ({
 		} catch (error) {
 			// Offline with nothing saved leaves the user signed out; a real "no" from the server always does.
 			if (!error.isOffline || !saved?._id) set({ authUser: null })
+			// Nobody is signed in now, even if nobody was before: forget the last account's
+			// saved answers, so its unsent changes are not tried without a session.
+			if (!error.isOffline) {
+				clearApiCache()
+				syncOutboxOwner()
+			}
 		} finally {
 			set({ isCheckingAuth: false })
 		}
@@ -122,12 +128,14 @@ export const useAuthStore = create((set, get) => ({
 
 	logout: async () => {
 		if (isDevAuthBypass) {
+			clearOutbox()
 			set({ authUser: null })
 			toast.info(translateCurrent('auth.toast.signedOut'))
 			return
 		}
 		try {
 			await axiosInstance.post('/auth/logout')
+			clearOutbox()
 			resetSocket()
 			clearBoardsCache()
 			useBoardStats.getState().reset()
@@ -310,6 +318,12 @@ export const useAuthStore = create((set, get) => ({
 	},
 }))
 
+// A queued change got a 401: check the session; if it ended, the auth state signs out
+// and the change waits for this account to sign in again.
+setOutboxSessionCheck(() => {
+	if (useAuthStore.getState().authUser) void useAuthStore.getState().checkAuth()
+})
+
 // Signed out from another device (or the password was reset): leave cleanly once.
 onSessionExpired(() => {
 	if (!useAuthStore.getState().authUser) return
@@ -325,11 +339,15 @@ useAuthStore.subscribe((state, previous) => {
 	const id = state.authUser?._id
 	if (id && id !== previous.authUser?._id && !isDevAuthBypass) {
 		setCacheOwner(id)
+		syncOutboxOwner()
 		// Changes kept on this device during an earlier visit go out once the account is known.
 		window.setTimeout(() => void flushOutbox(), 1500)
 	}
 	if (!id && previous.authUser?._id) {
 		clearApiCache()
-		clearOutbox()
+		syncOutboxOwner()
 	}
+	// Unsent changes are not cleared here: when a session simply ends (expired, signed out
+	// elsewhere) they wait, tied to this account, and go out once it signs in again.
+	// Only signing out on purpose (logout) drops them.
 })

@@ -49,7 +49,7 @@ import AppSidebar from '../app/shell/AppSidebar'
 import AppTopbar from '../app/shell/AppTopbar'
 import { axiosInstance } from '../lib/axios'
 import { cacheKey, peekCache, writeCache } from '../lib/apiCache'
-import { makeTempId, useOutbox } from '../lib/outbox'
+import { makeTempId, selectPending, useOutbox } from '../lib/outbox'
 import { fetchBoardsWithCache, getCachedBoards, setCachedBoards } from '../lib/boardsCache'
 import { sortTasks } from '../features/board/model/taskSorting'
 import { getColumnDropIndex, reorderColumns } from '../features/board/model/columnOrdering'
@@ -902,7 +902,7 @@ const Workspace = () => {
 
 	// While changes wait to be sent, the board as it looks with them is saved on this
 	// device, so reopening the app without a connection still shows them.
-	const pendingChanges = useOutbox((state) => state.items.length)
+	const pendingChanges = useOutbox(selectPending)
 	useEffect(() => {
 		if (!selectedBoardId || !pendingChanges || isDevAuthBypass) return
 		writeCache(cacheKey(`/board/boards/${selectedBoardId}/content`), columns)

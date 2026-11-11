@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useI18n } from '../i18n'
 import { useConnection } from '../lib/connection'
-import { useOutbox } from '../lib/outbox'
+import { selectPending, useOutbox } from '../lib/outbox'
 import './offline-banner.css'
 
 /**
@@ -15,7 +15,7 @@ import './offline-banner.css'
 const OfflineBanner = ({ inline = false }) => {
 	const { t } = useI18n()
 	const offline = useConnection((state) => !state.deviceOnline || !state.apiReachable)
-	const pending = useOutbox((state) => state.items.length)
+	const pending = useOutbox(selectPending)
 	const syncing = useOutbox((state) => state.syncing)
 	const wasOffline = useRef(false)
 
