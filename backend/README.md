@@ -16,7 +16,7 @@ Express + MongoDB API with Socket.IO live updates. `npm start` runs `index.js`; 
 - `emails/` builds and sends email (templates, translations, digests and reminders).
 - `realtime/` has the Socket.IO server: socket sign-in, board rooms and presence.
 - `lib/` has the infrastructure clients: database, Cloudinary, Firebase Admin and the realtime emitter.
-- `scripts/` has one-off migrations, demo data seeds and admin commands (`npm run migrate:*`, `npm run seed:demo`, `npm run create-user`, `npm run reset-password`).
+- `scripts/` has one-off migrations, demo data seeds and admin commands (`npm run migrate:*`, `npm run seed:demo -- --owner=<email> --confirm=<database>`, `npm run create-user`, `npm run reset-password`).
 - `test/` has the API tests (`node --test`).
 
 ## Migrations

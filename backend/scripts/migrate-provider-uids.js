@@ -14,9 +14,10 @@ const run = async () => {
 		},
 		{ $set: { providerUid: null } },
 	)
-	await User.syncIndexes()
+	// createIndexes adds what the schema declares; syncIndexes would also drop any index made by hand.
+	await User.createIndexes()
 
-	console.log(`Normalized ${result.modifiedCount} social users and synced User indexes.`)
+	console.log(`Normalized ${result.modifiedCount} social users and created missing User indexes.`)
 }
 
 run()

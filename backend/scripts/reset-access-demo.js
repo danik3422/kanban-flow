@@ -1,6 +1,5 @@
 import mongoose from 'mongoose'
 
-import { env } from '../config/env.js'
 import Board from '../models/board.model.js'
 import BoardActivity from '../models/boardActivity.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
@@ -10,9 +9,12 @@ import Notification from '../models/notification.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import User from '../models/user.model.js'
+import { connectConfirmed, refuseInProduction, requireOption } from './scriptArgs.js'
 
-const ownerEmail = 'mr.siloacd@gmail.com'
-const memberEmail = 'danylo.syloats@gmail.com'
+// Replaces EVERY board in the database with three demo rooms (private, workspace,
+// public) shared by two existing accounts. For local and test databases only.
+const USAGE = 'node scripts/reset-access-demo.js --owner=<email> --member=<email> --confirm=<database name>'
+
 const boardDefinitions = [
 	{ name: 'Demo · Private Room', visibility: 'private' },
 	{ name: 'Demo · Workspace Room', visibility: 'workspace' },
@@ -35,17 +37,13 @@ const taskDefinitions = [
 	{ column: 'Done', title: 'Demo · Create the board structure', priority: 'none', labels: ['shipped'] },
 ]
 
-const connect = async () => {
-	if (!env.mongoUri) throw new Error('MONGO_URI is not configured')
-	await mongoose.connect(env.mongoUri)
-}
-
 const removeAllRooms = async () => {
 	const boards = await Board.find({}).select('_id').lean()
 	const boardIds = boards.map((board) => board._id)
-	const columns = await Column.find({ board: { $in: boardIds } }).select('_id').lean()
+	// Archived lists and cards too, or they would be left behind without a board.
+	const columns = await Column.find({ board: { $in: boardIds } }).setOptions({ withArchived: true }).select('_id').lean()
 	const columnIds = columns.map((column) => column._id)
-	const tasks = await Task.find({ column: { $in: columnIds } }).select('_id').lean()
+	const tasks = await Task.find({ column: { $in: columnIds } }).setOptions({ withArchived: true }).select('_id').lean()
 	const taskIds = tasks.map((task) => task._id)
 
 	await Promise.all([
@@ -54,8 +52,8 @@ const removeAllRooms = async () => {
 		BoardActivity.deleteMany({ board: { $in: boardIds } }),
 		BoardInvite.deleteMany({ board: { $in: boardIds } }),
 		BoardMember.deleteMany({ board: { $in: boardIds } }),
-		Task.deleteMany({ column: { $in: columnIds } }),
-		Column.deleteMany({ board: { $in: boardIds } }),
+		Task.deleteMany({ column: { $in: columnIds } }).setOptions({ withArchived: true }),
+		Column.deleteMany({ board: { $in: boardIds } }).setOptions({ withArchived: true }),
 		Board.deleteMany({ _id: { $in: boardIds } }),
 	])
 	return boardIds.length
@@ -110,7 +108,10 @@ const createDemoRoom = async ({ owner, member, name, visibility }) => {
 }
 
 const run = async () => {
-	await connect()
+	refuseInProduction('Resetting every board')
+	const ownerEmail = requireOption('owner', USAGE).toLowerCase()
+	const memberEmail = requireOption('member', USAGE).toLowerCase()
+	await connectConfirmed(USAGE)
 	const [owner, member] = await Promise.all([
 		User.findOne({ email: ownerEmail }),
 		User.findOne({ email: memberEmail }),

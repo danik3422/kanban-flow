@@ -1,6 +1,5 @@
 import mongoose from 'mongoose'
 
-import { env } from '../config/env.js'
 import Board from '../models/board.model.js'
 import BoardInvite from '../models/boardInvite.model.js'
 import BoardMember from '../models/boardMember.model.js'
@@ -9,8 +8,11 @@ import Notification from '../models/notification.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import User from '../models/user.model.js'
+import { connectConfirmed, refuseInProduction, requireOption } from './scriptArgs.js'
 
-const ownerEmail = 'mr.siloacd@gmail.com'
+// Refills the "Test Room" board of one account with demo lists and cards (its current
+// lists and cards are deleted first). For local and test databases only.
+const USAGE = 'npm run seed:demo -- --owner=<email> --confirm=<database name>'
 const boardName = 'Test Room'
 const columnNames = ['Backlog', 'To do', 'In Progress', 'Review', 'Done']
 
@@ -182,20 +184,16 @@ const taskTemplates = [
 ]
 
 const run = async () => {
-	if (!env.mongoUri) throw new Error('MONGO_URI is required to seed Test Room')
-	await mongoose.connect(env.mongoUri)
+	refuseInProduction('Seeding the demo board')
+	const ownerEmail = requireOption('owner', USAGE)
+	await connectConfirmed(USAGE)
 
 	const owner = await User.findOne({ email: ownerEmail.toLowerCase() })
 	if (!owner) throw new Error(`User not found: ${ownerEmail}`)
 
-	const ownedBoard = await Board.findOne({ name: boardName, createdBy: owner._id })
-	const memberBoard = ownedBoard
-		? null
-		: await BoardMember.findOne({ user: owner._id }).distinct('board')
-	const board = ownedBoard || (memberBoard?.length
-		? await Board.findOne({ _id: { $in: memberBoard }, name: boardName })
-		: null)
-	if (!board) throw new Error(`Board not found: ${boardName}`)
+	// Only a board this account owns: never someone else's board that happens to share the name.
+	const board = await Board.findOne({ name: boardName, createdBy: owner._id })
+	if (!board) throw new Error(`Board "${boardName}" owned by ${ownerEmail} not found`)
 
 	await BoardMember.updateOne(
 		{ board: board._id, user: owner._id },
@@ -203,7 +201,8 @@ const run = async () => {
 		{ upsert: true },
 	)
 
-	const existingColumns = await Column.find({ board: board._id }).select('_id').lean()
+	// Archived lists too, or their cards would be left behind without a list.
+	const existingColumns = await Column.find({ board: board._id }).setOptions({ withArchived: true }).select('_id').lean()
 	const existingColumnIds = existingColumns.map((column) => column._id)
 	const resetTasks = await Task.deleteMany({ column: { $in: existingColumnIds } })
 	const resetColumns = await Column.deleteMany({ board: board._id })
