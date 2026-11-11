@@ -9,7 +9,7 @@
 		"migrate:provider-uids": "node scripts/migrate-provider-uids.js",
 		"migrate:password-flags": "node scripts/migrate-password-flags.js",
 		"migrate:email-frequency": "node scripts/migrate-email-frequency.js",
-		"test": "NODE_ENV=test node --import ./test/setup.js --test --test-concurrency=1 --test-timeout=60000 --test-force-exit",
+		"test": "NODE_ENV=test node --import ./test/setup.js --test --test-concurrency=1 --test-timeout=60000 --test-force-exit 'test/**/*.test.js'",
 		"reset-password": "node scripts/reset-password.js",
 		"create-user": "node scripts/create-user.js"
 	},
