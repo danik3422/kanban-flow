@@ -669,6 +669,26 @@ describe('board access and invitation flow', () => {
 		assert.equal(await BoardMember.exists({ board: board._id, user: removed._id }), null)
 	})
 
+	it('stops the email invites a removed admin sent, so they cannot come back through them', async () => {
+		const { owner, board } = await createBoardWithOwner()
+		const admin = await createUser('leaving-admin@example.com', 'Leaving admin')
+		const alt = await createUser('alt-account@example.com', 'Alt account')
+		const membership = await BoardMember.create({ board: board._id, user: admin._id, role: 'admin' })
+
+		const inviteResponse = await request(app)
+			.post(`/api/board/boards/${board._id}/invites`)
+			.set('Cookie', authCookie(admin._id))
+			.send({ email: alt.email, role: 'admin' })
+		assert.equal(inviteResponse.status, 201)
+		assert.equal(await BoardInvite.countDocuments({ board: board._id, createdBy: admin._id, usedAt: null }), 1)
+
+		const removeResponse = await request(app)
+			.delete(`/api/board/boards/${board._id}/members/${membership._id}`)
+			.set('Cookie', authCookie(owner._id))
+		assert.equal(removeResponse.status, 200)
+		assert.equal(await BoardInvite.countDocuments({ board: board._id, createdBy: admin._id, usedAt: null }), 0)
+	})
+
 	it('invalidates a public link across every non-public visibility', async () => {
 		const { owner } = await createBoardWithOwner()
 		const board = await Board.create({ name: 'Visibility transitions', createdBy: owner._id, visibility: 'public' })

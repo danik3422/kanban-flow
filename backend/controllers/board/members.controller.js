@@ -175,6 +175,9 @@ export const removeBoardMember = async (req, res) => {
 					usedAt: null,
 				}, { session })
 				await BoardInvite.deleteMany({ board: board._id, email: '', usedAt: null }, { session })
+				// Invites carry the inviter's authority, as on demotion: the removed person's own
+				// pending invites must not let them (or a second account) back in.
+				await BoardInvite.deleteMany({ board: board._id, createdBy: removedUserId, usedAt: null }, { session })
 				activity = await recordBoardActivity({
 					boardId: board._id,
 					userId: req.user._id,

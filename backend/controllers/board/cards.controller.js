@@ -189,9 +189,11 @@ export const createTask = async (req, res) => {
 		if (!title || title.trim() === '') {
 			return res.status(400).json({ message: 'Task title is required' })
 		}
-		// The same card sent again (the first answer was lost on a bad connection).
+		// The same card sent again (the first answer was lost on a bad connection). Looked up
+		// only on this board: a client id seen elsewhere must not reveal another board's card.
 		if (clientId) {
-			const existing = await Task.findOne({ clientId }).setOptions({ withArchived: true }).select('_id column')
+			const boardColumnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id')
+			const existing = await Task.findOne({ clientId, column: { $in: boardColumnIds } }).setOptions({ withArchived: true }).select('_id column')
 			if (existing) return res.status(200).json(await populatedTask(existing._id))
 		}
 

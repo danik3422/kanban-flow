@@ -295,4 +295,20 @@ describe('offline resends', () => {
 		assert.equal(await TaskActivity.countDocuments({ type: 'comment', message: 'Sent offline' }), 1)
 		assert.equal((await api('post', `/columns/${todo._id}/task`, owner).send({ title: 'x', clientId: 'bad id!' })).status, 400)
 	})
+
+	it('a client id from another board never returns that board’s card', async () => {
+		const { owner, stranger, todo } = await setup()
+		const secret = await api('post', `/columns/${todo._id}/task`, owner).send({ title: 'Secret plan', description: 'not for you', clientId: 'local-shared-0001' })
+		assert.equal(secret.status, 201)
+
+		const ownBoard = await Board.create({ name: 'Stranger’s', createdBy: stranger._id })
+		await BoardMember.create({ board: ownBoard._id, user: stranger._id, role: 'admin' })
+		const ownList = await Column.create({ board: ownBoard._id, title: 'Mine', position: 0 })
+		const probe = await api('post', `/columns/${ownList._id}/task`, stranger).send({ title: 'Probe', clientId: 'local-shared-0001' })
+
+		assert.equal(probe.status, 201)
+		assert.equal(probe.body.title, 'Probe')
+		assert.notEqual(String(probe.body._id), String(secret.body._id))
+		assert.ok(!JSON.stringify(probe.body).includes('Secret plan'))
+	})
 })
