@@ -258,6 +258,7 @@ const uk = {
 		page: 'Завантаження сторінки',
 	},
 	site: {
+		guide: 'Гайд',
 		nav: 'Головне меню',
 		login: 'Увійти',
 		signup: 'Почати',
@@ -633,6 +634,7 @@ const uk = {
 			hint: '↑↓ — вибір, Enter — відкрити',
 		},
 		account: {
+			guide: 'Гайд',
 			label: 'Меню акаунта',
 			profile: 'Профіль',
 			settings: 'Налаштування',
@@ -2321,6 +2323,7 @@ const uk = {
 		},
 	},
 	tips: {
+		guide: 'Гайд по KanbanHub',
 		label: 'Поради',
 		labelNew: 'Поради — є щось нове',
 		close: 'Закрити поради',

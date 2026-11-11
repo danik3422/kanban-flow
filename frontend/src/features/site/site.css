@@ -56,6 +56,10 @@
 	.site-header__actions { gap: 0; }
 	.site-header__link { padding: 0 var(--ui-space-2); }
 }
+/* The narrowest phones: About moves to the footer only, so the guide and the way in fit. */
+@media (max-width: 400px) {
+	.site-header__link--about { display: none; }
+}
 
 /* Shared section pieces */
 .home-eyebrow { margin: 0; color: var(--ui-link); font-size: var(--ui-text-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }

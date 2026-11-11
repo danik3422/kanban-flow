@@ -22,7 +22,8 @@ const SiteHeader = () => {
 					<BrandMark />
 				</Link>
 				<nav className='site-header__actions' aria-label={t('site.nav')}>
-					<NavLink to='/about' className='site-header__link'>{t('site.about')}</NavLink>
+					<NavLink to='/guide' className='site-header__link'>{t('site.guide')}</NavLink>
+					<NavLink to='/about' className='site-header__link site-header__link--about'>{t('site.about')}</NavLink>
 					<a href={GITHUB_URL} target='_blank' rel='noreferrer' className='site-header__github' aria-label={t('site.github')} title={t('site.github')}>
 						<FaGithub size={18} aria-hidden='true' />
 					</a>

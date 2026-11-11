@@ -1,4 +1,4 @@
-import { Languages, Lightbulb, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
+import { BookOpen, Languages, Lightbulb, LogOut, Monitor, Moon, Settings2, Sun, UserRound } from 'lucide-react'
 import useIsPhone from '../../hooks/useIsPhone'
 import { useNavigate } from 'react-router-dom'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useI18n } from '../../i18n'
@@ -30,6 +30,7 @@ const AccountMenu = () => {
 				{ header: { title: authUser?.name || authUser?.email || '', subtitle: authUser?.name ? authUser?.email : '' } },
 				{ label: t('app.account.profile'), icon: UserRound, onSelect: () => navigate('/profile') },
 				{ label: t('app.account.settings'), icon: Settings2, onSelect: () => navigate('/settings') },
+				{ label: t('app.account.guide'), icon: BookOpen, onSelect: () => navigate('/guide') },
 				...(isPhone ? [{ label: t('tips.label'), icon: Lightbulb, onSelect: () => window.dispatchEvent(new CustomEvent('kh:tips')) }] : []),
 				{ separator: true },
 				{

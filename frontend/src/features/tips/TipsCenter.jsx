@@ -218,6 +218,7 @@ const TipsCenter = () => {
 			</div>
 			{isPhone && !swiped && <p className='tips__hint'><Hand size={14} aria-hidden='true' />{t('tips.swipeHint')}</p>}
 			<nav className='tips__links' aria-label={t('tips.links')}>
+				<Link to='/guide' onClick={() => close(false)}>{t('tips.guide')}</Link>
 				<Link to='/about' onClick={() => close(false)}>{t('tips.about')}</Link>
 				<Link to='/self-hosting' onClick={() => close(false)}>{t('tips.selfHost')}</Link>
 				{onBoard && !isPhone && <button type='button' onClick={() => { close(false); window.dispatchEvent(new CustomEvent('kh:shortcuts')) }}>{t('tips.shortcuts')}</button>}

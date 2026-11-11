@@ -261,6 +261,7 @@ const en = {
 		page: 'Loading page',
 	},
 	site: {
+		guide: 'Guide',
 		nav: 'Main',
 		login: 'Log in',
 		signup: 'Get started',
@@ -636,6 +637,7 @@ const en = {
 			hint: '↑↓ to move, Enter to open',
 		},
 		account: {
+			guide: 'Guide',
 			label: 'Account menu',
 			profile: 'Profile',
 			settings: 'Settings',
@@ -2306,6 +2308,7 @@ const en = {
 		},
 	},
 	tips: {
+		guide: 'KanbanHub guide',
 		label: 'Tips',
 		labelNew: 'Tips — something new to see',
 		close: 'Close tips',

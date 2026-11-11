@@ -258,6 +258,7 @@ const ru = {
 		page: 'Загрузка страницы',
 	},
 	site: {
+		guide: 'Гайд',
 		nav: 'Главное меню',
 		login: 'Войти',
 		signup: 'Начать',
@@ -633,6 +634,7 @@ const ru = {
 			hint: '↑↓ — выбор, Enter — открыть',
 		},
 		account: {
+			guide: 'Гайд',
 			label: 'Меню аккаунта',
 			profile: 'Профиль',
 			settings: 'Настройки',
@@ -2321,6 +2323,7 @@ const ru = {
 		},
 	},
 	tips: {
+		guide: 'Гайд по KanbanHub',
 		label: 'Советы',
 		labelNew: 'Советы — есть что-то новое',
 		close: 'Закрыть советы',

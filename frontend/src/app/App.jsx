@@ -11,12 +11,18 @@ import Toaster from '../ui/Toaster'
 
 import AppLoader from './AppLoader'
 import OfflineBanner from './OfflineBanner'
+import { preloadGuideContent } from '../features/guide/guideContent'
 import { axiosInstance } from '../lib/axios'
 // Page chunks, keyed so the one for the opened address can start downloading
 // while the session is still being checked instead of after it.
 const PAGES = {
 	About: () => import('../pages/About'),
 	SelfHosting: () => import('../pages/SelfHosting'),
+	// The guide's texts load alongside the page instead of after it.
+	Guide: () => {
+		preloadGuideContent()
+		return import('../pages/Guide')
+	},
 	BoardInvite: () => import('../pages/BoardInvite'),
 	Calendar: () => import('../pages/Calendar'),
 	Home: () => import('../pages/Home'),
@@ -35,6 +41,7 @@ const PAGES = {
 }
 const About = lazy(PAGES.About)
 const SelfHosting = lazy(PAGES.SelfHosting)
+const Guide = lazy(PAGES.Guide)
 const BoardInvite = lazy(PAGES.BoardInvite)
 const CalendarPage = lazy(PAGES.Calendar)
 const Home = lazy(PAGES.Home)
@@ -55,6 +62,7 @@ const EXACT_PAGES = {
 	'/': 'Home',
 	'/about': 'About',
 	'/self-hosting': 'SelfHosting',
+	'/guide': 'Guide',
 	'/login': 'Login',
 	'/signup': 'Signup',
 	'/login/resetpassword': 'ResetPassword',
@@ -189,6 +197,7 @@ export const App = () => {
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
 						<Route path='/self-hosting' element={<SelfHosting />} />
+						<Route path='/guide' element={<Guide />} />
 						<Route
 							path='*'
 							element={
@@ -208,6 +217,7 @@ export const App = () => {
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
 						<Route path='/self-hosting' element={<SelfHosting />} />
+						<Route path='/guide' element={<Guide />} />
 						<Route
 							path='*'
 							element={
@@ -234,6 +244,7 @@ export const App = () => {
 						<Route path='/public/:token' element={<PublicBoard />} />
 						<Route path='/about' element={<About />} />
 						<Route path='/self-hosting' element={<SelfHosting />} />
+						<Route path='/guide' element={<Guide />} />
 						<Route
 							path='/signup'
 							element={!authUser ? <Signup /> : <Navigate to='/' replace />}

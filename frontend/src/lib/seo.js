@@ -40,6 +40,10 @@ const STRINGS = {
 			title: 'About KanbanHub — Open source, private by design',
 			description: 'Why KanbanHub is free and open source, what data it keeps, why it has no analytics, trackers or ads, and how to run it yourself with Docker.',
 		},
+		guide: {
+			title: 'How to use KanbanHub — Guide',
+			description: 'Every KanbanHub feature step by step: boards, cards, planner, repeating tasks, automation, calendar sync, shortcuts and offline work, with live examples.',
+		},
 		selfHosting: {
 			title: 'Self-host KanbanHub with Docker — KanbanHub',
 			description: 'Run KanbanHub on your own server or computer with Docker, with or without internet: install, your domain with HTTPS, email, backups.',
@@ -85,6 +89,10 @@ const STRINGS = {
 			title: 'Про KanbanHub — відкритий код і приватність',
 			description: 'Чому KanbanHub безкоштовний і відкритий, які дані він зберігає, чому тут немає аналітики, трекерів і реклами, і як запустити його в Docker.',
 		},
+		guide: {
+			title: 'Як користуватися KanbanHub — гайд',
+			description: 'Усі можливості KanbanHub крок за кроком: дошки, картки, планувальник, повторювані завдання, автоматизація, календар і гарячі клавіші — з прикладами.',
+		},
 		selfHosting: {
 			title: 'KanbanHub на своєму сервері в Docker',
 			description: 'Запустіть KanbanHub на своєму сервері чи комп’ютері в Docker, з інтернетом або без: встановлення, свій домен з HTTPS, пошта, резервні копії.',
@@ -129,6 +137,10 @@ const STRINGS = {
 		about: {
 			title: 'О KanbanHub — открытый код и приватность',
 			description: 'Почему KanbanHub бесплатный и открытый, какие данные он хранит, почему здесь нет аналитики, трекеров и рекламы, и как запустить его в Docker.',
+		},
+		guide: {
+			title: 'Как пользоваться KanbanHub — гайд',
+			description: 'Все возможности KanbanHub по шагам: доски, карточки, планировщик, повторяющиеся задачи, автоматизация, календарь и горячие клавиши — с примерами.',
 		},
 		selfHosting: {
 			title: 'KanbanHub на своём сервере в Docker',
@@ -189,6 +201,7 @@ export const pageMetaFor = (pathname, language = 'en') => {
 	if (path === '/') meta = indexable('home')
 	else if (path === '/about') meta = indexable('about')
 	else if (path === '/self-hosting') meta = indexable('selfHosting')
+	else if (path === '/guide') meta = indexable('guide')
 	else if (path === '/login') meta = indexable('login')
 	else if (path === '/signup') meta = indexable('signup')
 	else if (isUnder(path, '/public')) meta = unlisted('publicBoard')

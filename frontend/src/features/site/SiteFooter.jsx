@@ -18,6 +18,7 @@ const SiteFooter = () => {
 					<p>{t('site.footerTagline')}</p>
 				</div>
 				<div className='public-footer__links'>
+					<Link to='/guide'>{t('site.guide')}</Link>
 					<Link to='/about'>{t('site.about')}</Link>
 					<a href={GITHUB_URL} target='_blank' rel='noreferrer'><FaGithub size={16} aria-hidden='true' />{t('site.github')}</a>
 					<a href='mailto:support@kanbanhub.app'><Mail size={16} aria-hidden='true' />{t('site.support')}</a>
