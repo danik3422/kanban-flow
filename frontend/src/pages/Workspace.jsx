@@ -608,6 +608,8 @@ const Workspace = () => {
 		if (isDevAuthBypass) return
 		// Plain members cannot list invites; skip a request that can only be refused.
 		const canSeeInvites = selectedBoardRole !== 'member'
+		// After a quick switch to another board, the previous board's answers must not land here.
+		let isCurrent = true
 		Promise.allSettled([
 			axiosInstance.get(`/board/boards/${selectedBoardId}/members`),
 			canSeeInvites
@@ -616,6 +618,7 @@ const Workspace = () => {
 			axiosInstance.get(`/board/boards/${selectedBoardId}/activity`),
 		])
 			.then(([membersResult, invitesResult, activitiesResult]) => {
+				if (!isCurrent) return
 				if (membersResult.status === 'fulfilled') {
 					setBoardMemberRecords(membersResult.value.data)
 				}
@@ -626,7 +629,12 @@ const Workspace = () => {
 					setBoardActivities(activitiesResult.value.data)
 				}
 			})
-			.finally(() => setIsActivityLoading(false))
+			.finally(() => {
+				if (isCurrent) setIsActivityLoading(false)
+			})
+		return () => {
+			isCurrent = false
+		}
 	}, [selectedBoardId, selectedBoardRole])
 
 	const createBoard = async (event) => {
