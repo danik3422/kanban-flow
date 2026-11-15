@@ -51,7 +51,7 @@ export const socialSignin = async (req, res) => {
 		if (!isPrimaryIdentity && !linkedProvider) {
 			if (user.provider === 'local') {
 				return res.status(409).json({
-					message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
+					message: 'This email belongs to an account with a password. Sign in with it, then connect this provider in Settings.',
 				})
 			}
 			if (user.provider !== provider) {
@@ -114,7 +114,7 @@ export const socialSignup = async (req, res) => {
 				return res
 					.status(409)
 					.json({
-						message: `This email belongs to a local account. Connect ${provider} in Settings first.`,
+						message: 'This email belongs to an account with a password. Sign in with it, then connect this provider in Settings.',
 					})
 			return res
 				.status(409)

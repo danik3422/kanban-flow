@@ -21,6 +21,8 @@ export const CARD_TRIGGERS = ['card_added', 'card_created', 'card_moved', 'card_
 export const CARD_ACTIONS = ['move', 'complete', 'reopen', 'add_label', 'remove_label', 'clear_labels', 'assign', 'assign_actor', 'unassign_all', 'set_due', 'clear_due', 'set_priority', 'check_all', 'comment', 'archive']
 export const BOARD_ACTIONS = ['create_card', 'move_list', 'archive_list']
 export const MAX_RULES_PER_BOARD = 50
+// A fixed sentence, so the web app can translate it.
+export const rulesLimitMessage = `A board can have up to ${MAX_RULES_PER_BOARD} rules`
 const MAX_CHAIN = 5
 const MAX_LIST_CARDS = 500
 

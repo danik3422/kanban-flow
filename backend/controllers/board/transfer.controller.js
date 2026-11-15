@@ -8,7 +8,7 @@ import TaskActivity from '../../models/taskActivity.model.js'
 import { getBoardWithRole } from '../../services/boardAccess.service.js'
 import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
-import { boardLimitMessage, MAX_CARDS_PER_BOARD, reachedBoardLimit } from '../../services/limits.service.js'
+import { boardCardLimitMessage, boardLimitMessage, MAX_CARDS_PER_BOARD, reachedBoardLimit } from '../../services/limits.service.js'
 
 // Moving boards in and out: a full export (JSON to bring back later, CSV for spreadsheets)
 // and an import of a board the app has already read from a Trello or KanbanHub file.
@@ -148,7 +148,7 @@ export const importBoard = async (req, res) => {
 		const { name, description, visibility, source, labels, columns } = req.body
 		const cardCount = columns.reduce((sum, column) => sum + column.cards.length, 0)
 		const commentCount = columns.reduce((sum, column) => sum + column.cards.reduce((inner, card) => inner + (card.comments?.length || 0), 0), 0)
-		if (cardCount > MAX_CARDS_PER_BOARD) return res.status(400).json({ message: `A board can hold up to ${MAX_CARDS_PER_BOARD} cards` })
+		if (cardCount > MAX_CARDS_PER_BOARD) return res.status(400).json({ message: boardCardLimitMessage })
 		if (commentCount > MAX_IMPORTED_COMMENTS) return res.status(400).json({ message: `An import can bring up to ${MAX_IMPORTED_COMMENTS} comments` })
 		if (await reachedBoardLimit(req.user._id)) return res.status(400).json({ message: boardLimitMessage })
 

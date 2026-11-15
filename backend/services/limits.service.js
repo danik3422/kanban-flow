@@ -12,6 +12,8 @@ export const MAX_TASKS_PER_COLUMN = 2000
 
 export const boardCardLimitMessage = `A board can hold up to ${MAX_CARDS_PER_BOARD} cards`
 export const boardLimitMessage = `You can own up to ${MAX_BOARDS_PER_USER} boards`
+export const columnCardLimitMessage = `A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`
+export const boardListLimitMessage = `A board can hold up to ${MAX_COLUMNS_PER_BOARD} lists`
 
 /** True when adding `extra` cards would take the board over its ceiling. Archived cards count: they still take space. */
 export const exceedsBoardCardLimit = async (boardId, extra = 1) => {

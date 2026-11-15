@@ -13,12 +13,7 @@ import { runCardAutomations } from '../../services/automation.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import { forgetListInRules } from '../../services/boardCleanup.service.js'
 import { cardImageUrls, releaseCardImages } from '../../services/cardFiles.service.js'
-import {
-	boardCardLimitMessage,
-	exceedsBoardCardLimit,
-	MAX_COLUMNS_PER_BOARD,
-	MAX_TASKS_PER_COLUMN,
-} from '../../services/limits.service.js'
+import { boardCardLimitMessage, boardListLimitMessage, columnCardLimitMessage, exceedsBoardCardLimit, MAX_COLUMNS_PER_BOARD, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
 
 // Lists (columns) of a board, and loading a board's lists with their cards.
 
@@ -119,7 +114,7 @@ export const createColumn = async (req, res) => {
 		// The server appends: client-supplied positions collide when people add columns at once.
 		const columnCount = await Column.countDocuments({ board: board._id })
 		if (columnCount >= MAX_COLUMNS_PER_BOARD) {
-			return res.status(400).json({ message: `A board can have up to ${MAX_COLUMNS_PER_BOARD} columns` })
+			return res.status(400).json({ message: boardListLimitMessage })
 		}
 		const newColumn = new Column({
 			title: title.trim(),
@@ -469,7 +464,7 @@ export const copyColumn = async (req, res) => {
 		if (!context) return
 		const { column, board } = context
 		if (await Column.countDocuments({ board: board._id }) >= MAX_COLUMNS_PER_BOARD) {
-			return res.status(400).json({ message: `A board can have up to ${MAX_COLUMNS_PER_BOARD} columns` })
+			return res.status(400).json({ message: boardListLimitMessage })
 		}
 		if (await exceedsBoardCardLimit(board._id, await Task.countDocuments({ column: column._id }))) {
 			return res.status(400).json({ message: boardCardLimitMessage })
@@ -529,7 +524,7 @@ export const moveColumnTasks = async (req, res) => {
 		if (!tasks.length) return res.status(200).json({ moved: 0 })
 		const offset = await Task.countDocuments({ column: target._id })
 		if (offset + tasks.length > MAX_TASKS_PER_COLUMN) {
-			return res.status(400).json({ message: `A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks` })
+			return res.status(400).json({ message: columnCardLimitMessage })
 		}
 		await Task.bulkWrite(tasks.map((task, index) => ({
 			updateOne: { filter: { _id: task._id }, update: { $set: { column: target._id, position: offset + index } } },

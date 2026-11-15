@@ -5,7 +5,7 @@ import Column from '../../models/column.model.js'
 import Task from '../../models/task.model.js'
 import { canManageBoard, getBoardWithRole, getCardAccess } from '../../services/boardAccess.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
-import { MAX_COLUMNS_PER_BOARD, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
+import { boardListLimitMessage, columnCardLimitMessage, MAX_COLUMNS_PER_BOARD, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
 import { recordTaskActivity } from '../../services/taskEvents.service.js'
 
 // The archive: cards and lists put away instead of deleted, and brought back later.
@@ -95,7 +95,7 @@ export const restoreTask = async (req, res) => {
 			: ownColumn
 		if (!target) return res.status(400).json({ message: 'Add a list to the board first' })
 		const position = await Task.countDocuments({ column: target._id })
-		if (position >= MAX_TASKS_PER_COLUMN) return res.status(400).json({ message: `A list can hold up to ${MAX_TASKS_PER_COLUMN} cards` })
+		if (position >= MAX_TASKS_PER_COLUMN) return res.status(400).json({ message: columnCardLimitMessage })
 		await Task.updateOne(
 			{ _id: task._id },
 			{ $set: { column: target._id, position, archivedAt: null, archivedBy: null, archivedWithColumn: false } },
@@ -150,7 +150,7 @@ export const restoreColumn = async (req, res) => {
 	try {
 		const { column, board } = await managedColumn(req, { archived: true })
 		const position = await Column.countDocuments({ board: board._id })
-		if (position >= MAX_COLUMNS_PER_BOARD) return res.status(400).json({ message: `A board can hold up to ${MAX_COLUMNS_PER_BOARD} lists` })
+		if (position >= MAX_COLUMNS_PER_BOARD) return res.status(400).json({ message: boardListLimitMessage })
 		await session.withTransaction(async () => {
 			await Column.updateOne({ _id: column._id }, { $set: { archivedAt: null, archivedBy: null, position } }, { session })
 			await Task.updateMany(

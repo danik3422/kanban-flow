@@ -12,7 +12,7 @@ import { normalizeBackground } from '../../services/boardBackgrounds.service.js'
 import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.js'
 import { startNextInSeries, takeBackNextInSeries } from '../../services/repeatingCards.service.js'
 import { runCardAutomations } from '../../services/automation.service.js'
-import { boardCardLimitMessage, exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
+import { boardCardLimitMessage, columnCardLimitMessage, exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
 import { cardImageUrls, releaseCardImages } from '../../services/cardFiles.service.js'
 import { lockColumns } from '../../services/columnLock.service.js'
 import {
@@ -221,7 +221,7 @@ export const createTask = async (req, res) => {
 			}
 			const taskCount = await Task.countDocuments({ column: column._id }).session(session)
 			if (taskCount >= MAX_TASKS_PER_COLUMN) {
-				const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
+				const error = new Error(columnCardLimitMessage)
 				error.statusCode = 400
 				throw error
 			}
@@ -373,7 +373,7 @@ export const updateTask = async (req, res) => {
 				if (moved) {
 					const targetCount = await Task.countDocuments({ column: targetColumn._id }).session(session)
 					if (targetCount >= MAX_TASKS_PER_COLUMN) {
-						const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
+						const error = new Error(columnCardLimitMessage)
 						error.statusCode = 400
 						throw error
 					}

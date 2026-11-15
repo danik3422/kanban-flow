@@ -354,7 +354,7 @@ const AutomationDialog = ({ open, onClose, boardId, columns = [], labels = [], m
 			.then(({ data }) => setRules(data))
 			.catch((error) => {
 				setRules((current) => current || [])
-				toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.title'))
+				toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.error'))
 			})
 	}, [boardId])
 	useEffect(() => {
@@ -400,7 +400,7 @@ const AutomationDialog = ({ open, onClose, boardId, columns = [], labels = [], m
 			toast.success(t('automation.saved'))
 			setView('list')
 		} catch (error) {
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.title'))
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.error'))
 		} finally {
 			setSaving(false)
 		}
@@ -414,7 +414,7 @@ const AutomationDialog = ({ open, onClose, boardId, columns = [], labels = [], m
 			toast.success(t(enabled ? 'automation.turnedOn' : 'automation.turnedOff'), { id: 'rule-toggle' })
 		} catch (error) {
 			setRules((current) => current.map((item) => (item._id === rule._id ? rule : item)))
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.title'))
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.error'))
 		} finally {
 			setBusyId(null)
 		}
@@ -426,7 +426,7 @@ const AutomationDialog = ({ open, onClose, boardId, columns = [], labels = [], m
 			setRules((current) => current.map((item) => (item._id === data.rule._id ? data.rule : item)))
 			toast.success(t(data.created || data.moved || data.rule.runs > rule.runs ? 'automation.ran' : 'automation.ranNothing'))
 		} catch (error) {
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.title'))
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.error'))
 		} finally {
 			setBusyId(null)
 		}
@@ -440,7 +440,7 @@ const AutomationDialog = ({ open, onClose, boardId, columns = [], labels = [], m
 			toast.success(t('automation.deleted'))
 			setDeleting(null)
 		} catch (error) {
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.title'))
+			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'automation.error'))
 		} finally {
 			setBusyId(null)
 		}

@@ -4,7 +4,7 @@ import { emitBoardEvent } from '../../lib/realtime.js'
 import BoardRule from '../../models/boardRule.model.js'
 import Column from '../../models/column.model.js'
 import { getBoardWithRole, validateBoardAssignees } from '../../services/boardAccess.service.js'
-import { MAX_RULES_PER_BOARD, runRuleNow } from '../../services/automation.service.js'
+import { MAX_RULES_PER_BOARD, rulesLimitMessage, runRuleNow } from '../../services/automation.service.js'
 import { nextRunAfter } from '../../services/schedule.service.js'
 
 // A board's automation rules. Everyone on the board sees them and may add their own;
@@ -74,7 +74,7 @@ export const listRules = async (req, res) => {
 export const createRule = async (req, res) => {
 	try {
 		const access = await boardAccess(req)
-		if (await BoardRule.countDocuments({ board: access.board._id }) >= MAX_RULES_PER_BOARD) throw fail(400, `A board can have up to ${MAX_RULES_PER_BOARD} rules`)
+		if (await BoardRule.countDocuments({ board: access.board._id }) >= MAX_RULES_PER_BOARD) throw fail(400, rulesLimitMessage)
 		await checkReferences(access.board, req.body)
 		const schedule = scheduleFor(req.body, req.user.timezone)
 		const rule = await BoardRule.create({
