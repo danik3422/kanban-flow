@@ -2,7 +2,7 @@
 # Build:  docker compose build      Run: docker compose up -d      (see SELF_HOSTING.md)
 
 # 1. The web app. No API address is baked in: it talks to the server it was loaded from.
-FROM node:24-bookworm-slim AS web
+FROM node:26-bookworm-slim AS web
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -20,7 +20,7 @@ ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY \
 RUN npm run build
 
 # 2. The server, with only what it needs to run.
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 ENV NODE_ENV=production \
 	PORT=5001 \
 	FRONTEND_DIST=/app/web \
