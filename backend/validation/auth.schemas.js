@@ -61,6 +61,11 @@ export const setupProfileSchema = z.object({
 	removeAvatar: z.boolean().optional(),
 }).strict()
 
+// Accounts with a password confirm with it; others sign in again first (/reauthenticate).
+export const deleteAccountSchema = z.object({
+	currentPassword: z.string().min(1).max(128).optional(),
+}).strict()
+
 export const changePasswordSchema = z.object({
 	currentPassword: z.string().min(1).max(128),
 	newPassword: passwordSchema,

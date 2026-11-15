@@ -148,6 +148,19 @@ export const useAuthStore = create((set, get) => ({
 		}
 	},
 
+	// Deletes the account on the server (throws its answer on failure), then forgets
+	// everything this browser kept for it, as signing out does.
+	deleteAccount: async (currentPassword) => {
+		await axiosInstance.delete('/auth/account', { data: currentPassword ? { currentPassword } : {} })
+		clearOutbox()
+		resetSocket()
+		clearBoardsCache()
+		clearApiCache()
+		useBoardStats.getState().reset()
+		if (isFirebaseLoaded()) loadFirebase().then((firebase) => firebase?.signOut(firebase.auth)).catch(() => {})
+		set({ authUser: null })
+	},
+
 	handleSocialSignin: async (provider) => {
 		if (!firebaseEnabled) {
 			toast.error(translateCurrent('auth.toast.socialUnavailable'))

@@ -7,7 +7,8 @@ import { sendAccountExistsEmail, sendAccountVerificationEmail } from '../../emai
 import { deleteImage, saveImage } from '../../services/fileStorage.service.js'
 import User from '../../models/user.model.js'
 import { publicUserFields } from '../../models/userFields.js'
-import { getDuplicateAuthErrorMessage } from '../../services/authChecks.service.js'
+import { deleteAccountData } from '../../services/accountDeletion.service.js'
+import { assertReauthenticated, getDuplicateAuthErrorMessage } from '../../services/authChecks.service.js'
 import { clearAuthCookie } from '../../services/authCookie.service.js'
 import { endSession, startSession } from '../../services/sessions.service.js'
 
@@ -207,6 +208,24 @@ export const logout = async (req, res) => {
 		res.status(500).json({
 			message: 'Internal server error',
 		})
+	}
+}
+
+/** Deletes the signed-in account after confirming it is really its owner. */
+export const deleteAccount = async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id).select('email name password lastReauthenticatedAt')
+		if (!user) return res.status(404).json({ message: 'User not found' })
+		await assertReauthenticated(user, req.body?.currentPassword)
+		await deleteAccountData(user)
+		clearAuthCookie(res)
+		return res.status(204).send()
+	} catch (error) {
+		if (error.statusCode) {
+			return res.status(error.statusCode).json({ message: error.message, ...(error.code && { code: error.code }), ...(error.boards && { boards: error.boards }) })
+		}
+		console.error('Account deletion failed:', error)
+		return res.status(500).json({ message: 'Could not delete the account' })
 	}
 }
 

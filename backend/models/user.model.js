@@ -66,6 +66,8 @@ const userSchema = new mongoose.Schema(
 		calendarTokenHash: { type: String, default: undefined, select: false },
 		calendarTokenVersion: { type: Number, default: 0 },
 		passkeyRegistrationChallengeExpiresAt: { type: Date, default: null },
+		// Set when the person deleted their account; the record keeps nothing personal after that.
+		deletedAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
 )

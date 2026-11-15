@@ -1,6 +1,7 @@
 import express from 'express'
 
 import {
+	deleteAccount,
 	getAuthUser,
 	login,
 	logout,
@@ -9,9 +10,9 @@ import {
 	updateSettings,
 } from '../../controllers/auth/account.controller.js'
 import { authMiddleware, verifiedAuthMiddleware } from '../../middlewares/auth.middleware.js'
-import { authLimiter, loginAccountLimiter, loginEmailLimiter } from '../../middlewares/rateLimit.middleware.js'
+import { authLimiter, loginAccountLimiter, loginEmailLimiter, passwordChangeLimiter } from '../../middlewares/rateLimit.middleware.js'
 import { validateBody } from '../../middlewares/validateBody.middleware.js'
-import { loginSchema, settingsSchema, setupProfileSchema, signupSchema } from '../../validation/auth.schemas.js'
+import { deleteAccountSchema, loginSchema, settingsSchema, setupProfileSchema, signupSchema } from '../../validation/auth.schemas.js'
 
 const router = express.Router()
 
@@ -23,5 +24,7 @@ router.patch('/setup-profile', verifiedAuthMiddleware, validateBody(setupProfile
 // Preferences such as language must work before the email is verified,
 // because the verification screen itself follows them.
 router.patch('/settings', authMiddleware, validateBody(settingsSchema), updateSettings)
+// Works before the email is verified too: anyone can leave.
+router.delete('/account', authMiddleware, passwordChangeLimiter, validateBody(deleteAccountSchema), deleteAccount)
 
 export default router

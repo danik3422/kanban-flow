@@ -1967,6 +1967,17 @@ const en = {
 			exists: 'This device or password manager already has a passkey for your account.',
 			addError: 'Could not add the passkey.',
 		},
+		deleteAccount: {
+			title: 'Delete account',
+			text: 'Boards only you use are deleted. On shared boards your cards and comments stay for the team, without your name.',
+			button: 'Delete account',
+			dialogTitle: 'Delete your account?',
+			dialogText: 'This cannot be undone. Your profile, passkeys and the boards only you use are deleted, and you are signed out everywhere.',
+			confirm: 'Delete for good',
+			sharedBoards: 'Other people use these boards you own. Make someone else their owner (Share → Owner) or delete them first:',
+			done: 'Your account has been deleted.',
+			error: 'Could not delete the account. Please try again.',
+		},
 		sessions: {
 			title: 'Signed-in devices',
 			text: 'Where your account is signed in right now. Sign out a device you do not recognise.',

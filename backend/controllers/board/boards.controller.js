@@ -1,22 +1,18 @@
 import mongoose from 'mongoose'
 
-import { emitBoardEvent, revokeUserBoardAccess } from '../../lib/realtime.js'
+import { emitBoardEvent } from '../../lib/realtime.js'
 import Board from '../../models/board.model.js'
 import BoardActivity from '../../models/boardActivity.model.js'
-import BoardInvite from '../../models/boardInvite.model.js'
 import BoardMember from '../../models/boardMember.model.js'
-import BoardRule from '../../models/boardRule.model.js'
 import Column from '../../models/column.model.js'
-import Notification from '../../models/notification.model.js'
 import Task from '../../models/task.model.js'
-import TaskActivity from '../../models/taskActivity.model.js'
-import TimeEntry from '../../models/timeEntry.model.js'
 import User from '../../models/user.model.js'
 import { ensureBoardAccess } from '../../services/boardAccess.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
 import { normalizeBackground, releaseUploadedBackground, reportUnsplashUse } from '../../services/boardBackgrounds.service.js'
 import { finishedColumnIdsOf } from '../../services/finishedColumns.service.js'
 import { boardLimitMessage, reachedBoardLimit } from '../../services/limits.service.js'
+import { deleteBoardForGood, removePersonFromBoard } from '../../services/boardLifecycle.service.js'
 
 // Boards themselves: create, copy, open, change, delete, leave, and the board list.
 
@@ -319,36 +315,7 @@ export const removeBoard = async (req, res) => {
 			})
 		}
 
-		const memberIds = await BoardMember.find({ board: boardId }).distinct('user')
-		const session = await mongoose.startSession()
-		try {
-			// Delete everything in one transaction so a failure never leaves orphans.
-			await session.withTransaction(async () => {
-				// Archived lists and cards go too.
-				const columnIds = await Column.find({ board: boardId }).setOptions({ withArchived: true }).distinct('_id').session(session)
-				const taskIds = await Task.find({ column: { $in: columnIds } }).setOptions({ withArchived: true }).distinct('_id').session(session)
-				await TaskActivity.deleteMany({ board: boardId }, { session })
-				await TimeEntry.deleteMany({ task: { $in: taskIds } }, { session })
-				await Notification.deleteMany({
-					$or: [{ board: boardId }, { task: { $in: taskIds } }],
-				}, { session })
-				await Task.deleteMany({ column: { $in: columnIds } }, { session })
-				await Column.deleteMany({ board: boardId }, { session })
-				await BoardMember.deleteMany({ board: boardId }, { session })
-				await BoardInvite.deleteMany({ board: boardId }, { session })
-				await BoardActivity.deleteMany({ board: boardId }, { session })
-				await BoardRule.deleteMany({ board: boardId }, { session })
-				await Board.deleteOne({ _id: boardId }, { session })
-			})
-		} finally {
-			await session.endSession()
-		}
-
-		for (const memberId of memberIds) {
-			if (memberId.toString() === userId.toString()) continue
-			revokeUserBoardAccess(memberId, boardId, { reason: 'board-deleted', boardName: board.name })
-		}
-		releaseUploadedBackground(board.background)
+		await deleteBoardForGood(board, userId)
 
 		return res
 			.status(200)
@@ -378,38 +345,7 @@ export const leaveBoard = async (req, res) => {
 		if (!membership) {
 			return res.status(404).json({ message: 'You are not a member of this board.' })
 		}
-		const session = await mongoose.startSession()
-		let activity
-		try {
-			await session.withTransaction(async () => {
-				const columnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id').session(session)
-				await BoardMember.deleteMany({ board: board._id, user: userId }, { session })
-				await Notification.deleteMany({ user: userId, board: board._id }, { session })
-				await BoardInvite.deleteMany({ board: board._id, createdBy: userId, usedAt: null }, { session })
-				await Task.updateMany(
-					{ column: { $in: columnIds } },
-					{ $pull: { assignees: userId } },
-					{ session },
-				)
-				activity = await recordBoardActivity({
-					boardId: board._id,
-					userId,
-					action: 'left',
-					entityType: 'member',
-					entityId: userId,
-					entityName: req.user.name || req.user.email,
-					details: 'left this board',
-					session,
-					emit: false,
-				})
-			})
-		} finally {
-			await session.endSession()
-		}
-		emitBoardEvent(board._id.toString(), 'activity:new', activity)
-		revokeUserBoardAccess(userId, board._id, {
-			reason: 'left-board',
-		})
+		await removePersonFromBoard(board, req.user)
 
 		return res.status(200).json({ message: 'You left the board successfully' })
 	} catch (error) {

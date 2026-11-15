@@ -3,6 +3,7 @@ import { Fingerprint, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from 'lucide
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ProviderIcon } from '../auth/AuthParts'
+import DeleteAccount from './DeleteAccount'
 import DevicesList from './DevicesList'
 import PasswordDialog from './PasswordDialog'
 import { useI18n } from '../../i18n'
@@ -252,6 +253,8 @@ const SecuritySection = () => {
 			<h3 className='st-subtitle'>{t('settings.sessions.title')}</h3>
 			<p className='st-section__text st-devices__intro'>{t('settings.sessions.text')}</p>
 			<DevicesList />
+
+			<DeleteAccount />
 
 			<PasswordDialog
 				open={Boolean(passwordMode)}
