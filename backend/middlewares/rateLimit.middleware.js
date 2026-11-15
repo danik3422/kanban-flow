@@ -155,3 +155,14 @@ export const inviteLimiter = rateLimit({
 	message: { message: 'Too many invitations. Please wait a few minutes and try again.' },
 	keyGenerator: (req) => `user:${req.user?._id}`,
 })
+
+// Pictures take disk space (up to several MB each), so each person gets an hourly budget
+// on top of the general API limit. Generous for real use, small for a script.
+export const uploadLimiter = rateLimit({
+	windowMs: 60 * 60 * 1000,
+	limit: Number(process.env.UPLOAD_LIMIT_PER_HOUR) || 100,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: { message: 'Too many uploads. Please wait a while and try again.' },
+	keyGenerator: (req) => `user:${req.user?._id}`,
+})

@@ -1,10 +1,14 @@
+import mongoose from 'mongoose'
+
 import { emitBoardEvent } from '../lib/realtime.js'
 import Column from '../models/column.model.js'
 import Notification from '../models/notification.model.js'
 import Task from '../models/task.model.js'
 import TaskActivity from '../models/taskActivity.model.js'
 import TimeEntry from '../models/timeEntry.model.js'
+import { lockColumns } from './columnLock.service.js'
 import { finishedColumnIdsOf } from './finishedColumns.service.js'
+import { exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from './limits.service.js'
 import { nextDueKey, todayKeyIn } from './recurrence.service.js'
 import { populatedTask, recordTaskActivity } from './taskEvents.service.js'
 
@@ -31,24 +35,42 @@ export const startNextInSeries = async (task, boardId, user) => {
 	const currentId = (task.column?._id || task.column).toString()
 	const column = finishedColumnIdsOf(columns).has(currentId) ? columns[0] : columns.find((item) => item._id.toString() === currentId) || columns[0]
 	const shift = dueKey ? Date.parse(`${nextKey}T00:00:00Z`) - Date.parse(`${dueKey}T00:00:00Z`) : 0
-	const next = await Task.create({
-		column: column._id,
-		position: await Task.countDocuments({ column: column._id }),
-		title: task.title,
-		description: task.description,
-		labels: task.labels,
-		checklist: (task.checklist || []).map(({ text }) => ({ text, completed: false })),
-		assignees: task.assignees,
-		watchers: task.watchers,
-		priority: task.priority,
-		estimateMinutes: task.estimateMinutes,
-		// A cover from the card's own attachments stays with that card.
-		cover: task.cover && !/^attachment-/.test(task.cover.id || '') ? task.cover : null,
-		dueDate: new Date(`${nextKey}T00:00:00Z`),
-		startDate: task.startDate && dueKey ? new Date(new Date(task.startDate).getTime() + Math.round(shift / DAY) * DAY) : null,
-		repeat: task.repeat,
+	if (await exceedsBoardCardLimit(boardId)) return null
+	const repeat = task.repeat
+	let next = null
+	// One transaction claims the series (only while it still has a rule and no next card, so a
+	// double "complete" creates one card) and takes the next slot in the locked list.
+	await mongoose.connection.transaction(async (session) => {
+		next = null
+		await lockColumns([column._id], session)
+		const claimed = await Task.updateOne({ _id: task._id, repeatedTo: null, repeat: { $ne: null } }, { $set: { repeat: null } }, { session })
+		if (!claimed.modifiedCount) return
+		const count = await Task.countDocuments({ column: column._id }).session(session)
+		// A full list keeps the rule on this card instead of overfilling.
+		if (count >= MAX_TASKS_PER_COLUMN) {
+			await Task.updateOne({ _id: task._id }, { $set: { repeat } }, { session })
+			return
+		}
+		;[next] = await Task.create([{
+			column: column._id,
+			position: count,
+			title: task.title,
+			description: task.description,
+			labels: task.labels,
+			checklist: (task.checklist || []).map(({ text }) => ({ text, completed: false })),
+			assignees: task.assignees,
+			watchers: task.watchers,
+			priority: task.priority,
+			estimateMinutes: task.estimateMinutes,
+			// A cover from the card's own attachments stays with that card.
+			cover: task.cover && !/^attachment-/.test(task.cover.id || '') ? task.cover : null,
+			dueDate: new Date(`${nextKey}T00:00:00Z`),
+			startDate: task.startDate && dueKey ? new Date(new Date(task.startDate).getTime() + Math.round(shift / DAY) * DAY) : null,
+			repeat,
+		}], { session })
+		await Task.updateOne({ _id: task._id }, { $set: { repeatedTo: next._id } }, { session })
 	})
-	await Task.updateOne({ _id: task._id }, { $set: { repeat: null, repeatedTo: next._id } })
+	if (!next) return null
 	task.repeat = null
 	task.repeatedTo = next._id
 	await recordTaskActivity({ taskId: next._id, boardId, userId: user._id, type: 'created', message: `repeated from “${task.title}”`, toColumn: column.title })

@@ -6,6 +6,7 @@ import {
 	deleteAttachment,
 } from '../../controllers/board/attachments.controller.js'
 import { verifiedAuthMiddleware } from '../../middlewares/auth.middleware.js'
+import { uploadLimiter } from '../../middlewares/rateLimit.middleware.js'
 import { validateBody } from '../../middlewares/validateBody.middleware.js'
 import { validateObjectIdParams } from '../../middlewares/validateObjectId.middleware.js'
 import { attachmentSchema, imageAttachmentSchema } from '../../validation/card.schemas.js'
@@ -20,7 +21,7 @@ const router = express.Router()
 validateObjectIdParams(router)
 
 router.post('/tasks/:id/attachments', verifiedAuthMiddleware, validateBody(attachmentSchema), addLinkAttachment)
-router.post('/tasks/:id/attachments/image', verifiedAuthMiddleware, imageBody, validateBody(imageAttachmentSchema), addImageAttachment)
+router.post('/tasks/:id/attachments/image', verifiedAuthMiddleware, uploadLimiter, imageBody, validateBody(imageAttachmentSchema), addImageAttachment)
 router.delete('/tasks/:id/attachments/:attachmentId', verifiedAuthMiddleware, deleteAttachment)
 
 export default router

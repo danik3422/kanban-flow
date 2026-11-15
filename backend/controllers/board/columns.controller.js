@@ -11,6 +11,7 @@ import TimeEntry from '../../models/timeEntry.model.js'
 import { canManageBoard, ensureBoardAccess } from '../../services/boardAccess.service.js'
 import { runCardAutomations } from '../../services/automation.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
+import { cardImageUrls, releaseCardImages } from '../../services/cardFiles.service.js'
 import {
 	boardCardLimitMessage,
 	exceedsBoardCardLimit,
@@ -388,6 +389,7 @@ export const deleteColumn = async (req, res) => {
 				message: 'Access denied: Only board admins can delete columns.',
 			})
 		}
+		const images = await cardImageUrls({ column: columnId })
 		const session = await mongoose.startSession()
 		let activity
 		try {
@@ -424,6 +426,7 @@ export const deleteColumn = async (req, res) => {
 
 		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(column.board.toString(), 'column:deleted', { columnId })
+		void releaseCardImages(images)
 
 		return res.status(200).json({ message: 'Column deleted successfully' })
 	} catch (error) {

@@ -13,6 +13,8 @@ import { normalizeRepeat, todayKeyIn } from '../../services/recurrence.service.j
 import { startNextInSeries, takeBackNextInSeries } from '../../services/repeatingCards.service.js'
 import { runCardAutomations } from '../../services/automation.service.js'
 import { boardCardLimitMessage, exceedsBoardCardLimit, MAX_TASKS_PER_COLUMN } from '../../services/limits.service.js'
+import { cardImageUrls, releaseCardImages } from '../../services/cardFiles.service.js'
+import { lockColumns } from '../../services/columnLock.service.js'
 import {
 	describeTaskContent,
 	emitTask,
@@ -189,18 +191,6 @@ export const createTask = async (req, res) => {
 		if (!title || title.trim() === '') {
 			return res.status(400).json({ message: 'Task title is required' })
 		}
-		// The same card sent again (the first answer was lost on a bad connection). Looked up
-		// only on this board: a client id seen elsewhere must not reveal another board's card.
-		if (clientId) {
-			const boardColumnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id')
-			const existing = await Task.findOne({ clientId, column: { $in: boardColumnIds } }).setOptions({ withArchived: true }).select('_id column')
-			if (existing) return res.status(200).json(await populatedTask(existing._id))
-		}
-
-		const taskCount = await Task.countDocuments({ column: column._id })
-		if (taskCount >= MAX_TASKS_PER_COLUMN) {
-			return res.status(400).json({ message: `A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks` })
-		}
 		if (await exceedsBoardCardLimit(board._id)) {
 			return res.status(400).json({ message: boardCardLimitMessage })
 		}
@@ -209,15 +199,36 @@ export const createTask = async (req, res) => {
 			description: description || '',
 			dueDate: dueDate || null,
 			column: column._id,
-			position: taskCount,
 			assignees,
 			labels,
 			checklist,
 			priority: ['none', 'low', 'medium', 'high', 'urgent'].includes(priority) ? priority : 'none',
 			...(clientId && { clientId }),
 		})
-
-		await newTask.save()
+		// The list is locked while the card takes the next slot, so two cards created at once
+		// get different positions and a card sent twice is created once.
+		let existingId = null
+		// connection.transaction resets the new card between retries, so a retried save inserts it again.
+		await mongoose.connection.transaction(async (session) => {
+			await lockColumns([column._id], session)
+			// The same card sent again (the first answer was lost on a bad connection). Looked up
+			// only on this board: a client id seen elsewhere must not reveal another board's card.
+			if (clientId) {
+				const boardColumnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).session(session).distinct('_id')
+				const existing = await Task.findOne({ clientId, column: { $in: boardColumnIds } }).setOptions({ withArchived: true }).session(session).select('_id')
+				existingId = existing?._id || null
+				if (existingId) return
+			}
+			const taskCount = await Task.countDocuments({ column: column._id }).session(session)
+			if (taskCount >= MAX_TASKS_PER_COLUMN) {
+				const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
+				error.statusCode = 400
+				throw error
+			}
+			newTask.position = taskCount
+			await newTask.save({ session })
+		})
+		if (existingId) return res.status(200).json(await populatedTask(existingId))
 		const savedTask = await Task.findById(newTask._id)
 			.populate('assignees', 'name email avatar')
 			.lean()
@@ -249,6 +260,8 @@ export const createTask = async (req, res) => {
 		await runCardAutomations({ boardId: column.board, taskId: savedTask._id, events: [{ type: 'created', column: column._id }], actor: req.user })
 		return undefined
 	} catch (error) {
+		if (res.headersSent) return console.error('Error after creating task:', error)
+		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error creating task:', error)
 		res.status(500).json({ message: 'Internal server error' })
 	}
@@ -284,7 +297,6 @@ export const updateTask = async (req, res) => {
 		}
 		const originalColumnId = task.column._id
 		const originalColumn = await Column.findById(originalColumnId).select('title')
-		const originalPosition = task.position
 		const originalAssigneeIds = task.assignees.map((assignee) => assignee.toString())
 		let targetColumn = task.column
 		if (
@@ -334,67 +346,71 @@ export const updateTask = async (req, res) => {
 				return res.status(400).json({ message: 'Choose a cover from the list.' })
 			}
 		}
-		const completedChanged = completed !== undefined && Boolean(completed) !== Boolean(task.completed)
-		if (completedChanged) {
-			task.completed = Boolean(completed)
-			task.completedAt = completed ? new Date() : null
-		}
+		let completedChanged = completed !== undefined && Boolean(completed) !== Boolean(task.completed)
 		const moved = originalColumnId.toString() !== targetColumn._id.toString()
 		// A column change without an explicit slot appends the card to the target column.
-		const requestedPosition = position !== undefined
-			? position
-			: moved
-				? await Task.countDocuments({ column: targetColumn._id })
-				: undefined
-		const repositioned = requestedPosition !== undefined
+		const repositioned = position !== undefined || moved
 
-		const session = await mongoose.startSession()
-		try {
-			await session.withTransaction(async () => {
-				if (repositioned) {
-					if (moved) {
-						const targetCount = await Task.countDocuments({ column: targetColumn._id }).session(session)
-						if (targetCount >= MAX_TASKS_PER_COLUMN) {
-							const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
-							error.statusCode = 400
-							throw error
-						}
-						const nextPosition = Math.min(Math.max(0, requestedPosition), targetCount)
+		// connection.transaction (not a bare session) resets the card between retries, so a
+		// retried save writes every change again.
+		await mongoose.connection.transaction(async (session) => {
+			// Both lists are locked and the card is read again here, so two drags or two
+			// "complete" clicks at once are applied one after the other, never from the same
+			// stale snapshot (MongoDB retries this function when they collide).
+			if (repositioned) await lockColumns([originalColumnId, targetColumn._id], session)
+			const fresh = await Task.findById(task._id).session(session).select('position completed completedAt repeatedTo').lean()
+			if (!fresh) {
+				const error = new Error('Task not found')
+				error.statusCode = 404
+				throw error
+			}
+			const originalPosition = fresh.position
+			task.repeatedTo = fresh.repeatedTo
+			completedChanged = completed !== undefined && Boolean(completed) !== Boolean(fresh.completed)
+			task.completed = completedChanged ? Boolean(completed) : fresh.completed
+			task.completedAt = completedChanged ? (completed ? new Date() : null) : fresh.completedAt
+			if (repositioned) {
+				if (moved) {
+					const targetCount = await Task.countDocuments({ column: targetColumn._id }).session(session)
+					if (targetCount >= MAX_TASKS_PER_COLUMN) {
+						const error = new Error(`A column can hold up to ${MAX_TASKS_PER_COLUMN} tasks`)
+						error.statusCode = 400
+						throw error
+					}
+					const requestedPosition = position !== undefined ? position : targetCount
+					const nextPosition = Math.min(Math.max(0, requestedPosition), targetCount)
+					await Task.updateMany(
+						{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition } },
+						{ $inc: { position: -1 } },
+						{ session },
+					)
+					await Task.updateMany(
+						{ column: targetColumn._id, position: { $gte: nextPosition } },
+						{ $inc: { position: 1 } },
+						{ session },
+					)
+					task.position = nextPosition
+				} else {
+					const lastPosition = Math.max(0, await Task.countDocuments({ column: originalColumnId }).session(session) - 1)
+					const nextPosition = Math.min(Math.max(0, position), lastPosition)
+					if (nextPosition < originalPosition) {
 						await Task.updateMany(
-							{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition } },
-							{ $inc: { position: -1 } },
-							{ session },
-						)
-						await Task.updateMany(
-							{ column: targetColumn._id, position: { $gte: nextPosition } },
+							{ column: originalColumnId, _id: { $ne: task._id }, position: { $gte: nextPosition, $lt: originalPosition } },
 							{ $inc: { position: 1 } },
 							{ session },
 						)
-						task.position = nextPosition
-					} else {
-						const lastPosition = Math.max(0, await Task.countDocuments({ column: originalColumnId }).session(session) - 1)
-						const nextPosition = Math.min(Math.max(0, requestedPosition), lastPosition)
-						if (nextPosition < originalPosition) {
-							await Task.updateMany(
-								{ column: originalColumnId, _id: { $ne: task._id }, position: { $gte: nextPosition, $lt: originalPosition } },
-								{ $inc: { position: 1 } },
-								{ session },
-							)
-						} else if (nextPosition > originalPosition) {
-							await Task.updateMany(
-								{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition, $lte: nextPosition } },
-								{ $inc: { position: -1 } },
-								{ session },
-							)
-						}
-						task.position = nextPosition
+					} else if (nextPosition > originalPosition) {
+						await Task.updateMany(
+							{ column: originalColumnId, _id: { $ne: task._id }, position: { $gt: originalPosition, $lte: nextPosition } },
+							{ $inc: { position: -1 } },
+							{ session },
+						)
 					}
+					task.position = nextPosition
 				}
-				await task.save({ session })
-			})
-		} finally {
-			await session.endSession()
-		}
+			}
+			await task.save({ session })
+		})
 		// A repeating card brings the next one when completed, and takes it back when un-completed.
 		let nextInSeries = null
 		if (completedChanged && task.completed && task.repeat?.frequency && !task.repeatedTo) nextInSeries = await startNextInSeries(task, boardId, req.user)
@@ -523,6 +539,7 @@ export const updateTask = async (req, res) => {
 		await runCardAutomations({ boardId, taskId: task._id, events, actor: req.user })
 		return undefined
 	} catch (error) {
+		if (res.headersSent) return console.error('Error after updating task:', error)
 		if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
 		console.error('Error updating task:', error)
 		return res.status(500).json({ message: 'Internal server error' })
@@ -553,6 +570,7 @@ export const deleteTask = async (req, res) => {
 		const columnId = column._id
 		const position = task.position
 		const columnTitle = column.title
+		const images = await cardImageUrls({ _id: task._id })
 		const session = await mongoose.startSession()
 		let activity
 		try {
@@ -601,6 +619,7 @@ export const deleteTask = async (req, res) => {
 
 		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(board._id.toString(), 'task:deleted', { taskId })
+		void releaseCardImages(images)
 
 		return res.status(200).json({ message: 'Task deleted successfully' })
 	} catch (error) {

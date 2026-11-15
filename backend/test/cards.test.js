@@ -183,6 +183,39 @@ describe('attachments', () => {
 		await api('delete', `/tasks/${card._id}/attachments/${image._id}`, owner)
 		assert.equal((await request(app).get(image.url)).status, 404, 'the file is gone with the attachment')
 	})
+
+	it('removes uploaded images with their card and list, but keeps one a copied card still shows', async () => {
+		const { owner, card, other, todo } = await setup()
+		const upload = async (task) => (await api('post', `/tasks/${task._id}/attachments/image`, owner).send({ image: 'data:image/png;base64,iVBORw0KGgo=' })).body.attachments.find((item) => item.kind === 'image').url
+		const settled = async (url, status) => {
+			for (let attempt = 0; attempt < 50 && (await request(app).get(url)).status !== status; attempt++) await new Promise((resolve) => setTimeout(resolve, 20))
+			return (await request(app).get(url)).status
+		}
+		const cardImage = await upload(card)
+		const copy = await api('post', `/tasks/${card._id}/copy`, owner).send({ title: 'Hero copy' })
+		assert.equal(copy.status, 201)
+		assert.equal((await api('delete', `/tasks/${card._id}`, owner)).status, 200)
+		assert.equal((await request(app).get(cardImage)).status, 200, 'the copy still shows it')
+		assert.equal((await api('delete', `/tasks/${copy.body._id}`, owner)).status, 200)
+		assert.equal(await settled(cardImage, 404), 404, 'gone with the last card that showed it')
+
+		const listImage = await upload(other)
+		assert.equal((await api('delete', `/columns/${todo._id}`, owner)).status, 200)
+		assert.equal(await settled(listImage, 404), 404, 'gone with the list')
+	})
+
+	it('limits how many images one person uploads in an hour', async () => {
+		const { member, card } = await setup()
+		const send = () => api('post', `/tasks/${card._id}/attachments/image`, member).send({ image: 'data:image/png;base64,iVBORw0KGgo=' })
+		const statuses = []
+		for (let index = 0; index < 101; index++) {
+			// Attachments are capped at 50 per card; clear them so only the upload limit answers.
+			if (index % 40 === 0) await Task.updateOne({ _id: card._id }, { $set: { attachments: [] } })
+			statuses.push((await send()).status)
+		}
+		assert.ok(statuses.slice(0, 100).every((status) => status === 201))
+		assert.equal(statuses[100], 429)
+	})
 })
 
 describe('copy card', () => {
