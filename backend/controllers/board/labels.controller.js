@@ -3,6 +3,7 @@ import BoardRule from '../../models/boardRule.model.js'
 import Column from '../../models/column.model.js'
 import Task from '../../models/task.model.js'
 import { getBoardWithRole } from '../../services/boardAccess.service.js'
+import { forgetLabelInRules } from '../../services/boardCleanup.service.js'
 
 // A board's label set. Renaming or deleting a label updates every card that uses it.
 
@@ -50,7 +51,8 @@ export const updateBoardLabel = async (req, res) => {
 		if (req.body.color !== undefined) label.color = req.body.color
 		await board.save()
 		if (label.name !== previousName) {
-			const columnIds = await Column.find({ board: board._id }).distinct('_id')
+			// Archived lists and cards too, so a restored card does not bring back the old name.
+			const columnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id')
 			await Task.updateMany({ column: { $in: columnIds }, labels: previousName }, { $set: { 'labels.$': label.name } })
 			// Automation rules that name the label follow the new name.
 			await BoardRule.updateMany({ board: board._id, 'actions.label': previousName }, { $set: { 'actions.$[action].label': label.name } }, { arrayFilters: [{ 'action.label': previousName }] })
@@ -78,8 +80,9 @@ export const deleteBoardLabel = async (req, res) => {
 		const name = label.name
 		label.deleteOne()
 		await board.save()
-		const columnIds = await Column.find({ board: board._id }).distinct('_id')
+		const columnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id')
 		await Task.updateMany({ column: { $in: columnIds } }, { $pull: { labels: name } })
+		if (await forgetLabelInRules(board._id, name)) emitBoardEvent(board._id.toString(), 'board:rules-changed', {})
 		emitBoardEvent(board._id.toString(), 'board:updated', { _id: board._id, labels: board.labels })
 		emitBoardEvent(board._id.toString(), 'board:content-changed', {})
 		return res.status(200).json(board.labels)

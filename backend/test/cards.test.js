@@ -233,3 +233,21 @@ describe('copy card', () => {
 		assert.equal(await Task.countDocuments({ column: todo._id }), 3)
 	})
 })
+
+describe('removing a member', () => {
+	it('takes them off every card and list, archived ones included', async () => {
+		const { owner, member, board, todo, card } = await setup()
+		const archived = await Task.create({ column: todo._id, title: 'Old work', position: 9, assignees: [member._id], watchers: [member._id], archivedAt: new Date() })
+		await Task.updateOne({ _id: card._id }, { $set: { watchers: [member._id] } })
+		await Column.updateOne({ _id: todo._id }, { $set: { watchers: [member._id] } })
+		const membership = await BoardMember.findOne({ board: board._id, user: member._id })
+		const response = await api('delete', `/boards/${board._id}/members/${membership._id}`, owner)
+		assert.equal(response.status, 200, JSON.stringify(response.body))
+		const [live, old, list] = await Promise.all([
+			Task.findById(card._id).lean(),
+			Task.findById(archived._id).setOptions({ withArchived: true }).lean(),
+			Column.findById(todo._id).lean(),
+		])
+		assert.deepEqual([live.assignees, live.watchers, old.assignees, old.watchers, list.watchers].map((ids) => ids.length), [0, 0, 0, 0, 0])
+	})
+})

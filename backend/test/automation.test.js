@@ -291,7 +291,29 @@ describe('automation rules: around the board', () => {
 		assert.equal(await BoardRule.countDocuments({}), 0)
 	})
 
-	it('stop working once their author leaves the board', async () => {
+	it('turn off with a reason when a list or label they use is deleted', async () => {
+		const { owner, board, todo, doing, done } = await setup()
+		const watchesDone = await addRule(owner, board, { name: 'Watches done', trigger: { type: 'card_added', column: done._id }, actions: [{ type: 'complete' }] })
+		const movesToDoing = await addRule(owner, board, { name: 'Moves to doing', trigger: { type: 'card_created', column: todo._id }, actions: [{ type: 'move', column: doing._id.toString() }] })
+		const labels = await addRule(owner, board, { name: 'Labels', trigger: { type: 'card_added', column: todo._id }, actions: [{ type: 'add_label', label: 'Weekly' }] })
+		const untouched = await addRule(owner, board, { name: 'Untouched', trigger: { type: 'card_added', column: todo._id }, actions: [{ type: 'add_label', label: 'Shipped' }] })
+		const archived = await Task.create({ column: todo._id, title: 'Archived', position: 5, labels: ['Weekly'], archivedAt: new Date() })
+
+		assert.equal((await api('delete', `/columns/${doing._id}`, owner)).status, 200)
+		const weekly = board.labels.find((item) => item.name === 'Weekly')
+		assert.equal((await api('delete', `/boards/${board._id}/labels/${weekly._id}`, owner)).status, 200)
+
+		const byId = Object.fromEntries((await BoardRule.find({ board: board._id }).lean()).map((rule) => [String(rule._id), rule]))
+		assert.equal(byId[watchesDone._id].enabled, true)
+		assert.equal(byId[movesToDoing._id].enabled, false)
+		assert.equal(byId[movesToDoing._id].lastError, 'list_deleted')
+		assert.equal(byId[labels._id].enabled, false)
+		assert.equal(byId[labels._id].lastError, 'label_deleted')
+		assert.equal(byId[untouched._id].enabled, true)
+		assert.deepEqual((await fresh(archived)).labels, [], 'archived cards lose the label too')
+	})
+
+		it('stop working once their author leaves the board', async () => {
 		const { member, board, done, card } = await setup()
 		await addRule(member, board, { trigger: { type: 'card_added', column: done._id }, actions: [{ type: 'comment', text: 'From a former member' }] })
 		await BoardMember.deleteOne({ board: board._id, user: member._id })

@@ -865,6 +865,8 @@ const en = {
 			full: 'Last time something was skipped: the list is full',
 			author: 'Turned off: the rule’s author is no longer on the board',
 			board: 'The board was deleted',
+			list_deleted: 'Turned off: a list this rule uses was deleted',
+			label_deleted: 'Turned off: a label this rule uses was deleted',
 		},
 		name: 'Name',
 		namePlaceholder: 'For example: close finished cards',

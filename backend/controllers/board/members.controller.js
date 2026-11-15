@@ -161,14 +161,16 @@ export const removeBoardMember = async (req, res) => {
 		let activity
 		try {
 			await session.withTransaction(async () => {
-				const columnIds = await Column.find({ board: board._id }).distinct('_id').session(session)
+				// Archived lists and cards too: a restored card must not bring the person back.
+				const columnIds = await Column.find({ board: board._id }).setOptions({ withArchived: true }).distinct('_id').session(session)
 				await BoardMember.deleteMany({ board: board._id, user: removedUserId }, { session })
 				await Notification.deleteMany({ user: removedUserId, board: board._id }, { session })
 				await Task.updateMany(
 					{ column: { $in: columnIds } },
-					{ $pull: { assignees: removedUserId } },
+					{ $pull: { assignees: removedUserId, watchers: removedUserId } },
 					{ session },
 				)
+				await Column.updateMany({ board: board._id }, { $pull: { watchers: removedUserId } }, { session })
 				await BoardInvite.deleteMany({
 					board: board._id,
 					email: membership.user.email.toLowerCase(),

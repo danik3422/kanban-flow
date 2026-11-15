@@ -11,6 +11,7 @@ import TimeEntry from '../../models/timeEntry.model.js'
 import { canManageBoard, ensureBoardAccess } from '../../services/boardAccess.service.js'
 import { runCardAutomations } from '../../services/automation.service.js'
 import { recordBoardActivity } from '../../services/boardActivity.service.js'
+import { forgetListInRules } from '../../services/boardCleanup.service.js'
 import { cardImageUrls, releaseCardImages } from '../../services/cardFiles.service.js'
 import {
 	boardCardLimitMessage,
@@ -390,6 +391,7 @@ export const deleteColumn = async (req, res) => {
 			})
 		}
 		const images = await cardImageUrls({ column: columnId })
+		let rulesTurnedOff = 0
 		const session = await mongoose.startSession()
 		let activity
 		try {
@@ -400,6 +402,8 @@ export const deleteColumn = async (req, res) => {
 				await TimeEntry.deleteMany({ task: { $in: taskIds } }, { session })
 				await Notification.deleteMany({ task: { $in: taskIds } }, { session })
 				await Column.deleteOne({ _id: columnId }, { session })
+				// Rules that name this list can no longer run as meant.
+				rulesTurnedOff = await forgetListInRules(board._id, columnId, session)
 				// An archived list already left the order when it was archived.
 				if (!column.archivedAt) {
 					await Column.updateMany(
@@ -426,6 +430,7 @@ export const deleteColumn = async (req, res) => {
 
 		emitBoardEvent(board._id.toString(), 'activity:new', activity)
 		emitBoardEvent(column.board.toString(), 'column:deleted', { columnId })
+		if (rulesTurnedOff) emitBoardEvent(column.board.toString(), 'board:rules-changed', {})
 		void releaseCardImages(images)
 
 		return res.status(200).json({ message: 'Column deleted successfully' })
