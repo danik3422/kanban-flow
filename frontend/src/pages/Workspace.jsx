@@ -107,6 +107,9 @@ const fetchColumns = async (boardId) => {
 const columnsCache = new Map()
 const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column._id, column.sortBy || 'custom']))
 
+// One empty list for every render, so memoised cards see the same value.
+const NO_LABELS = []
+
 const PLANNER_KEY = 'kh:planner'
 const PHONE_VIEW_KEY = 'kh:phone-view'
 const PLANNER_MIN = 300
@@ -1623,7 +1626,7 @@ const Workspace = () => {
 
 	// ── Cards ──────────────────────────────────────────────────────────────────
 	const meId = authUser?._id
-	const boardLabelList = selectedBoard?.labels || []
+	const boardLabelList = selectedBoard?.labels || NO_LABELS
 	const labelOptions = allLabels(boardLabelList, columns)
 	const allTasks = columns.flatMap((column) => column.tasks)
 	const findTask = (taskId) => allTasks.find((task) => task._id === taskId)
@@ -1772,6 +1775,23 @@ const Workspace = () => {
 	const cardLayoutKey = `${columns.map((column) => column.tasks.map((task) => task._id).join('.')).join('|')}#${cardDrag.drag ? `${cardDrag.drag.columnId}:${cardDrag.drag.index}` : ''}`
 	useFlipCards(boardListRef, cardLayoutKey)
 
+	// Cards are memoised; their handlers stay the same function across renders and reach
+	// the latest drag state and actions through this ref, so one live change re-renders
+	// only the cards it touched, not the whole board.
+	const cardActionsRef = useRef(null)
+	useLayoutEffect(() => {
+		cardActionsRef.current = { cardDrag, patchTask }
+	})
+	const openCard = useCallback((task) => {
+		if (!cardActionsRef.current.cardDrag.consumeClick()) setTaskDetails(task)
+	}, [])
+	const toggleCardComplete = useCallback((task) => {
+		cardActionsRef.current.patchTask(task, { completed: !task.completed })
+	}, [])
+	const startCardDrag = useCallback((event, taskId) => {
+		cardActionsRef.current.cardDrag.onPointerDown(event, taskId)
+	}, [])
+
 	const renderColumnCards = (column) => {
 		const drag = cardDrag.drag
 		const slot = drag && drag.columnId === column._id ? <div key='drag-slot' className='task-drag-slot' style={{ height: drag.height }} aria-hidden='true' /> : null
@@ -1794,11 +1814,9 @@ const Workspace = () => {
 					canEdit
 					isDragSource={isSource}
 					isFilteredOut={!cardPasses(task, column)}
-					onOpen={() => {
-						if (!cardDrag.consumeClick()) setTaskDetails(task)
-					}}
-					onToggleComplete={() => patchTask(task, { completed: !task.completed })}
-					onPointerDown={(event) => cardDrag.onPointerDown(event, task._id)}
+					onOpen={openCard}
+					onToggleComplete={toggleCardComplete}
+					onPointerDown={startCardDrag}
 				/>,
 			)
 		}

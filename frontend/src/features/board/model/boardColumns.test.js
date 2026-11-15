@@ -10,6 +10,7 @@ import {
 	removeColumn,
 	removeTask,
 	replaceTask,
+	setTaskCommentCount,
 	setColumnTasks,
 } from './boardColumns.js'
 
@@ -39,7 +40,17 @@ describe('board column transitions', () => {
 		assert.deepEqual(ids(moved), ['todo:b', 'done:ac'])
 	})
 
-	it('removes a task from every column', () => {
+	it('leaves lists a change does not touch as they were', () => {
+		const before = [...board(), { _id: 'later', sortBy: 'custom', tasks: [{ _id: 'z', title: 'Z', column: 'later' }] }]
+		const after = replaceTask(before, { _id: 'a', column: 'todo', title: 'Alpha 2' })
+		assert.equal(after[2], before[2], 'an untouched list keeps its identity, so it does not re-render')
+		assert.notEqual(after[0], before[0])
+		const counted = setTaskCommentCount(before, 'z', 3)
+		assert.equal(counted[0], before[0])
+		assert.equal(counted[2].tasks[0].commentCount, 3)
+	})
+
+		it('removes a task from every column', () => {
 		assert.deepEqual(ids(removeTask(board(), 'b')), ['todo:a', 'done:c'])
 	})
 

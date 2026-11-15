@@ -110,6 +110,10 @@ taskSchema.plugin(archivable)
 taskSchema.index({ column: 1, position: 1 })
 taskSchema.index({ assignees: 1 })
 taskSchema.index({ clientId: 1 }, { sparse: true })
+// Due-date reminders scan cards due in the next day; the calendar and my tasks read a
+// board's cards in a date window.
+taskSchema.index({ dueDate: 1 })
+taskSchema.index({ column: 1, dueDate: 1 })
 
 const Task = mongoose.model('Task', taskSchema)
 export default Task

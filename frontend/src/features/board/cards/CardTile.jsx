@@ -90,14 +90,14 @@ const CardTile = ({ task, boardLabels, done, meId, canEdit, isDragSource, isFilt
 			tabIndex={0}
 			role='button'
 			aria-label={t('card.open', { title: task.title })}
-			onClick={onOpen}
+			onClick={() => onOpen(task)}
 			onKeyDown={(event) => {
 				if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
 					event.preventDefault()
-					onOpen()
+					onOpen(task)
 				}
 			}}
-			onPointerDown={onPointerDown}
+			onPointerDown={(event) => onPointerDown(event, task._id)}
 			style={fullCover ? coverStyle : undefined}
 		>
 			{cover && !fullCover && <div className='ct-cover' style={coverStyle} aria-hidden='true' />}
@@ -118,7 +118,7 @@ const CardTile = ({ task, boardLabels, done, meId, canEdit, isDragSource, isFilt
 							aria-label={complete ? t('card.markIncomplete') : t('card.markComplete')}
 							onClick={(event) => {
 								event.stopPropagation()
-								onToggleComplete()
+								onToggleComplete(task)
 							}}
 						>
 							{complete ? <CircleCheck size={17} aria-hidden='true' /> : <Circle size={17} aria-hidden='true' />}

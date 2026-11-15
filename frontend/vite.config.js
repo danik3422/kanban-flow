@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 
 // Files from public/ that the app shows on every page, stored by the service worker too.
+const LATER = /(^|\/)(index\.esm|Guide|GuideDemos|SelfHosting|DemoBoard|About|docs)-|onest-(math|symbols|vietnamese|greek)/
 const PUBLIC_SHELL = ['/favicon.ico', '/favicon-32.png', '/kanban-mark.svg', '/icon-192.png', '/site.webmanifest', '/avatar.png']
 
 /**
@@ -15,7 +16,10 @@ const serviceWorker = () => ({
 	apply: 'build',
 	generateBundle(_options, bundle) {
 		const files = Object.keys(bundle).filter((file) => !file.endsWith('.map') && file !== 'sw.js')
-		const precache = ['/', '/index.html', ...files.filter((file) => file !== 'index.html').map((file) => `/${file}`), ...PUBLIC_SHELL]
+		// Stored up front: what working on boards needs without a network. The rest (social
+		// sign-in, the guide and site pages, rare font subsets) is stored the first time it is
+		// used, so a phone does not download it all on every update.
+		const precache = ['/', '/index.html', ...files.filter((file) => file !== 'index.html' && !LATER.test(file)).map((file) => `/${file}`), ...PUBLIC_SHELL]
 		const version = createHash('sha256').update(files.sort().join('|')).digest('hex').slice(0, 12)
 		const template = readFileSync(new URL('./src/sw/serviceWorker.js', import.meta.url), 'utf8')
 		this.emitFile({

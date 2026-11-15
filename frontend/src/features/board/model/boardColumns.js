@@ -49,7 +49,10 @@ export const replaceTask = (columns, task) => {
 	const previous = columns.flatMap((column) => column.tasks).find((item) => item._id === task._id)
 	const merged = previous ? { ...previous, ...task } : task
 	return columns.map((column) => {
-		const withoutTask = column.tasks.filter((item) => item._id !== task._id)
+		const hasTask = column.tasks.some((item) => item._id === task._id)
+		// Lists the card neither left nor joined stay the same objects, so they do not re-render.
+		if (!hasTask && column._id !== merged.column) return column
+		const withoutTask = hasTask ? column.tasks.filter((item) => item._id !== task._id) : column.tasks
 		return column._id === merged.column
 			? { ...column, tasks: sortColumnTasks(column, [...withoutTask, merged]) }
 			: { ...column, tasks: withoutTask }
@@ -57,10 +60,9 @@ export const replaceTask = (columns, task) => {
 }
 
 export const setTaskCommentCount = (columns, taskId, commentCount) =>
-	columns.map((column) => ({
-		...column,
-		tasks: column.tasks.map((task) => (task._id === taskId ? { ...task, commentCount } : task)),
-	}))
+	columns.map((column) => (column.tasks.some((task) => task._id === taskId)
+		? { ...column, tasks: column.tasks.map((task) => (task._id === taskId ? { ...task, commentCount } : task)) }
+		: column))
 
 export const removeTask = (columns, taskId) =>
 	columns.map((column) => ({

@@ -8,6 +8,8 @@ import './styles/reset.css'
 import './styles/global.css'
 import './ui'
 import { I18nProvider } from './i18n'
+import { detectLanguage } from './i18n/detect.js'
+import { loadLanguage } from './i18n/translate.js'
 import { initApiCache } from './lib/apiCache.js'
 import { registerServiceWorker } from './lib/serviceWorker.js'
 import { loadServerConfig } from './lib/serverConfig.js'
@@ -17,7 +19,11 @@ applyThemeFromStorage()
 
 // Saved answers load first (a few milliseconds), so pages can draw from them in their first frame.
 // Never wait more than a moment: a slow disk must not delay the app itself.
-const cacheReady = Promise.race([initApiCache(), new Promise((resolve) => setTimeout(resolve, 400))])
+// The device's language comes along, so the first frame is already in it.
+const cacheReady = Promise.race([
+	Promise.all([initApiCache(), loadLanguage(detectLanguage()).catch(() => {})]),
+	new Promise((resolve) => setTimeout(resolve, 400)),
+])
 cacheReady.catch(() => {}).finally(() => createRoot(document.getElementById('root')).render(
 	<StrictMode>
 		<ErrorBoundary>

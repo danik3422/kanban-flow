@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { LOCALES, SUPPORTED_LANGUAGES, translate, translateServerMessage } from './translate.js'
+import { LOCALES, loadLanguage, SUPPORTED_LANGUAGES, translate, translateServerMessage } from './translate.js'
+
+await Promise.all(SUPPORTED_LANGUAGES.map(loadLanguage))
 
 const PLURAL_KEYS = new Set(['zero', 'one', 'two', 'few', 'many', 'other'])
 const isPlural = (value) => value && typeof value === 'object' && Object.keys(value).every((key) => PLURAL_KEYS.has(key))

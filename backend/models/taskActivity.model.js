@@ -28,6 +28,8 @@ const taskActivitySchema = new mongoose.Schema(
 )
 
 taskActivitySchema.index({ task: 1, createdAt: -1 })
+// Comment counts on the card faces when a board opens.
+taskActivitySchema.index({ task: 1, type: 1 })
 taskActivitySchema.index({ clientId: 1 }, { sparse: true })
 
 const TaskActivity = mongoose.model('TaskActivity', taskActivitySchema)

@@ -1,9 +1,28 @@
 // Pure translation helpers, shared by the React provider and the tests.
 import en from './locales/en.js'
-import ru from './locales/ru.js'
-import uk from './locales/uk.js'
 
-export const LOCALES = { en, uk, ru }
+// English ships with the app and fills any gap; Ukrainian and Russian are separate files
+// fetched when someone uses them, so nobody downloads two languages they never read.
+export const LOCALES = { en }
+const LOADERS = {
+	uk: () => import('./locales/uk.js'),
+	ru: () => import('./locales/ru.js'),
+}
+const loading = {}
+
+export const isLanguageLoaded = (language) => Boolean(LOCALES[normalizeLanguage(language) || 'en'])
+
+/** Makes a language's messages available; resolves at once when they already are. */
+export const loadLanguage = async (language) => {
+	const lang = normalizeLanguage(language) || 'en'
+	if (LOCALES[lang]) return
+	loading[lang] ||= LOADERS[lang]().then((module) => {
+		LOCALES[lang] = module.default
+	}).finally(() => {
+		delete loading[lang]
+	})
+	await loading[lang]
+}
 export const SUPPORTED_LANGUAGES = ['en', 'uk', 'ru']
 export const LANGUAGE_NAMES = { en: 'English', uk: 'Українська', ru: 'Русский' }
 const INTL_LOCALE = { en: 'en-GB', uk: 'uk-UA', ru: 'ru-RU' }
@@ -24,7 +43,7 @@ const pickPlural = (value, language, count) => {
 
 export const translate = (language, key, vars = {}) => {
 	const lang = normalizeLanguage(language) || 'en'
-	let value = lookup(LOCALES[lang], key)
+	let value = LOCALES[lang] ? lookup(LOCALES[lang], key) : undefined
 	if (value === undefined) value = lookup(LOCALES.en, key)
 	if (value === undefined) return key
 	value = pickPlural(value, lang, vars.count)
@@ -38,7 +57,7 @@ export const intlLocale = (language) => INTL_LOCALE[normalizeLanguage(language) 
 // back to a translated generic message for unknown ones.
 export const translateServerMessage = (language, message, fallbackKey = 'auth.errors.generic') => {
 	const lang = normalizeLanguage(language) || 'en'
-	if (message && LOCALES[lang].server?.[message]) return LOCALES[lang].server[message]
+	if (message && LOCALES[lang]?.server?.[message]) return LOCALES[lang].server[message]
 	if (message && lang === 'en') return message
 	return translate(lang, fallbackKey)
 }

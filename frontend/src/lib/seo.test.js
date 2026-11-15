@@ -2,6 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { pageMetaFor, SEO_LANGUAGES, SITE_URL } from './seo.js'
+import { loadLanguage as loadTestLanguage } from '../i18n/translate.js'
+
+// Ukrainian and Russian load on demand in the app; these tests read them straight away.
+await Promise.all(['uk', 'ru'].map(loadTestLanguage))
 
 const PUBLIC_ROUTES = ['/', '/about', '/self-hosting', '/guide', '/login', '/signup']
 const ALL_ROUTES = [...PUBLIC_ROUTES, '/public/abc123', '/invite/abc123', '/no-such-page', '/workspaces', '/workspaces/b1', '/my-tasks', '/calendar', '/team', '/profile', '/settings', '/setup-profile', '/login/resetpassword', '/verify-email']

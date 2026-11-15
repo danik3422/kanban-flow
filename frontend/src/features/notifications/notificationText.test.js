@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { translate } from '../../i18n/translate.js'
 import { describeNotification } from './notificationText.js'
+import { loadLanguage as loadTestLanguage } from '../../i18n/translate.js'
+
+// Ukrainian and Russian load on demand in the app; these tests read them straight away.
+await Promise.all(['uk', 'ru'].map(loadTestLanguage))
 
 const inLanguage = (language) => (key, vars) => translate(language, key, vars)
 

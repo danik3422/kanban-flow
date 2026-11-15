@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import Board from '../models/board.model.js'
 import BoardMember from '../models/boardMember.model.js'
 import Column from '../models/column.model.js'
@@ -69,19 +70,28 @@ export const runDueReminders = async ({ now = new Date() } = {}) => {
 		'assignees.0': { $exists: true },
 	}).select('title dueDate assignees column').limit(500).lean()
 	let reminded = 0
-	const lastColumnByBoard = new Map()
+	// Lists, boards and each board's last ("done") list, read once for the whole batch.
+	const columns = await Column.find({ _id: { $in: [...new Set(tasks.map((task) => task.column.toString()))] } }).select('board').lean()
+	const columnById = new Map(columns.map((column) => [column._id.toString(), column]))
+	const boardIds = [...new Set(columns.map((column) => column.board.toString()))].map((id) => new mongoose.Types.ObjectId(id))
+	const [boards, lastColumns] = await Promise.all([
+		Board.find({ _id: { $in: boardIds } }).select('name createdBy').lean(),
+		Column.aggregate([
+			{ $match: { board: { $in: boardIds } } },
+			{ $sort: { position: -1 } },
+			{ $group: { _id: '$board', last: { $first: '$_id' } } },
+		]),
+	])
+	const boardById = new Map(boards.map((board) => [board._id.toString(), board]))
+	const lastColumnByBoard = new Map(lastColumns.map((row) => [row._id.toString(), row.last.toString()]))
 	for (const task of tasks) {
-		const column = await Column.findById(task.column).select('board').lean()
+		const column = columnById.get(task.column.toString())
 		if (!column) continue
 		const boardId = column.board.toString()
-		if (!lastColumnByBoard.has(boardId)) {
-			const last = await Column.findOne({ board: column.board }).sort({ position: -1 }).select('_id').lean()
-			lastColumnByBoard.set(boardId, last?._id.toString())
-		}
 		// Claim first, so a second server never reminds twice.
 		const claimed = await Task.findOneAndUpdate({ _id: task._id, dueReminderSentAt: null }, { $set: { dueReminderSentAt: now } })
 		if (!claimed || lastColumnByBoard.get(boardId) === task.column.toString()) continue
-		const board = await Board.findById(column.board).select('name createdBy').lean()
+		const board = boardById.get(boardId)
 		if (!board) continue
 		await notifyTaskRecipients({
 			userIds: task.assignees,

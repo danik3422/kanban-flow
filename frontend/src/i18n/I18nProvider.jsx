@@ -2,29 +2,31 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { axiosInstance } from '../lib/axios'
 import { useAuthStore } from '../store/useAuthStore'
 import { I18nContext, buildI18nValue } from './context'
-import { normalizeLanguage } from './translate'
-
-const STORAGE_KEY = 'kanban-language'
-
-const readStoredLanguage = () => {
-	try {
-		return normalizeLanguage(localStorage.getItem(STORAGE_KEY))
-	} catch {
-		return null
-	}
-}
-
-// Before sign-in: the choice made on this device, else the browser's language.
-const detectLanguage = () =>
-	readStoredLanguage() ||
-	(typeof navigator !== 'undefined' && (navigator.languages || [navigator.language]).map(normalizeLanguage).find(Boolean)) ||
-	'en'
+import { detectLanguage, LANGUAGE_STORAGE_KEY } from './detect'
+import { isLanguageLoaded, loadLanguage, normalizeLanguage } from './translate'
 
 const I18nProvider = ({ children }) => {
 	const accountLanguage = useAuthStore((state) => normalizeLanguage(state.authUser?.language))
 	const [deviceLanguage, setDeviceLanguage] = useState(detectLanguage)
 	// A signed-in account's saved language wins so it follows the user across devices.
-	const language = accountLanguage || deviceLanguage
+	const wanted = accountLanguage || deviceLanguage
+	// The language on screen: the wanted one once its messages have arrived, until then
+	// the one already showing (usually only a moment, and only on a first switch).
+	const [language, setShownLanguage] = useState(() => (isLanguageLoaded(wanted) ? wanted : 'en'))
+
+	useEffect(() => {
+		let current = true
+		loadLanguage(wanted)
+			.then(() => {
+				if (current) setShownLanguage(wanted)
+			})
+			.catch(() => {
+				// Offline before the file was ever fetched: stay in the language already showing.
+			})
+		return () => {
+			current = false
+		}
+	}, [wanted])
 
 	useEffect(() => {
 		document.documentElement.lang = language
@@ -34,7 +36,7 @@ const I18nProvider = ({ children }) => {
 		const nextLanguage = normalizeLanguage(next)
 		if (!nextLanguage) return
 		try {
-			localStorage.setItem(STORAGE_KEY, nextLanguage)
+			localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage)
 		} catch {
 			// The choice still applies for this visit.
 		}

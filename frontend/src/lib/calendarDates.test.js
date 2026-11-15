@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { addDays, monthGrid, monthTitle, weekdayNames } from './calendarDates.js'
+import { loadLanguage as loadTestLanguage } from '../i18n/translate.js'
+
+// Ukrainian and Russian load on demand in the app; these tests read them straight away.
+await Promise.all(['uk', 'ru'].map(loadTestLanguage))
 
 describe('calendar grid', () => {
 	it('starts weeks on Monday or Sunday and always shows six whole weeks', () => {
