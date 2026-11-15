@@ -2,7 +2,7 @@ import {
 	Plus,
 	Sparkles,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { intlLocale, translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 import { useI18n } from '../i18n'
@@ -347,6 +347,19 @@ const Workspace = () => {
 
 	const selectedBoardId = selectedBoard?._id
 	const selectedBoardRole = selectedBoard?.role
+	// Reloads finish after the person may have switched boards; a board's lists must never
+	// land under another board, so each answer is applied only while its board is open.
+	const openBoardIdRef = useRef(selectedBoardId)
+	useLayoutEffect(() => {
+		openBoardIdRef.current = selectedBoardId
+	}, [selectedBoardId])
+	const loadColumnsFor = useCallback(async (boardId) => {
+		if (!boardId) return false
+		const loadedColumns = await fetchColumns(boardId)
+		if (openBoardIdRef.current !== boardId) return false
+		applyLoadedColumns(loadedColumns)
+		return true
+	}, [applyLoadedColumns])
 	// Every way of switching boards (sidebar, back button, notification link) lands here.
 	// Reset during render (not in an effect) so the old board never paints under the new one.
 	const [renderedBoardId, setRenderedBoardId] = useState(selectedBoardId)
@@ -538,7 +551,7 @@ const Workspace = () => {
 
 	const { status: realtimeStatus, presence: presenceByUserId } = useBoardRealtime(selectedBoardId, {
 		onResync: () => {
-			fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+			loadColumnsFor(selectedBoardId).catch(() => {})
 		},
 		'board:access-revoked': ({ boardId: revokedBoardId, reason, boardName }) => {
 			setBoards((current) => current.filter((board) => board._id !== revokedBoardId))
@@ -597,7 +610,7 @@ const Workspace = () => {
 			setColumns((current) => applyColumnOrder(current, reorderedColumns)),
 		// Copying a list or moving all its cards changes many cards at once: reload them.
 		'board:content-changed': () => {
-			fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+			loadColumnsFor(selectedBoardId).catch(() => {})
 		},
 		// Someone changed the board's automation rules: an open rules dialog reloads them.
 		'board:rules-changed': () => setRulesVersion((version) => version + 1),
@@ -905,7 +918,7 @@ const Workspace = () => {
 	}
 
 	const reloadColumns = () => {
-		if (selectedBoardId) fetchColumns(selectedBoardId).then(applyLoadedColumns).catch(() => {})
+		loadColumnsFor(selectedBoardId).catch(() => {})
 	}
 
 	// While changes wait to be sent, the board as it looks with them is saved on this
@@ -1191,7 +1204,7 @@ const Workspace = () => {
 		} else if (type === 'copy') {
 			try {
 				await axiosInstance.post(`/board/columns/${column._id}/copy`, { title: payload })
-				applyLoadedColumns(await fetchColumns(selectedBoard._id))
+				await loadColumnsFor(selectedBoard._id)
 				toast.success(tr('columns.toast.copied', { title: payload }))
 			} catch (error) {
 				columnError(error, 'columns.errors.copy')
@@ -1199,7 +1212,7 @@ const Workspace = () => {
 		} else if (type === 'moveCards') {
 			try {
 				const { data } = await axiosInstance.post(`/board/columns/${column._id}/move-tasks`, { targetColumnId: payload })
-				applyLoadedColumns(await fetchColumns(selectedBoard._id))
+				await loadColumnsFor(selectedBoard._id)
 				const target = columns.find((item) => item._id === payload)
 				toast.success(tr('columns.toast.cardsMoved', { count: data.moved, title: target?.title || '' }))
 			} catch (error) {
