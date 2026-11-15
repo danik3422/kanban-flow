@@ -438,3 +438,8 @@ export const startAutomationJobs = () => {
 	timer.unref?.()
 	void tick()
 }
+
+export const stopAutomationJobs = () => {
+	clearInterval(timer)
+	timer = null
+}

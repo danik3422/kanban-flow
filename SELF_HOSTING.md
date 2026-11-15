@@ -223,8 +223,10 @@ Another program may use port 8080: set `PORT=8090` in `.env` and run
 including `http` or `https`. Over plain `http`, don't put `https` in `PUBLIC_URL`.
 
 **The database stops at once with "illegal instruction".** MongoDB 8 needs a
-processor with AVX. On older machines change `image: mongo:8.0` to
-`image: mongo:4.4` in `docker-compose.yml` before the first start.
+processor with AVX. On older machines, before the first start, change two lines
+of the `mongo` service in `docker-compose.yml`: `image: mongo:8.0` to
+`image: mongo:4.4`, and `"mongosh"` in the `healthcheck` to `"mongo"` (MongoDB 4.4
+has the older `mongo` shell instead of `mongosh`).
 
 **Passkeys are missing in Settings.** Browsers allow passkeys only on `https://`
 addresses and `localhost`.

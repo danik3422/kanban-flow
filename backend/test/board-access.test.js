@@ -1753,6 +1753,23 @@ describe('security and integrity hardening', () => {
 		assert.notEqual(unset.status, 0)
 		assert.match(unset.stderr, /JWT_SECRET must be configured/)
 		assert.equal(run({ NODE_ENV: 'development' }).status, 0)
+		const placeholder = run({ NODE_ENV: 'production', JWT_SECRET: 'replace-with-a-random-secret-at-least-32-characters' })
+		assert.notEqual(placeholder.status, 0, 'the example value from .env.production.example is refused')
+		assert.match(placeholder.stderr, /JWT_SECRET must be configured/)
+		assert.equal(run({ NODE_ENV: 'production', JWT_SECRET: 'q8Vt3mZ0pK7xR2wN5yL9cB4hJ6fD1sA0eG3uT7iO' }).status, 0)
+	})
+
+	it('reports unhealthy while the database is not connected', async () => {
+		assert.equal((await request(app).get('/health')).status, 200)
+		const readyState = Object.getOwnPropertyDescriptor(mongoose.connection, 'readyState')
+		Object.defineProperty(mongoose.connection, 'readyState', { configurable: true, get: () => 0 })
+		try {
+			assert.equal((await request(app).get('/health')).status, 503)
+		} finally {
+			if (readyState) Object.defineProperty(mongoose.connection, 'readyState', readyState)
+			else delete mongoose.connection.readyState
+		}
+		assert.equal((await request(app).get('/health')).status, 200)
 	})
 })
 

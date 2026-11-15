@@ -29,6 +29,8 @@ services:
         VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
     image: kanbanhub:latest
     restart: unless-stopped
+    # A tiny init process passes stop signals on, so the server shuts down cleanly.
+    init: true
     depends_on:
       mongo:
         condition: service_healthy
@@ -42,6 +44,9 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017/kanbanhub?replicaSet=rs0
       HOST_PORT: ${PORT:-8080}
+      # PORT in .env is the port on this machine; inside the container the server
+      # always listens on 5001 (the mapping above), so .env must not change it.
+      PORT: 5001
 
 volumes:
   mongo-data:

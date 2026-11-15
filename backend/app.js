@@ -4,6 +4,7 @@ import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
+import mongoose from 'mongoose'
 
 import { env } from './config/env.js'
 import { csrfProtection } from './middlewares/csrf.middleware.js'
@@ -62,7 +63,9 @@ app.use(
 	})
 )
 
+// Healthy only while the database is reachable, so Docker and hosts restart a stuck server.
 app.get('/health', (_req, res) => {
+	if (mongoose.connection.readyState !== 1) return res.status(503).json({ status: 'database unavailable' })
 	res.status(200).json({ status: 'ok' })
 })
 

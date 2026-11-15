@@ -115,3 +115,8 @@ export const startEmailJobs = () => {
 	timer.unref?.()
 	void tick()
 }
+
+export const stopEmailJobs = () => {
+	clearInterval(timer)
+	timer = null
+}

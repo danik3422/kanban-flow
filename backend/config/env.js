@@ -22,9 +22,13 @@ const readSecretFile = () => {
 const configuredJwtSecret = process.env.JWT_SECRET?.trim() || readSecretFile()
 const jwtSecret = configuredJwtSecret || (isLocalEnvironment ? 'dev-secret-change-me' : '')
 
-if (!isLocalEnvironment && configuredJwtSecret.length < 32) {
+// The example files ship a placeholder that is long enough to pass the length check;
+// a server started with it would sign invite and calendar links with a public value.
+const isPlaceholderSecret = (secret) => /replace-with|change-me|changeme|your-secret|example/i.test(secret)
+
+if (!isLocalEnvironment && (configuredJwtSecret.length < 32 || isPlaceholderSecret(configuredJwtSecret))) {
 	throw new Error(
-		'JWT_SECRET must be configured with at least 32 characters (set NODE_ENV=development for local work)',
+		'JWT_SECRET must be configured with at least 32 random characters, not the example value (set NODE_ENV=development for local work)',
 	)
 }
 
