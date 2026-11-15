@@ -100,7 +100,7 @@ export const socialSignup = async (req, res) => {
 			return res
 				.status(500)
 				.json({ message: 'Social auth is not configured on the server.' })
-		const { idToken, provider } = req.body
+		const { idToken, provider, language } = req.body
 		const decodedToken = await verifySocialProviderToken(idToken, provider)
 		const { email, name, picture } = decodedToken
 		if (!email)
@@ -132,6 +132,7 @@ export const socialSignup = async (req, res) => {
 			password: null,
 			emailVerified: true,
 			profileSetup: false,
+			...(language ? { language } : {}),
 		})
 		await startSession(req, res, user, provider)
 		return res

@@ -45,7 +45,7 @@ export const translateServerMessage = (language, message, fallbackKey = 'auth.er
 
 // For code outside React (stores, toasts): the provider keeps <html lang> in sync
 // with the active language.
-const activeLanguage = () => (typeof document === 'undefined' ? 'en' : document.documentElement.lang)
+export const activeLanguage = () => normalizeLanguage(typeof document === 'undefined' ? 'en' : document.documentElement.lang) || 'en'
 export const translateCurrent = (key, vars) => translate(activeLanguage(), key, vars)
 export const translateServerMessageCurrent = (message, fallbackKey) =>
 	translateServerMessage(activeLanguage(), message, fallbackKey)

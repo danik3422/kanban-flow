@@ -22,6 +22,11 @@ export const socialAuthSchema = z.object({
 	provider: z.enum(['google', 'microsoft', 'apple']),
 })
 
+// Sign-up with a provider also carries the language chosen on the sign-up screen.
+export const socialSignupSchema = socialAuthSchema.extend({
+	language: z.enum(['en', 'uk', 'ru']).optional(),
+})
+
 export const connectSocialSchema = socialAuthSchema.extend({
 	currentPassword: z.string().min(1).max(128).optional(),
 })

@@ -8,7 +8,7 @@ import { useBoardStats } from './useBoardStats'
 import { resetSocket } from '../lib/socketRegistry'
 import { devUser, isDevAuthBypass } from '../lib/devMode'
 import { firebaseEnabled, isFirebaseLoaded, loadFirebase } from '../lib/firebase'
-import { translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
+import { activeLanguage, translateCurrent, translateServerMessageCurrent } from '../i18n/translate'
 
 const providerName = (provider) => ({ google: 'Google', microsoft: 'Microsoft', apple: 'Apple' })[provider] || provider
 
@@ -207,7 +207,7 @@ export const useAuthStore = create((set, get) => ({
 		try {
 			const result = await firebase.signInWithPopup(firebase.auth, firebaseProvider)
 			const idToken = await result.user.getIdToken()
-			const response = await axiosInstance.post('/auth/social/signup', { idToken, provider }, { withCredentials: true })
+			const response = await axiosInstance.post('/auth/social/signup', { idToken, provider, language: activeLanguage() }, { withCredentials: true })
 			signIn(set, response.data)
 			toast.success(translateCurrent('auth.toast.socialAccountCreated'))
 			return { success: true, user: response.data }

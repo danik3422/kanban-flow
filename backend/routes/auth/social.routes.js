@@ -15,12 +15,13 @@ import {
 	disconnectSocialSchema,
 	setSocialPasswordSchema,
 	socialAuthSchema,
+	socialSignupSchema,
 } from '../../validation/auth.schemas.js'
 
 const router = express.Router()
 
 router.post('/social/login', authLimiter, validateBody(socialAuthSchema), socialSignin)
-router.post('/social/signup', authLimiter, validateBody(socialAuthSchema), socialSignup)
+router.post('/social/signup', authLimiter, validateBody(socialSignupSchema), socialSignup)
 router.post('/social/connect', verifiedAuthMiddleware, authLimiter, validateBody(connectSocialSchema), connectSocialAccount)
 router.delete('/social/:provider', verifiedAuthMiddleware, authLimiter, validateBody(disconnectSocialSchema), disconnectSocialAccount)
 router.post('/social/set-password', verifiedAuthMiddleware, authLimiter, validateBody(setSocialPasswordSchema), setSocialPassword)
