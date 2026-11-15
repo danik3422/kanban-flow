@@ -5,6 +5,7 @@ import { env } from '../../config/env.js'
 import { sendPasswordResetEmail } from '../../emails/mailer.js'
 import PasswordResetToken from '../../models/passwordResetToken.model.js'
 import User from '../../models/user.model.js'
+import { revokeCalendarToken } from '../../services/calendarFeed.service.js'
 import { endOtherSessions, renewSession } from '../../services/sessions.service.js'
 
 // Changing a password, and resetting a forgotten one by email.
@@ -39,6 +40,8 @@ export const changePassword = async (req, res) => {
 		await user.save()
 		// Other devices are signed out; this one stays signed in with a fresh cookie.
 		await endOtherSessions(user._id, req.sessionId, res)
+		// The private calendar link is a password of its own; a new password retires it too.
+		await revokeCalendarToken(user._id)
 		await renewSession(res, user, req.sessionId)
 		return res.status(200).json({ message: 'Password changed successfully' })
 	} catch (error) {
@@ -188,6 +191,7 @@ export const resetPassword = async (req, res) => {
 		user.sessionVersion = Number(user.sessionVersion || 0) + 1
 		await user.save()
 		await endOtherSessions(user._id)
+		await revokeCalendarToken(user._id)
 		await PasswordResetToken.deleteMany({
 			user: user._id,
 			_id: { $ne: claimedToken._id },

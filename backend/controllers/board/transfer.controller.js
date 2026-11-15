@@ -34,8 +34,11 @@ const plainText = (html) => String(html || '')
 	.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
 	.replace(/\n{3,}/g, '\n\n')
 	.trim()
+// Spreadsheets run a cell that starts with = + - @ as a formula; a card named
+// =HYPERLINK(...) must open as text for whoever exports the board.
 const csvCell = (value) => {
-	const text = String(value ?? '')
+	const raw = String(value ?? '')
+	const text = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
 	return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 

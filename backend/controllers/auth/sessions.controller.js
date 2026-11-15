@@ -6,6 +6,7 @@ import {
 	assertFreshProviderToken,
 	verifySocialProviderToken,
 } from '../../services/authChecks.service.js'
+import { revokeCalendarToken } from '../../services/calendarFeed.service.js'
 import { endOtherSessions, endSession, listSessions, renewSession } from '../../services/sessions.service.js'
 
 // Signed-in devices, and confirming identity again before sensitive changes.
@@ -45,6 +46,8 @@ export const signOutOtherSessions = async (req, res) => {
 		const user = await User.findByIdAndUpdate(req.user._id, { $inc: { sessionVersion: 1 } }, { returnDocument: 'after' }).select('sessionVersion')
 		if (!user) return res.status(404).json({ message: 'User not found' })
 		const count = await endOtherSessions(user._id, req.sessionId, res)
+		// Signing everyone else out also turns off the private calendar link someone may have copied.
+		await revokeCalendarToken(user._id)
 		await renewSession(res, user, req.sessionId)
 		// Only after this device has its new cookie, so it never checks with the old one.
 		res.on('finish', () => emitUserEvent(user._id.toString(), 'session:changed', {}))

@@ -302,6 +302,10 @@ export const normalizeBackground = (input, { current = null } = {}) => {
 	return background
 }
 
+// Addresses as the URL parser writes them back: quotes, spaces and line breaks come out
+// percent-encoded, so a stored picture address cannot close the CSS url("...") around it.
+const canonicalUrl = (value) => new URL(value).href
+
 const normalizeBackgroundSource = (input, current) => {
 	if (input === null) return null
 	if (input.type === 'gradient' && GRADIENT_KEYS.includes(input.key)) return { type: 'gradient', key: input.key }
@@ -323,11 +327,11 @@ const normalizeBackgroundSource = (input, current) => {
 			return {
 				type: 'photo',
 				id: input.id,
-				url: input.url,
-				thumb: input.thumb,
+				url: canonicalUrl(input.url),
+				thumb: canonicalUrl(input.thumb),
 				color: '#5b6470',
 				author: String(input.author || '').slice(0, 80),
-				authorUrl: isHttpsUrl(input.authorUrl, 'commons.wikimedia.org') ? input.authorUrl : 'https://commons.wikimedia.org',
+				authorUrl: isHttpsUrl(input.authorUrl, 'commons.wikimedia.org') ? canonicalUrl(input.authorUrl) : 'https://commons.wikimedia.org',
 				license: String(input.license || '').slice(0, 40),
 				source: 'Wikimedia Commons',
 			}
@@ -336,11 +340,11 @@ const normalizeBackgroundSource = (input, current) => {
 			return {
 				type: 'photo',
 				id: input.id,
-				url: input.url,
-				thumb: input.thumb,
+				url: canonicalUrl(input.url),
+				thumb: canonicalUrl(input.thumb),
 				color: /^#[0-9a-f]{6}$/i.test(input.color || '') ? input.color : '#5b6470',
 				author: String(input.author || '').slice(0, 80),
-				authorUrl: isUnsplashUrl(input.authorUrl, 'unsplash.com') ? input.authorUrl : 'https://unsplash.com',
+				authorUrl: isUnsplashUrl(input.authorUrl, 'unsplash.com') ? canonicalUrl(input.authorUrl) : 'https://unsplash.com',
 				source: 'Unsplash',
 			}
 		}

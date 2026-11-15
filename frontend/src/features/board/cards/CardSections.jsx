@@ -9,7 +9,7 @@ import { cx } from '../../../ui/utils'
 import { formatClock, formatDuration, parseDuration } from '../model/cardDisplay'
 import { getLocalDateKey } from '../../../lib/dueDate'
 import { relativeTime } from '../../../lib/relativeTime'
-import { assetUrl } from '../../../lib/runtimeConfig'
+import { assetUrl, cssUrl } from '../../../lib/runtimeConfig'
 
 export const SectionHead = ({ icon: Icon, title, children }) => (
 	<div className='cm-section__head'>
@@ -118,7 +118,7 @@ export const AttachmentsSection = ({ attachments, meId, canManage, onAdd, onRemo
 					const canRemove = canManage || String(item.addedBy) === String(meId)
 					return (
 						<li key={item._id} className='cm-attachment'>
-							<a className={cx('cm-attachment__thumb', item.kind === 'image' && 'is-image')} href={assetUrl(item.url)} target='_blank' rel='noopener noreferrer' style={item.kind === 'image' ? { backgroundImage: `url("${assetUrl(item.url)}")` } : undefined} aria-label={item.name || hostOf(item.url)}>
+							<a className={cx('cm-attachment__thumb', item.kind === 'image' && 'is-image')} href={assetUrl(item.url)} target='_blank' rel='noopener noreferrer' style={item.kind === 'image' ? { backgroundImage: cssUrl(item.url) } : undefined} aria-label={item.name || hostOf(item.url)}>
 								{item.kind !== 'image' && <Link2 size={18} aria-hidden='true' />}
 							</a>
 							<span className='cm-attachment__text'>

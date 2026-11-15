@@ -9,7 +9,7 @@ import { CARD_COLORS, CARD_COLOR_KEYS } from '../model/cardDisplay'
 import { describeRepeat, FREQUENCIES, nextOccurrence, weekdayChoices, weekdayOfKey } from '../model/recurrence'
 import { BackgroundSwatch } from '../../boards/backgrounds/BackgroundPicker'
 import { usePhotoSearch } from '../../boards/backgrounds/usePhotoSearch'
-import { assetUrl } from '../../../lib/runtimeConfig'
+import { cssUrl } from '../../../lib/runtimeConfig'
 import { useServerConfig } from '../../../lib/serverConfig'
 import { intlLocale, translateServerMessageCurrent } from '../../../i18n/translate'
 import { prepareBackgroundImage } from '../../boards/backgrounds/prepareBackgroundImage'
@@ -357,7 +357,7 @@ export const CoverPicker = ({ cover, images, onChange, onUpload }) => {
 					<h4 className='cp-section'>{t('card.fromAttachments')}</h4>
 					<div className='cp-photos'>
 						{images.map((image) => (
-							<button key={image._id} type='button' className={cx('cp-photo', cover?.url === image.url && 'is-selected')} style={{ backgroundImage: `url("${assetUrl(image.url)}")` }} aria-label={image.name || t('card.makeCover')} onClick={() => choose({ type: 'photo', id: `attachment-${image._id}`, url: image.url, thumb: image.url })} />
+							<button key={image._id} type='button' className={cx('cp-photo', cover?.url === image.url && 'is-selected')} style={{ backgroundImage: cssUrl(image.url) }} aria-label={image.name || t('card.makeCover')} onClick={() => choose({ type: 'photo', id: `attachment-${image._id}`, url: image.url, thumb: image.url })} />
 						))}
 					</div>
 				</>

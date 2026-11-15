@@ -155,4 +155,12 @@ describe('calendar link', () => {
 		assert.equal((await feed(token, `?board=${board._id}`)).status, 404)
 		assert.ok(!(await feed(token)).text.includes('Their card'))
 	})
+	it('turns the link off when the owner signs out every other device', async () => {
+		const { owner } = await setup()
+		const cookie = sessionCookie(owner._id)
+		const { token } = (await request(app).post('/api/calendar/link').set('Cookie', cookie).send({})).body
+		assert.equal((await feed(token)).status, 200)
+		assert.equal((await request(app).post('/api/auth/sessions/sign-out-others').set('Cookie', cookie)).status, 200)
+		assert.equal((await feed(token)).status, 404, 'a copied link stops working')
+	})
 })

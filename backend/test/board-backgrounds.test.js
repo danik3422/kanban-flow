@@ -84,6 +84,13 @@ describe('board background photos', () => {
 		assert.throws(() => normalizeBackground({ type: 'photo', id: 'picsum-../../x' }))
 	})
 
+	it('stores a photo address that cannot break out of CSS url("...")', () => {
+		const sneaky = 'https://upload.wikimedia.org/a"), url("https://evil.example/p.png'
+		const cover = normalizeBackground({ type: 'photo', id: 'commons-1', url: sneaky, thumb: sneaky })
+		assert.ok(!cover.url.includes('"') && !cover.thumb.includes('"'), cover.url)
+		assert.equal(new URL(cover.url).hostname, 'upload.wikimedia.org')
+	})
+
 	it('with a key searches all of Unsplash, any word, page by page', async () => {
 		env.unsplashAccessKey = 'test-key'
 		const calls = []

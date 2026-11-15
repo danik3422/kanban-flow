@@ -187,6 +187,9 @@ describe('export and import', () => {
 		assert.match(csv.headers['content-type'], /text\/csv/)
 		assert.ok(csv.text.includes('To do,Second,"Fix ""it"", now",Bug,,,,,,1/2,,'))
 		assert.ok(csv.text.includes('To do,First,'))
+		await Task.create({ column: (await Column.findOne({ board: board._id }))._id, title: '=HYPERLINK("https://evil.example","x")', position: 9 })
+		const guarded = await api('get', `/boards/${board._id}/export?format=csv`, owner)
+		assert.ok(guarded.text.includes(`"'=HYPERLINK(""https://evil.example"",""x"")"`), 'a formula opens as text')
 	})
 
 	it('imports a board with archived lists and cards and comments, and round-trips an export', async () => {
