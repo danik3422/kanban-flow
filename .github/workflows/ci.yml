@@ -54,3 +54,28 @@ jobs:
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
       - run: npm ci
       - run: npm test
+
+  docker:
+    name: Docker image (build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # The self-hosting image must keep building; nothing is pushed anywhere.
+      - run: docker compose config --quiet
+      - run: docker build --tag kanbanhub:ci .
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # Only what ships: known vulnerabilities at high severity or above fail the run.
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: backend
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend

@@ -175,6 +175,10 @@ docker compose up -d --build
 ```
 
 Your boards, accounts and pictures are kept in Docker volumes and survive updates.
+Back up first (see below) if you skip several versions. When a release note asks for
+a data migration, run the command it names, for example
+`docker compose exec app npm run migrate:email-frequency`; migrations are safe to run
+more than once.
 
 ## Back up and restore
 
@@ -212,6 +216,11 @@ All optional, in `.env` (see `.env.example`):
 | `CLOUDINARY_*` | — | Store pictures in Cloudinary instead of the server |
 | `VITE_FIREBASE_*`, `FIREBASE_SERVICE_ACCOUNT` | — | Google, Microsoft and Apple sign-in (needs internet) |
 | `JWT_SECRET` | created on first start | The key sessions are signed with, kept in `app-data` |
+| `MAIL_REPLY_TO` | — | Where replies to KanbanHub emails go |
+| `UNSPLASH_ACCESS_KEY` | — | With a key, background search covers all of Unsplash |
+| `UPLOAD_LIMIT_PER_HOUR` | `100` | Pictures one person may upload in an hour |
+| `PASSWORD_RESET_MINUTES` | `30` | How long a password reset link works |
+| `EMAIL_VERIFICATION_MINUTES` | `60` | How long an email confirmation link works |
 
 ## Troubleshooting
 
