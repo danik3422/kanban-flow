@@ -7,6 +7,7 @@ import { axiosInstance } from '../../lib/axios'
 import { isDevAuthBypass } from '../../lib/devMode'
 import { Alert, Button, Checkbox, ConfirmDialog, Input, Modal, SegmentedControl, Skeleton } from '../../ui'
 import { feedUrl, googleCalendarUrl, isLocalAddress, outlookCalendarUrl, webcalUrl } from './calendarFeedUrls'
+import { copyToClipboard } from '../../lib/clipboard'
 import './calendar-link.css'
 
 /**
@@ -79,7 +80,7 @@ export const CalendarLink = ({ board = null }) => {
 	const local = isLocalAddress(url)
 	const copy = async () => {
 		try {
-			await navigator.clipboard.writeText(url)
+			await copyToClipboard(url)
 			setCopied(true)
 			window.setTimeout(() => setCopied(false), 1600)
 		} catch {

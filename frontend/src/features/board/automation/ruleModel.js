@@ -17,7 +17,12 @@ export const listRequired = (triggerType) => LIST_REQUIRED.has(triggerType)
 const idOf = (value) => (value && typeof value === 'object' ? String(value._id) : value ? String(value) : '')
 
 /** A new action of a type, with sensible first choices from the board. */
-export const blankAction = (type, { columns = [], labels = [] } = {}) => {
+// Each action in the editor gets its own key for React: actions can be moved and removed,
+// so their place in the list is not who they are. toPayload never sends it.
+let actionKeys = 0
+export const blankAction = (type, board) => ({ ...blankActionFields(type, board), key: `action-${++actionKeys}` })
+
+const blankActionFields = (type, { columns = [], labels = [] } = {}) => {
 	const first = columns[0]?._id || ''
 	const last = columns.at(-1)?._id || ''
 	switch (type) {

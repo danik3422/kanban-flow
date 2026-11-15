@@ -25,7 +25,8 @@ const useTaskActions = ({ setTasks, onChanged }) => {
 	const updateTask = async (task, changes, optimistic) => {
 		setTasks((current) => current.map((item) => (item._id === task._id ? { ...item, ...optimistic } : item)))
 		try {
-			await axiosInstance.patch(`/board/tasks/${task._id}`, changes)
+			// Without a connection the change waits on this device, as it does on the board.
+			await axiosInstance.patch(`/board/tasks/${task._id}`, changes, { offline: { response: { ...task, ...changes, pending: true } } })
 			return true
 		} catch (error) {
 			setTasks((current) => current.map((item) => (item._id === task._id ? task : item)))

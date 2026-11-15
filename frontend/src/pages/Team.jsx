@@ -16,6 +16,7 @@ import { Avatar, Badge, Button, EmptyState, IconButton, Input, Menu, PageHeader,
 import { cx } from '../ui/utils'
 import { boardToneFor } from '../features/boards/boardTone'
 import { peekCache } from '../lib/apiCache'
+import { copyToClipboard } from '../lib/clipboard'
 
 const SORTS = ['name', 'open', 'overdue']
 const MANAGES = ['owner', 'admin']
@@ -116,7 +117,7 @@ const Team = () => {
 
 	const copyEmail = async (email) => {
 		try {
-			await navigator.clipboard.writeText(email)
+			await copyToClipboard(email)
 			toast.success(t('team.emailCopied'))
 		} catch {
 			toast.error(t('team.copyError'))

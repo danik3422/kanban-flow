@@ -234,7 +234,7 @@ const RuleEditor = ({ draft, setDraft, board, problems, showProblems, timezone }
 				<h3 className='am-block__title' id='am-then'><span className='am-block__badge am-block__badge--then'>{t('automation.then')}</span></h3>
 				<ol className='am-actions'>
 					{draft.actions.map((action, index) => (
-						<li key={index} className={cx('am-action', showProblems && problems[index] && 'has-error')}>
+						<li key={action.key || index} className={cx('am-action', showProblems && problems[index] && 'has-error')}>
 							<div className='am-action__head'>
 								<span className='am-action__number' aria-hidden='true'>{index + 1}</span>
 								<Select

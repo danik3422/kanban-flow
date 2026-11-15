@@ -17,6 +17,7 @@ import { Alert, Avatar, Button, Field, Input, Skeleton } from '../ui'
 import { startPagePath } from '../lib/preferences'
 import { canAutoFocusTyping } from '../lib/autoFocus'
 import { useServerConfig } from '../lib/serverConfig'
+import { copyToClipboard } from '../lib/clipboard'
 
 
 const PENDING_INVITE_KEY = 'kanban-pending-invite'
@@ -150,7 +151,7 @@ const BoardInvite = () => {
 
 	const copyLink = async () => {
 		try {
-			await navigator.clipboard.writeText(window.location.href)
+			await copyToClipboard(window.location.href)
 			toast.success(t('invite.copied'))
 		} catch {
 			toast.error(t('invite.joinError'))

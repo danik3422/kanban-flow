@@ -76,6 +76,7 @@ import {
 } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
 import { shortcutKey } from '../lib/shortcutKey'
+import { copyToClipboard } from '../lib/clipboard'
 
 const getSortStorageKey = (boardId, userId = 'anonymous') =>
 	`kanban-column-sorts:${userId}:${boardId}`
@@ -263,6 +264,8 @@ const Workspace = () => {
 	}, [columns])
 
 	useEffect(() => {
+		// Switching boards quickly starts several loads; only the latest one may act.
+		let isCurrent = true
 		const loadBoards = async () => {
 			if (isDevAuthBypass) {
 				let storedBoards = []
@@ -292,6 +295,7 @@ const Workspace = () => {
 				if (boardId && !data.some((board) => board._id === boardId)) {
 					data = await fetchBoardsWithCache(authUser?._id, { fresh: true })
 				}
+				if (!isCurrent) return
 				setBoards(data)
 				const nextBoard = boardId
 					? data.find((board) => board._id === boardId)
@@ -309,6 +313,7 @@ const Workspace = () => {
 					hasRevalidatedBoardsRef.current = true
 					fetchBoardsWithCache(authUser?._id, { fresh: true })
 						.then((freshBoards) => {
+							if (!isCurrent) return
 							setBoards(freshBoards)
 							setSelectedBoard((current) => {
 								if (!current) return current
@@ -319,14 +324,17 @@ const Workspace = () => {
 						.catch(() => {})
 				}
 			} catch (error) {
-				if (error.response?.status !== 404) {
+				if (isCurrent && error.response?.status !== 404) {
 					toast.error(translateServerMessageCurrent(error.response?.data?.message, 'workspace.loadBoardsError'))
 				}
 			} finally {
-				setIsLoading(false)
+				if (isCurrent) setIsLoading(false)
 			}
 		}
 		loadBoards()
+		return () => {
+			isCurrent = false
+		}
 	}, [authUser?._id, boardId, navigate])
 
 	// Keyed by id: renames and realtime board updates replace the object but not the content.
@@ -787,21 +795,6 @@ const Workspace = () => {
 		})
 	}, [location.state, location.pathname, navigate])
 
-	const copyInviteUrl = async (url) => {
-		if (navigator.clipboard?.writeText) {
-			await navigator.clipboard.writeText(url)
-			return
-		}
-		const textArea = document.createElement('textarea')
-		textArea.value = url
-		textArea.style.position = 'fixed'
-		textArea.style.opacity = '0'
-		document.body.appendChild(textArea)
-		textArea.select()
-		document.execCommand('copy')
-		textArea.remove()
-	}
-
 	const loadInviteLink = async (board = selectedBoard) => {
 		if (!board || isDevAuthBypass) return
 		try {
@@ -812,13 +805,17 @@ const Workspace = () => {
 		}
 	}
 
+	// The share links depend on who may manage the board, not on its name, labels or
+	// background; those change often and must not refetch the links each time.
+	const shareBoardId = selectedBoard?._id
+	const canManageShare = selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
+	const shareVisibility = selectedBoard?.visibility
+
 	useEffect(() => {
-		if (!selectedBoard || isDevAuthBypass) return undefined
-		const canManage = selectedBoard.access === 'owned' || selectedBoard.role === 'admin'
-		if (!canManage) return undefined
+		if (!shareBoardId || isDevAuthBypass || !canManageShare) return undefined
 		let isCurrent = true
 		axiosInstance
-			.get(`/board/boards/${selectedBoard._id}/invites/link`)
+			.get(`/board/boards/${shareBoardId}/invites/link`)
 			.then(({ data }) => {
 				if (isCurrent) setInviteLink(data)
 			})
@@ -828,17 +825,13 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [selectedBoard, authUser?._id])
+	}, [shareBoardId, canManageShare, authUser?._id])
 
 	useEffect(() => {
-		if (!selectedBoard || selectedBoard.visibility !== 'public' || isDevAuthBypass) {
-			return undefined
-		}
-		const canManage = selectedBoard.access === 'owned' || selectedBoard.role === 'admin'
-		if (!canManage) return undefined
+		if (!shareBoardId || shareVisibility !== 'public' || isDevAuthBypass || !canManageShare) return undefined
 		let isCurrent = true
 		axiosInstance
-			.get(`/board/boards/${selectedBoard._id}/public-link`)
+			.get(`/board/boards/${shareBoardId}/public-link`)
 			.then(({ data }) => {
 				if (isCurrent) setPublicBoardLink(data.publicUrl)
 			})
@@ -848,7 +841,7 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [selectedBoard, authUser?._id])
+	}, [shareBoardId, shareVisibility, canManageShare, authUser?._id])
 
 	// Becoming owner is confirmed in the share dialog before this runs.
 	const updateMemberRole = async (memberId, role) => {
@@ -933,17 +926,22 @@ const Workspace = () => {
 	}, [columns, pendingChanges, selectedBoardId])
 
 	// Once everything kept offline has reached the server, show the board as the server has it.
-	useEffect(() => {
-		const handleSynced = (event) => {
+	// Subscribed once; the handler reads this render's board and language through the ref.
+	const handleSyncedRef = useRef(null)
+	useLayoutEffect(() => {
+		handleSyncedRef.current = (event) => {
 			const { sent, failed, realIds } = event.detail || {}
 			reloadColumns()
 			setTaskDetails((current) => (current && realIds?.[current._id] ? { ...current, _id: realIds[current._id] } : current))
 			if (failed) toast.error(tr('offline.syncedSome', { count: failed }))
 			else if (sent) toast.success(tr('offline.synced', { count: sent }))
 		}
+	})
+	useEffect(() => {
+		const handleSynced = (event) => handleSyncedRef.current?.(event)
 		window.addEventListener('kh:outbox-synced', handleSynced)
 		return () => window.removeEventListener('kh:outbox-synced', handleSynced)
-	})
+	}, [])
 
 	// Archiving takes a card or list off the board without losing it; the toast can undo it.
 	const restoreArchived = async (path, message) => {
@@ -1290,6 +1288,7 @@ const Workspace = () => {
 	const plannerShown = isPhone ? phoneView === 'planner' : plannerLayout.open
 	const boardShown = isPhone ? phoneView !== 'planner' : !plannerShown || plannerLayout.board
 	const mainView = isPhone ? (phoneView === 'table' ? 'table' : 'board') : plannerLayout.view
+	const stopPlannerResizeRef = useRef(null)
 	const startPlannerResize = (event) => {
 		event.preventDefault()
 		const startX = event.clientX
@@ -1303,10 +1302,16 @@ const Workspace = () => {
 			document.body.classList.remove('is-resizing-planner')
 			window.removeEventListener('pointermove', move)
 			window.removeEventListener('pointerup', stop)
+			window.removeEventListener('pointercancel', stop)
+			stopPlannerResizeRef.current = null
 		}
+		stopPlannerResizeRef.current = stop
 		window.addEventListener('pointermove', move)
 		window.addEventListener('pointerup', stop)
+		window.addEventListener('pointercancel', stop)
 	}
+	// Leaving the page in the middle of a resize must not leave the listeners behind.
+	useEffect(() => () => stopPlannerResizeRef.current?.(), [])
 	const openSwitcher = useCallback(() => setIsSwitcherOpen(true), [])
 
 	const startColumnDrag = (event, column) => {
@@ -1434,7 +1439,7 @@ const Workspace = () => {
 
 	const copyText = async (text, message) => {
 		try {
-			await copyInviteUrl(text)
+			await copyToClipboard(text)
 			toast.success(message)
 		} catch {
 			toast.error(tr('auth.errors.generic'))
@@ -1461,7 +1466,8 @@ const Workspace = () => {
 			}
 		}
 		if (invited) {
-			await reloadInvites()
+			// The invites exist either way; a failed refresh of the list must not leave the dialog busy.
+			await reloadInvites().catch(() => {})
 			toast.success(invited === 1 && emails.length === 1 ? tr('boardHeader.sent', { email: emails[0] }) : tr('boardHeader.invitedMany', { count: invited }))
 			if (notEmailed) toast.warning(tr('boardHeader.sentNoEmail'))
 		}
@@ -1508,7 +1514,7 @@ const Workspace = () => {
 	const createInviteLink = async () => {
 		try {
 			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email: '', role: 'member' })
-			await copyInviteUrl(data.inviteUrl)
+			await copyToClipboard(data.inviteUrl)
 			await loadInviteLink()
 			toast.success(tr('boardHeader.linkCreated'))
 		} catch (error) {
@@ -1640,22 +1646,24 @@ const Workspace = () => {
 
 	/** Move a card (drag, list menu, Move panel) and save the new order of both lists. */
 	const moveCard = async (taskId, columnId, index) => {
-		if (!selectedBoard || isSamePlace(columns, taskId, columnId, index)) return
+		if (!selectedBoard || isSamePlace(columns, taskId, columnId, index)) return false
 		const previous = columns
 		const previousSorts = columnSortBy
 		const sourceId = columns.find((column) => column.tasks.some((task) => task._id === taskId))?._id
 		const next = moveCardInColumns(columns, taskId, columnId, index).map((column) => (column._id === columnId || column._id === sourceId ? { ...column, sortBy: 'custom' } : column))
 		setColumns(next)
 		setColumnSortBy((current) => ({ ...current, [columnId]: 'custom', ...(sourceId && { [sourceId]: 'custom' }) }))
-		if (isDevAuthBypass) return
+		if (isDevAuthBypass) return true
 		try {
 			await axiosInstance.patch(`/board/boards/${selectedBoard._id}/tasks/reorder`, {
 				columns: [...new Set([sourceId, columnId])].filter(Boolean).map((id) => ({ columnId: id, taskIds: next.find((column) => column._id === id)?.tasks.map((task) => task._id) || [] })),
 			}, { offline: { response: {} } })
+			return true
 		} catch (error) {
 			setColumns(previous)
 			setColumnSortBy(previousSorts)
 			cardError(error)
+			return false
 		}
 	}
 
@@ -1678,7 +1686,10 @@ const Workspace = () => {
 			if (nextInSeries) toast.success(tr('repeat.created', { date: formatDueDate(nextInSeries.dueDate, { weekday: 'short', day: 'numeric', month: 'short' }, intlLocale(language)) }))
 			return saved
 		} catch (error) {
-			setColumns((current) => replaceTask(current, task))
+			// Put back only what this change touched: anything else that arrived meanwhile
+			// (a teammate's edit, a live update) stays.
+			const revert = Object.fromEntries(Object.keys(optimistic).map((key) => [key, task[key]]))
+			setColumns((current) => replaceTask(current, { ...revert, _id: task._id }))
 			cardError(error)
 			return null
 		}
@@ -2121,9 +2132,8 @@ const Workspace = () => {
 					commentsVersion={commentsVersion}
 					onClose={() => setTaskDetails(null)}
 					onPatch={(fields, options) => patchTask(openTask, fields, options)}
-					onMove={(columnId, index) => {
-						moveCard(openTask._id, columnId, index)
-						toast.success(tr('card.moved'))
+					onMove={async (columnId, index) => {
+						if (await moveCard(openTask._id, columnId, index)) toast.success(tr('card.moved'))
 					}}
 					onCopy={(payload) => copyCard(openTask, payload)}
 					onDelete={() => deleteTask(openTask._id)}

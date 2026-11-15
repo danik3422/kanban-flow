@@ -2,6 +2,7 @@ import { Check, Copy, Info, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useI18n } from '../../i18n'
 import { cx } from '../../ui/utils'
+import { copyToClipboard } from '../../lib/clipboard'
 
 /** Text with `code` in backticks, as the guide's translations write it. */
 export const Rich = ({ text, as: Tag = 'p', className }) => (
@@ -19,7 +20,7 @@ export const CodeBlock = ({ code, label, kind = 'shell', className }) => {
 	const [copied, setCopied] = useState(false)
 	const copy = async () => {
 		try {
-			await navigator.clipboard.writeText(code)
+			await copyToClipboard(code)
 			setCopied(true)
 			window.setTimeout(() => setCopied(false), 1600)
 		} catch {
