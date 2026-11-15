@@ -102,3 +102,15 @@ export const devColumns = [
 		],
 	},
 ]
+
+// Dev mode has no server: list sorts are kept in this browser, per person and board.
+const devSortKey = (boardId, userId = 'anonymous') => `kanban-column-sorts:${userId}:${boardId}`
+export const saveDevColumnSort = (boardId, userId, columnId, sortType) => {
+	let sorts = {}
+	try {
+		sorts = JSON.parse(localStorage.getItem(devSortKey(boardId, userId)) || '{}')
+	} catch {
+		// A broken saved value starts over.
+	}
+	localStorage.setItem(devSortKey(boardId, userId), JSON.stringify({ ...sorts, [columnId]: sortType }))
+}

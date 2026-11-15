@@ -34,12 +34,15 @@ import BoardFilter from '../features/board/header/BoardFilter'
 import ArchiveDialog from '../features/board/header/ArchiveDialog'
 import BoardMenu from '../features/board/header/BoardMenu'
 import ShareDialog from '../features/board/header/ShareDialog'
+import useBoardSharing from '../features/board/sharing/useBoardSharing'
 import ShortcutsDialog from '../features/board/header/ShortcutsDialog'
 import { CalendarLinkDialog } from '../features/calendar/CalendarLink'
 import AutomationDialog from '../features/board/automation/AutomationDialog'
 import { activeFilterCount, boardLabels, EMPTY_FILTER, isFilterActive, matchesCardFilter } from '../features/board/model/cardFilter'
 import CardModal from '../features/board/cards/CardModal'
 import CardTile from '../features/board/cards/CardTile'
+import useBoardLayout from '../features/board/hooks/useBoardLayout'
+import useBoardShortcuts from '../features/board/hooks/useBoardShortcuts'
 import useCardDrag from '../features/board/hooks/useCardDrag'
 import useFlipCards from '../features/board/hooks/useFlipCards'
 import { allLabels } from '../features/board/model/cardDisplay'
@@ -73,30 +76,9 @@ import {
 	devBoardMembers,
 	devColumns,
 	isDevAuthBypass,
+	saveDevColumnSort,
 } from '../lib/devMode'
 import { useAuthStore } from '../store/useAuthStore'
-import { shortcutKey } from '../lib/shortcutKey'
-import { copyToClipboard } from '../lib/clipboard'
-
-const getSortStorageKey = (boardId, userId = 'anonymous') =>
-	`kanban-column-sorts:${userId}:${boardId}`
-
-const readLocalSorts = (boardId, userId) => {
-	try {
-		return JSON.parse(
-			localStorage.getItem(getSortStorageKey(boardId, userId)) || '{}',
-		)
-	} catch {
-		localStorage.removeItem(getSortStorageKey(boardId, userId))
-		return {}
-	}
-}
-
-const saveLocalSorts = (boardId, userId, sorts) => {
-	localStorage.setItem(getSortStorageKey(boardId, userId), JSON.stringify(sorts))
-}
-
-
 
 const fetchColumns = async (boardId) => {
 	const { data } = await axiosInstance.get(`/board/boards/${boardId}/content`)
@@ -110,19 +92,6 @@ const sortByOf = (columns) => Object.fromEntries(columns.map((column) => [column
 
 // One empty list for every render, so memoised cards see the same value.
 const NO_LABELS = []
-
-const PLANNER_KEY = 'kh:planner'
-const PHONE_VIEW_KEY = 'kh:phone-view'
-const PLANNER_MIN = 300
-const PLANNER_MAX = 560
-const readPlannerLayout = () => {
-	try {
-		const saved = JSON.parse(localStorage.getItem(PLANNER_KEY) || '{}')
-		return { open: Boolean(saved.open), board: saved.board !== false, view: saved.view === 'table' ? 'table' : 'board', width: Math.min(Math.max(Number(saved.width) || 360, PLANNER_MIN), PLANNER_MAX) }
-	} catch {
-		return { open: false, board: true, view: 'board', width: 360 }
-	}
-}
 
 const Workspace = () => {
 	const { authUser } = useAuthStore()
@@ -174,10 +143,6 @@ const Workspace = () => {
 	const [isBackgroundOpen, setIsBackgroundOpen] = useState(false)
 	const [isSubmittingBoard, setIsSubmittingBoard] = useState(false)
 	const [createBoardError, setCreateBoardError] = useState('')
-	const [boardMemberRecords, setBoardMemberRecords] = useState([])
-	const [boardInvites, setBoardInvites] = useState([])
-	const [inviteLink, setInviteLink] = useState(null)
-	const [publicBoardLink, setPublicBoardLink] = useState('')
 	const [boardActivities, setBoardActivities] = useState([])
 	const [isActivityLoading, setIsActivityLoading] = useState(false)
 	const [draggedColumn, setDraggedColumn] = useState(null)
@@ -201,6 +166,36 @@ const Workspace = () => {
 	const [isSwitcherOpen, setIsSwitcherOpen] = useState(false)
 	const [collapsedColumnIds, setCollapsedColumnIds] = useState([])
 	const isPhone = useIsPhone()
+	// Members, invites, the invite and view links of the open board, and their actions.
+	const {
+		members: boardMemberRecords,
+		setMembers: setBoardMemberRecords,
+		invites: boardInvites,
+		setInvites: setBoardInvites,
+		inviteLink,
+		setInviteLink,
+		publicLink: publicBoardLink,
+		setPublicLink: setPublicBoardLink,
+		suggestions: shareSuggestions,
+		copyText,
+		inviteByEmail,
+		resendInvite,
+		copyInviteFor,
+		cancelInvite,
+		createInviteLink,
+		turnOffInviteLink,
+		createViewLink,
+		turnOffViewLink,
+		changeMemberRole,
+		removeMember,
+	} = useBoardSharing({
+		board: selectedBoard,
+		authUserId: authUser?._id,
+		canManage: Boolean(selectedBoard) && (selectedBoard.createdBy === authUser?._id || selectedBoard.role === 'admin'),
+		isShareOpen: isInviteOpen,
+		setBoards,
+		setSelectedBoard,
+	})
 	// The board whose lists are on screen (from the server or this visit's cache).
 	const [loadedBoardId, setLoadedBoardId] = useState(null)
 	const isBoardContentLoading = isLoading || Boolean(
@@ -335,7 +330,7 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [authUser?._id, boardId, navigate])
+	}, [authUser?._id, boardId, navigate, setBoardInvites, setBoardMemberRecords])
 
 	// Keyed by id: renames and realtime board updates replace the object but not the content.
 	// Creating, renaming, leaving or deleting boards edits this list; keep other pages' cache in step.
@@ -659,7 +654,7 @@ const Workspace = () => {
 		return () => {
 			isCurrent = false
 		}
-	}, [selectedBoardId, selectedBoardRole])
+	}, [selectedBoardId, selectedBoardRole, setBoardInvites, setBoardMemberRecords])
 
 	const createBoard = async (event) => {
 		event?.preventDefault()
@@ -794,104 +789,6 @@ const Workspace = () => {
 			navigate(location.pathname, { replace: true, state: null })
 		})
 	}, [location.state, location.pathname, navigate])
-
-	const loadInviteLink = async (board = selectedBoard) => {
-		if (!board || isDevAuthBypass) return
-		try {
-			const { data } = await axiosInstance.get(`/board/boards/${board._id}/invites/link`)
-			setInviteLink(data)
-		} catch (error) {
-			if (error.response?.status === 404) setInviteLink(null)
-		}
-	}
-
-	// The share links depend on who may manage the board, not on its name, labels or
-	// background; those change often and must not refetch the links each time.
-	const shareBoardId = selectedBoard?._id
-	const canManageShare = selectedBoard?.access === 'owned' || selectedBoard?.role === 'admin'
-	const shareVisibility = selectedBoard?.visibility
-
-	useEffect(() => {
-		if (!shareBoardId || isDevAuthBypass || !canManageShare) return undefined
-		let isCurrent = true
-		axiosInstance
-			.get(`/board/boards/${shareBoardId}/invites/link`)
-			.then(({ data }) => {
-				if (isCurrent) setInviteLink(data)
-			})
-			.catch((error) => {
-				if (isCurrent && error.response?.status === 404) setInviteLink(null)
-			})
-		return () => {
-			isCurrent = false
-		}
-	}, [shareBoardId, canManageShare, authUser?._id])
-
-	useEffect(() => {
-		if (!shareBoardId || shareVisibility !== 'public' || isDevAuthBypass || !canManageShare) return undefined
-		let isCurrent = true
-		axiosInstance
-			.get(`/board/boards/${shareBoardId}/public-link`)
-			.then(({ data }) => {
-				if (isCurrent) setPublicBoardLink(data.publicUrl)
-			})
-			.catch((error) => {
-				if (isCurrent && error.response?.status === 404) setPublicBoardLink('')
-			})
-		return () => {
-			isCurrent = false
-		}
-	}, [shareBoardId, shareVisibility, canManageShare, authUser?._id])
-
-	// Becoming owner is confirmed in the share dialog before this runs.
-	const updateMemberRole = async (memberId, role) => {
-		if (isDevAuthBypass) {
-			setBoardMemberRecords((current) =>
-				current.map((member) =>
-					member._id === memberId ? { ...member, role } : member,
-				),
-			)
-			toast.success(translateCurrent('workspace.memberRoleUpdated'))
-			return
-		}
-		try {
-			const { data } = await axiosInstance.patch(
-				`/board/boards/${selectedBoard._id}/members/${memberId}`,
-				{ role },
-			)
-			if (data.ownershipTransferred) {
-				setBoardMemberRecords((current) =>
-					current.map((member) =>
-						member._id === memberId
-							? data
-							: member.user?._id === authUser?._id
-								? { ...member, role: 'admin' }
-								: member,
-					),
-				)
-				setBoards((current) =>
-					current.map((board) =>
-						board._id === selectedBoard._id
-							? { ...board, createdBy: data.boardOwnerId, access: 'invited', role: 'admin' }
-							: board,
-					),
-				)
-				setSelectedBoard((current) =>
-					current
-						? { ...current, createdBy: data.boardOwnerId, access: 'invited', role: 'admin' }
-						: current,
-				)
-				toast.success(tr('boardHeader.transferred'))
-			} else {
-				setBoardMemberRecords((current) =>
-					current.map((member) => (member._id === memberId ? data : member)),
-				)
-				toast.success(tr('boardHeader.roleChanged'))
-			}
-		} catch (error) {
-			toast.error(translateServerMessageCurrent(error.response?.data?.message, 'auth.errors.generic'))
-		}
-	}
 
 	const openOverviewBoard = (board) => selectBoard(board)
 
@@ -1040,10 +937,7 @@ const Workspace = () => {
 		)
 		setColumnSortBy((prev) => ({ ...prev, [columnId]: sortType }))
 		if (isDevAuthBypass) {
-			saveLocalSorts(selectedBoard._id, authUser?._id, {
-				...readLocalSorts(selectedBoard._id, authUser?._id),
-				[columnId]: sortType,
-			})
+			saveDevColumnSort(selectedBoard._id, authUser?._id, columnId, sortType)
 			toast.success(translateCurrent('workspace.tasksSorted'))
 			return
 		}
@@ -1222,96 +1116,10 @@ const Workspace = () => {
 		}
 	}
 
-	// The planner sits beside the board; hiding the board leaves it full width. Phones,
-	// which have no room for both, open the calendar page instead.
-	const [plannerLayout, setPlannerLayout] = useState(readPlannerLayout)
+	// The planner beside the board, the board or the table, and the one view phones show.
+	const { plannerWidth, phoneView, choosePhoneView, togglePlanner, toggleBoard, toggleTable, startPlannerResize, plannerShown, boardShown, mainView } = useBoardLayout({ isPhone, onShortcuts: () => setIsShortcutsOpen(true) })
 	// Spoken by screen readers after keyboard moves and planner drops.
 	const [announcement, setAnnouncement] = useState('')
-	useEffect(() => {
-		try {
-			localStorage.setItem(PLANNER_KEY, JSON.stringify(plannerLayout))
-		} catch {
-			// Only a preference.
-		}
-	}, [plannerLayout])
-	// Phones show one view at a time: the board, the table or the planner.
-	const [phoneView, setPhoneView] = useState(() => {
-		try {
-			return ['table', 'planner'].includes(localStorage.getItem(PHONE_VIEW_KEY)) ? localStorage.getItem(PHONE_VIEW_KEY) : 'board'
-		} catch {
-			return 'board'
-		}
-	})
-	const choosePhoneView = useCallback((view) => {
-		setPhoneView(view)
-		try {
-			localStorage.setItem(PHONE_VIEW_KEY, view)
-		} catch {
-			// Only a preference.
-		}
-	}, [])
-	const togglePlanner = useCallback(() => {
-		if (isPhone) {
-			choosePhoneView(phoneView === 'planner' ? 'board' : 'planner')
-			return
-		}
-		setPlannerLayout((current) => (current.open ? { ...current, open: false, board: true } : { ...current, open: true }))
-	}, [isPhone, phoneView, choosePhoneView])
-	// The board or the table fills the main area; it can be hidden only while the planner
-	// is open, so one of them always shows. Switching to the other view shows it.
-	const showMainView = useCallback((view) => {
-		setPlannerLayout((current) => {
-			if (current.view !== view) return { ...current, view, board: true }
-			return !current.board ? { ...current, board: true } : current.open ? { ...current, board: false } : current
-		})
-	}, [])
-	const toggleBoard = useCallback(() => showMainView('board'), [showMainView])
-	const toggleTable = useCallback(() => {
-		if (!isPhone) showMainView('table')
-	}, [isPhone, showMainView])
-	// Tips (the light bulb in the top bar) can open the planner, the table or the shortcuts.
-	useEffect(() => {
-		const handleView = (event) => {
-			const view = event.detail
-			if (isPhone) choosePhoneView(view)
-			else if (view === 'planner') setPlannerLayout((current) => ({ ...current, open: true }))
-			else setPlannerLayout((current) => ({ ...current, view, board: true }))
-		}
-		const handleShortcuts = () => setIsShortcutsOpen(true)
-		window.addEventListener('kh:board-view', handleView)
-		window.addEventListener('kh:shortcuts', handleShortcuts)
-		return () => {
-			window.removeEventListener('kh:board-view', handleView)
-			window.removeEventListener('kh:shortcuts', handleShortcuts)
-		}
-	}, [isPhone, choosePhoneView])
-	const plannerShown = isPhone ? phoneView === 'planner' : plannerLayout.open
-	const boardShown = isPhone ? phoneView !== 'planner' : !plannerShown || plannerLayout.board
-	const mainView = isPhone ? (phoneView === 'table' ? 'table' : 'board') : plannerLayout.view
-	const stopPlannerResizeRef = useRef(null)
-	const startPlannerResize = (event) => {
-		event.preventDefault()
-		const startX = event.clientX
-		const startWidth = plannerLayout.width
-		document.body.classList.add('is-resizing-planner')
-		const move = (moveEvent) => {
-			const width = Math.round(Math.min(Math.max(startWidth + moveEvent.clientX - startX, PLANNER_MIN), Math.min(PLANNER_MAX, window.innerWidth * 0.6)))
-			setPlannerLayout((current) => (current.width === width ? current : { ...current, width }))
-		}
-		const stop = () => {
-			document.body.classList.remove('is-resizing-planner')
-			window.removeEventListener('pointermove', move)
-			window.removeEventListener('pointerup', stop)
-			window.removeEventListener('pointercancel', stop)
-			stopPlannerResizeRef.current = null
-		}
-		stopPlannerResizeRef.current = stop
-		window.addEventListener('pointermove', move)
-		window.addEventListener('pointerup', stop)
-		window.addEventListener('pointercancel', stop)
-	}
-	// Leaving the page in the middle of a resize must not leave the listeners behind.
-	useEffect(() => () => stopPlannerResizeRef.current?.(), [])
 	const openSwitcher = useCallback(() => setIsSwitcherOpen(true), [])
 
 	const startColumnDrag = (event, column) => {
@@ -1435,141 +1243,6 @@ const Workspace = () => {
 	const changeVisibility = (visibility) => {
 		if (visibility === 'public') setPendingVisibility('public')
 		else void applyVisibility(visibility)
-	}
-
-	const copyText = async (text, message) => {
-		try {
-			await copyToClipboard(text)
-			toast.success(message)
-		} catch {
-			toast.error(tr('auth.errors.generic'))
-		}
-	}
-
-	const reloadInvites = async () => {
-		const { data } = await axiosInstance.get(`/board/boards/${selectedBoard._id}/invites`)
-		setBoardInvites(data)
-	}
-	// Invites everyone listed; returns the addresses that could not be invited.
-	const inviteByEmail = async (emails, role) => {
-		const failed = []
-		let invited = 0
-		let notEmailed = 0
-		for (const email of emails) {
-			try {
-				const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email, role })
-				invited += 1
-				if (!data.emailSent) notEmailed += 1
-			} catch (error) {
-				failed.push(email)
-				toast.error(`${email}: ${translateServerMessageCurrent(error.response?.data?.message, 'boardHeader.inviteError')}`)
-			}
-		}
-		if (invited) {
-			// The invites exist either way; a failed refresh of the list must not leave the dialog busy.
-			await reloadInvites().catch(() => {})
-			toast.success(invited === 1 && emails.length === 1 ? tr('boardHeader.sent', { email: emails[0] }) : tr('boardHeader.invitedMany', { count: invited }))
-			if (notEmailed) toast.warning(tr('boardHeader.sentNoEmail'))
-		}
-		return failed
-	}
-	const resendInvite = async (invite) => {
-		try {
-			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites/${invite._id}/resend`)
-			await reloadInvites()
-			if (data.emailSent) toast.success(tr('boardHeader.resent', { email: invite.email }))
-			else toast.warning(tr('boardHeader.sentNoEmail'))
-		} catch (error) {
-			failToast(error, 'boardHeader.inviteError')
-		}
-	}
-	const copyInviteFor = async (invite) => {
-		try {
-			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites/${invite._id}/copy`)
-			await copyText(data.inviteUrl, tr('boardHeader.linkCopied'))
-			await reloadInvites()
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
-	}
-
-	const [shareSuggestions, setShareSuggestions] = useState([])
-	useEffect(() => {
-		if (!isInviteOpen || !canManageBoard || isDevAuthBypass) return undefined
-		let current = true
-		axiosInstance.get('/board/team').then(({ data }) => {
-			if (!current) return
-			const seen = new Map()
-			for (const entry of data) for (const member of entry.members || []) {
-				const user = member.user
-				if (user?.email && String(user._id) !== String(authUser?._id) && !seen.has(user.email)) seen.set(user.email, { name: user.name, email: user.email.toLowerCase(), avatar: user.avatar })
-			}
-			setShareSuggestions([...seen.values()])
-		}).catch(() => {})
-		return () => {
-			current = false
-		}
-	}, [isInviteOpen, canManageBoard, authUser?._id])
-
-	const createInviteLink = async () => {
-		try {
-			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/invites`, { email: '', role: 'member' })
-			await copyToClipboard(data.inviteUrl)
-			await loadInviteLink()
-			toast.success(tr('boardHeader.linkCreated'))
-		} catch (error) {
-			failToast(error, 'boardHeader.inviteError')
-		}
-	}
-	const turnOffInviteLink = async () => {
-		if (!inviteLink?.inviteId) return
-		try {
-			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/invites/${inviteLink.inviteId}`)
-			setInviteLink(null)
-			setBoardInvites((current) => current.filter((invite) => invite._id !== inviteLink.inviteId))
-			toast.success(tr('boardHeader.linkRevoked'))
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
-	}
-	const createViewLink = async () => {
-		try {
-			const { data } = await axiosInstance.post(`/board/boards/${selectedBoard._id}/public-link`)
-			setPublicBoardLink(data.publicUrl)
-			await copyText(data.publicUrl, tr('boardHeader.publicCopied'))
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
-	}
-	const turnOffViewLink = async () => {
-		try {
-			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/public-link`)
-			setPublicBoardLink('')
-			toast.success(tr('boardHeader.publicRevoked'))
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
-	}
-	const cancelInvite = async (invite) => {
-		try {
-			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/invites/${invite._id}`)
-			setBoardInvites((current) => current.filter((item) => item._id !== invite._id))
-			toast.success(tr('boardHeader.inviteRevoked'))
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
-	}
-	const changeMemberRole = async (member, role) => {
-		await updateMemberRole(member._id, role)
-	}
-	const removeMember = async (member) => {
-		try {
-			await axiosInstance.delete(`/board/boards/${selectedBoard._id}/members/${member._id}`)
-			setBoardMemberRecords((current) => current.filter((record) => record._id !== member._id))
-			toast.success(tr('boardHeader.removed', { name: member.user?.name || member.user?.email }))
-		} catch (error) {
-			failToast(error, 'auth.errors.generic')
-		}
 	}
 
 	const saveBoardDescription = async (description) => {
@@ -1835,132 +1508,21 @@ const Workspace = () => {
 		return items
 	}
 
-	// Board shortcuts (see ShortcutsDialog). The handler is set up once per board and reads
-	// the latest cards and actions through this ref.
-	const shortcutActions = useRef(null)
-	useEffect(() => {
-		shortcutActions.current = { columns, findTask, patchTask, archiveTask, moveCard, meId: authUser?._id ? String(authUser._id) : '' }
+	// Board shortcuts (see ShortcutsDialog), set up once per board.
+	useBoardShortcuts(boardId, {
+		columns,
+		findTask,
+		patchTask,
+		archiveTask,
+		moveCard,
+		meId: authUser?._id ? String(authUser._id) : '',
+		announce: setAnnouncement,
+		openShortcuts: () => setIsShortcutsOpen(true),
+		openFilter: () => setIsFilterOpen(true),
+		setCardFilter,
+		startNewCard: setActiveTaskColumn,
+		openCard: setTaskDetails,
 	})
-	const hoveredCardId = useRef(null)
-	const hoveredColumnId = useRef(null)
-
-	useEffect(() => {
-		if (!boardId) return undefined
-		const onOver = (event) => {
-			const element = event.target instanceof Element ? event.target : null
-			hoveredCardId.current = element?.closest('.bc-board .task-card[data-task-id]')?.dataset.taskId || null
-			hoveredColumnId.current = element?.closest('.bc-board .bc-column[data-column-id]')?.dataset.columnId || null
-		}
-		// What is on screen, in order: lists that are open and the cards the filter shows.
-		const grid = () => [...document.querySelectorAll('.bc-board > .bc-column[data-column-id]:not(.bc-column--collapsed)')]
-			.map((column) => ({ id: column.dataset.columnId, cards: [...column.querySelectorAll('.task-card[data-task-id]:not(.is-filtered-out)')].map((card) => card.dataset.taskId) }))
-		const focusCard = (taskId) => window.requestAnimationFrame(() => {
-			const card = document.querySelector(`.bc-board .task-card[data-task-id="${taskId}"]`)
-			card?.focus({ preventScroll: true })
-			card?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-		})
-		const indexIn = (columnId, taskId) => shortcutActions.current.columns.find((column) => column._id === columnId)?.tasks.findIndex((task) => task._id === taskId) ?? -1
-
-		const arrows = (event, focusedId) => {
-			const lists = grid()
-			const columnIndex = lists.findIndex((list) => list.cards.includes(focusedId))
-			if (columnIndex < 0) return
-			const list = lists[columnIndex]
-			const row = list.cards.indexOf(focusedId)
-			const step = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -1, ArrowRight: 1 }[event.key]
-			const sideways = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
-			event.preventDefault()
-			if (!event.altKey) {
-				if (!sideways) {
-					const next = list.cards[row + step]
-					if (next) focusCard(next)
-					return
-				}
-				for (let index = columnIndex + step; index >= 0 && index < lists.length; index += step) {
-					if (lists[index].cards.length) return focusCard(lists[index].cards[Math.min(row, lists[index].cards.length - 1)])
-				}
-				return
-			}
-			// Alt + arrows move the card: within its list, or to the next list at the same height.
-			const { moveCard, findTask } = shortcutActions.current
-			let target = list
-			let index
-			if (sideways) {
-				target = lists[columnIndex + step]
-				if (!target) return
-				const before = target.cards[row]
-				index = before ? indexIn(target.id, before) : (shortcutActions.current.columns.find((column) => column._id === target.id)?.tasks.length ?? 0)
-			} else {
-				const neighbour = list.cards[row + step]
-				if (!neighbour) return
-				index = indexIn(list.id, neighbour)
-			}
-			moveCard(focusedId, target.id, index)
-			const title = findTask(focusedId)?.title || ''
-			const columnTitle = shortcutActions.current.columns.find((column) => column._id === target.id)?.title || ''
-			setAnnouncement(translateCurrent('shortcuts.moved', { title, list: columnTitle, position: (sideways ? Math.min(row, target.cards.length) : row + step) + 1 }))
-			focusCard(focusedId)
-		}
-
-		const onKey = (event) => {
-			const target = event.target
-			const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-			if (event.metaKey || event.ctrlKey || typing || document.body.classList.contains('has-modal')) return
-			const focusedId = document.activeElement?.closest?.('.bc-board .task-card[data-task-id]')?.dataset.taskId || null
-			if (event.key.startsWith('Arrow')) {
-				if (focusedId) arrows(event, focusedId)
-				else if (!event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowRight')) {
-					const first = grid().find((list) => list.cards.length)?.cards[0]
-					if (first) {
-						event.preventDefault()
-						focusCard(first)
-					}
-				}
-				return
-			}
-			if (event.altKey) return
-			const key = shortcutKey(event)
-			const { findTask, patchTask, archiveTask, meId } = shortcutActions.current
-			const task = findTask(focusedId || hoveredCardId.current)
-			if (key === '?') {
-				event.preventDefault()
-				setIsShortcutsOpen(true)
-			} else if (key === 'f') {
-				event.preventDefault()
-				setIsFilterOpen(true)
-			} else if (key === 'q' && meId) {
-				event.preventDefault()
-				setCardFilter((current) => {
-					const onlyMine = current.members.length === 1 && current.members[0] === meId
-					return { ...current, members: onlyMine ? [] : [meId] }
-				})
-			} else if (key === 'n') {
-				const columnId = (task && String(task.column)) || hoveredColumnId.current || grid()[0]?.id
-				if (!columnId) return
-				event.preventDefault()
-				setActiveTaskColumn(columnId)
-			} else if (task && key === 'e') {
-				event.preventDefault()
-				setTaskDetails(task)
-			} else if (task && key === 'm' && meId) {
-				event.preventDefault()
-				const ids = (task.assignees || []).map((person) => String(person?._id || person))
-				patchTask(task, { assignees: ids.includes(meId) ? ids.filter((id) => id !== meId) : [...ids, meId] })
-			} else if (task && key === 'c') {
-				event.preventDefault()
-				patchTask(task, { completed: !task.completed })
-			} else if (task && key === 'a') {
-				event.preventDefault()
-				archiveTask(task)
-			}
-		}
-		document.addEventListener('mouseover', onOver, { passive: true })
-		document.addEventListener('keydown', onKey)
-		return () => {
-			document.removeEventListener('mouseover', onOver)
-			document.removeEventListener('keydown', onKey)
-		}
-	}, [boardId])
 
 	return (
 		<div className='workspace-shell'>
@@ -2048,7 +1610,7 @@ const Workspace = () => {
 										onToggleComplete={(task) => patchTask(task, { completed: !task.completed })}
 										onAddCard={addPlannerCard}
 										onClose={togglePlanner}
-										width={plannerLayout.width}
+										width={plannerWidth}
 										onResizeStart={startPlannerResize}
 									/>
 								)}
